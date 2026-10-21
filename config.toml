@@ -1,0 +1,10 @@
+# Development default. Select Ollama explicitly with scripts/start-backend.ps1.
+provider = "mock"
+ollama_url = "http://127.0.0.1:11434"
+model = "qwen3:4b-instruct-2507-q4_K_M"
+context_length = 2048
+max_output_tokens = 256
+thinking = false
+timeout_seconds = 120.0
+health_timeout_seconds = 5.0
+keep_alive = "30s"

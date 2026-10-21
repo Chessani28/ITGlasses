@@ -1,0 +1,116 @@
+{
+  "baseline": {
+    "time": 1792436603.1352832,
+    "ram_available_mib": 7673.7,
+    "gpu_used_mib": 1625,
+    "gpu_free_mib": 4330
+  },
+  "request_seconds": 7.24,
+  "status": {
+    "status": "ready",
+    "provider": "ollama",
+    "model": "qwen3:4b",
+    "mock": false,
+    "rag_enabled": false,
+    "local_only": true
+  },
+  "synthetic_response": {
+    "answer": "Okay, the user is asking me to explain what DNS means in two sentences, and they specifically said not to run any commands. Let me think.\n\nFirst, I need to recall what DNS stands for. DNS is Domain Name System. But I should explain it in simple terms without technical jargon. The user wants it in two sentences.\n\nSo, DNS translates domain names (like example.com) into IP addresses so computers can find each other on the internet. It's like a phonebook for the internet.\n\nWait, but I need to make sure it's two sentences. Let me check.\n\nFirst sentence: DNS (Domain Name System) es un sistema que convierte nombres de dominio en direcciones IP para que los dispositivos en internet puedan comunicarse.\n\nSecond sentence: Sin DNS, los usuarios no podr\u00edan acceder a sitios web usando nombres de dominio en lugar de direcciones IP num\u00e9ricas.\n\nHmm, that's two sentences. Let me make sure it's concise and in Spanish. The user asked for the answer in their language, which is Spanish here.\n\nWait, the user wrote \"En dos frases, explica que significa DNS.\" So they want the answer in Spanish. I need to respond in Spanish.\n\nLet me rephrase. DNS",
+    "provider": "ollama",
+    "model": "qwen3:4b",
+    "sources": [],
+    "documentation_sufficient": false
+  },
+  "loaded_models": {
+    "models": [
+      {
+        "name": "qwen3:4b",
+        "model": "qwen3:4b",
+        "size": 2876160081,
+        "digest": "359d7dd4bcdab3d86b87d73ac27966f4dbb9f5efdfcc75d34a8764a09474fae7",
+        "details": {
+          "parent_model": "",
+          "format": "gguf",
+          "family": "qwen3",
+          "families": [
+            "qwen3"
+          ],
+          "parameter_size": "4.0B",
+          "quantization_level": "Q4_K_M"
+        },
+        "expires_at": "2026-10-19T13:04:01.9450118-06:00",
+        "size_vram": 2876160081,
+        "context_length": 2048,
+        "runner": "llamacpp"
+      }
+    ]
+  },
+  "listeners": [
+    "TCP    127.0.0.1:8000         0.0.0.0:0              LISTENING       17012",
+    "TCP    127.0.0.1:11434        0.0.0.0:0              LISTENING       26480"
+  ],
+  "minimum_sampled_free_ram_mib": 6775.8,
+  "maximum_sampled_gpu_used_mib": 4487,
+  "samples": [
+    {
+      "time": 1792436603.1352832,
+      "ram_available_mib": 7673.7,
+      "gpu_used_mib": 1625,
+      "gpu_free_mib": 4330
+    },
+    {
+      "time": 1792436604.1956286,
+      "ram_available_mib": 7592.7,
+      "gpu_used_mib": 1575,
+      "gpu_free_mib": 4380
+    },
+    {
+      "time": 1792436605.2380028,
+      "ram_available_mib": 7543.8,
+      "gpu_used_mib": 1642,
+      "gpu_free_mib": 4313
+    },
+    {
+      "time": 1792436606.2796516,
+      "ram_available_mib": 7538.2,
+      "gpu_used_mib": 1642,
+      "gpu_free_mib": 4313
+    },
+    {
+      "time": 1792436607.3458297,
+      "ram_available_mib": 7216.2,
+      "gpu_used_mib": 2027,
+      "gpu_free_mib": 3928
+    },
+    {
+      "time": 1792436608.3844519,
+      "ram_available_mib": 6827.5,
+      "gpu_used_mib": 4406,
+      "gpu_free_mib": 1549
+    },
+    {
+      "time": 1792436609.441472,
+      "ram_available_mib": 6790.4,
+      "gpu_used_mib": 4487,
+      "gpu_free_mib": 1468
+    },
+    {
+      "time": 1792436610.480559,
+      "ram_available_mib": 6776.8,
+      "gpu_used_mib": 4487,
+      "gpu_free_mib": 1468
+    },
+    {
+      "time": 1792436611.5235298,
+      "ram_available_mib": 6775.8,
+      "gpu_used_mib": 4471,
+      "gpu_free_mib": 1484
+    },
+    {
+      "time": 1792436611.9989998,
+      "ram_available_mib": 7595.1,
+      "gpu_used_mib": 4422,
+      "gpu_free_mib": 1533
+    }
+  ]
+}

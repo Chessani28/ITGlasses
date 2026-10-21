@@ -1,0 +1,200 @@
+{
+  "baseline": {
+    "time": 1792442707.5926714,
+    "ram_available_mib": 7515.2,
+    "gpu_used_mib": 1897,
+    "gpu_free_mib": 4058
+  },
+  "request_seconds": 22.07,
+  "status": {
+    "status": "ready",
+    "provider": "ollama",
+    "model": "qwen3:4b-instruct-2507-q4_K_M",
+    "mock": false,
+    "rag_enabled": false,
+    "local_only": true
+  },
+  "synthetic_response": {
+    "answer": "El proceso de borrar Windows para realizar una instalaci\u00f3n limpia se llama **\"reinstalaci\u00f3n de Windows\"** o **\"limpieza de sistema\"**.  \n\nEste proceso implica eliminar completamente el sistema operativo actual y luego instalar una nueva copia de Windows desde cero, lo que permite eliminar archivos, programas y configuraciones anteriores.  \n\n\u26a0\ufe0f *Nota: No hay documentaci\u00f3n verificada para este proceso en este contexto. Las respuestas se basan en conocimientos generales y no han sido validadas con fuentes oficiales.*",
+    "provider": "ollama",
+    "model": "qwen3:4b-instruct-2507-q4_K_M",
+    "sources": [],
+    "documentation_sufficient": false
+  },
+  "loaded_models": {
+    "models": [
+      {
+        "name": "qwen3:4b-instruct-2507-q4_K_M",
+        "model": "qwen3:4b-instruct-2507-q4_K_M",
+        "size": 2876160081,
+        "digest": "0edcdef34593eac1aa2be9c7d06c432dcf81945adca5eca2f27662c18f168ba0",
+        "details": {
+          "parent_model": "",
+          "format": "gguf",
+          "family": "qwen3",
+          "families": [
+            "qwen3"
+          ],
+          "parameter_size": "4.0B",
+          "quantization_level": "Q4_K_M"
+        },
+        "expires_at": "2026-10-19T14:46:01.142707-06:00",
+        "size_vram": 2876160081,
+        "context_length": 2048,
+        "runner": "llamacpp"
+      }
+    ]
+  },
+  "listeners": [
+    "TCP    127.0.0.1:8000         0.0.0.0:0              LISTENING       25968",
+    "TCP    127.0.0.1:11434        0.0.0.0:0              LISTENING       26004"
+  ],
+  "minimum_sampled_free_ram_mib": 6747.9,
+  "maximum_sampled_gpu_used_mib": 4740,
+  "samples": [
+    {
+      "time": 1792442707.5926714,
+      "ram_available_mib": 7515.2,
+      "gpu_used_mib": 1897,
+      "gpu_free_mib": 4058
+    },
+    {
+      "time": 1792442708.6369402,
+      "ram_available_mib": 7467.8,
+      "gpu_used_mib": 1881,
+      "gpu_free_mib": 4074
+    },
+    {
+      "time": 1792442709.6886117,
+      "ram_available_mib": 7555.8,
+      "gpu_used_mib": 1833,
+      "gpu_free_mib": 4122
+    },
+    {
+      "time": 1792442710.766028,
+      "ram_available_mib": 7254.2,
+      "gpu_used_mib": 1904,
+      "gpu_free_mib": 4051
+    },
+    {
+      "time": 1792442711.8141353,
+      "ram_available_mib": 7199.4,
+      "gpu_used_mib": 1976,
+      "gpu_free_mib": 3979
+    },
+    {
+      "time": 1792442712.8591552,
+      "ram_available_mib": 6814.3,
+      "gpu_used_mib": 4338,
+      "gpu_free_mib": 1617
+    },
+    {
+      "time": 1792442713.907201,
+      "ram_available_mib": 6747.9,
+      "gpu_used_mib": 4290,
+      "gpu_free_mib": 1665
+    },
+    {
+      "time": 1792442714.9542062,
+      "ram_available_mib": 6932.4,
+      "gpu_used_mib": 4352,
+      "gpu_free_mib": 1603
+    },
+    {
+      "time": 1792442715.9998646,
+      "ram_available_mib": 6911.7,
+      "gpu_used_mib": 4352,
+      "gpu_free_mib": 1603
+    },
+    {
+      "time": 1792442717.0460503,
+      "ram_available_mib": 6879.3,
+      "gpu_used_mib": 4338,
+      "gpu_free_mib": 1617
+    },
+    {
+      "time": 1792442718.0926704,
+      "ram_available_mib": 6850.5,
+      "gpu_used_mib": 4290,
+      "gpu_free_mib": 1665
+    },
+    {
+      "time": 1792442719.142944,
+      "ram_available_mib": 6844.4,
+      "gpu_used_mib": 4352,
+      "gpu_free_mib": 1603
+    },
+    {
+      "time": 1792442720.1890314,
+      "ram_available_mib": 6836.6,
+      "gpu_used_mib": 4352,
+      "gpu_free_mib": 1603
+    },
+    {
+      "time": 1792442721.2419202,
+      "ram_available_mib": 6850.9,
+      "gpu_used_mib": 4338,
+      "gpu_free_mib": 1617
+    },
+    {
+      "time": 1792442722.2901428,
+      "ram_available_mib": 6830.9,
+      "gpu_used_mib": 4290,
+      "gpu_free_mib": 1665
+    },
+    {
+      "time": 1792442723.3432174,
+      "ram_available_mib": 7115.8,
+      "gpu_used_mib": 4352,
+      "gpu_free_mib": 1603
+    },
+    {
+      "time": 1792442724.3870568,
+      "ram_available_mib": 6985.2,
+      "gpu_used_mib": 4352,
+      "gpu_free_mib": 1603
+    },
+    {
+      "time": 1792442725.425258,
+      "ram_available_mib": 6961.2,
+      "gpu_used_mib": 4338,
+      "gpu_free_mib": 1617
+    },
+    {
+      "time": 1792442726.4761627,
+      "ram_available_mib": 7028.3,
+      "gpu_used_mib": 4353,
+      "gpu_free_mib": 1602
+    },
+    {
+      "time": 1792442727.5265217,
+      "ram_available_mib": 6991.5,
+      "gpu_used_mib": 4354,
+      "gpu_free_mib": 1601
+    },
+    {
+      "time": 1792442728.5727594,
+      "ram_available_mib": 6984.8,
+      "gpu_used_mib": 4352,
+      "gpu_free_mib": 1603
+    },
+    {
+      "time": 1792442729.611201,
+      "ram_available_mib": 6997.2,
+      "gpu_used_mib": 4678,
+      "gpu_free_mib": 1277
+    },
+    {
+      "time": 1792442730.6679707,
+      "ram_available_mib": 6988.2,
+      "gpu_used_mib": 4740,
+      "gpu_free_mib": 1215
+    },
+    {
+      "time": 1792442731.1806896,
+      "ram_available_mib": 6983.1,
+      "gpu_used_mib": 4740,
+      "gpu_free_mib": 1215
+    }
+  ]
+}

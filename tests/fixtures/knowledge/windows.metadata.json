@@ -1,0 +1,8 @@
+{
+  "title": "Formateo e instalación limpia de Windows",
+  "version": "1",
+  "scope": "Synthetic laboratory",
+  "procedure_id": "24",
+  "procedure_key": "synthetic-windows-clean-install",
+  "authorized": true
+}

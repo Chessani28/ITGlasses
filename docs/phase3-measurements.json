@@ -1,0 +1,521 @@
+{
+  "verification_dates": [
+    "2026-10-19",
+    "2026-10-20"
+  ],
+  "automated_tests": {
+    "passed": 88,
+    "seconds": 19.37,
+    "original_phase2_tests": 50,
+    "warning": "Existing Starlette/httpx deprecation warning"
+  },
+  "acceptance_report": "D:\\ITGlasses\\storage\\acceptance\\20261019-151734\\report.json",
+  "http_report": "D:\\ITGlasses\\storage\\acceptance\\http-20261020-093408\\report.json",
+  "acceptance_cases": {
+    "A": {
+      "status": "answered",
+      "answer": "Documento identificado: «Formateo e instalación limpia de Windows» (versión 1). [b5fea447-a691-5fe1-a81b-f09d6828b3a1]\nNo se incluyen pasos de ejecución porque la consulta pide identificar el procedimiento.",
+      "conversation_id": "cd0d0c43-f097-4b7b-99a9-0c5cbdeeb3a8",
+      "intent": "identify",
+      "sources": [
+        {
+          "citation_id": "b5fea447-a691-5fe1-a81b-f09d6828b3a1",
+          "document_id": "2af380a2-d8ad-4df9-8be0-505c240125da",
+          "title": "Formateo e instalación limpia de Windows",
+          "filename": "synthetic.md",
+          "version": "1",
+          "revision": 1,
+          "procedure_id": "24",
+          "page": null,
+          "section": "Document",
+          "paragraph": 1,
+          "sha256": "d7c62f9b438979da2cf9583191de0b672272aaa9f5e2dcb9c515c75c9a4647c7",
+          "quote": "",
+          "url": "/api/v1/knowledge/sources/b5fea447-a691-5fe1-a81b-f09d6828b3a1",
+          "quote_available_at_source": true
+        }
+      ],
+      "options": [
+        {
+          "id": "2af380a2-d8ad-4df9-8be0-505c240125da",
+          "title": "Formateo e instalación limpia de Windows",
+          "scope": "Laboratorio sintético",
+          "version": "1",
+          "procedure_id": "24",
+          "current_revision": 1
+        }
+      ],
+      "documentation_sufficient": true,
+      "knowledge_type": "documented_evidence",
+      "retrieval": {
+        "retrieval_ms": 1957.62,
+        "semantic_score": 0.631297,
+        "hybrid_score": 0.03278688524590164,
+        "candidate_documents": 1,
+        "evidence_check_ms": 3411.08
+      },
+      "seconds": 5.371,
+      "expected": "answered",
+      "passed": true
+    },
+    "B": {
+      "status": "answered",
+      "answer": "Documento identificado: «Formateo e instalación limpia de Windows» (versión 1). [b5fea447-a691-5fe1-a81b-f09d6828b3a1]\nNo se incluyen pasos de ejecución porque la consulta pide identificar el procedimiento.",
+      "conversation_id": "8d5ac888-ba63-4f3a-bcc8-bf06f3b1ba39",
+      "intent": "identify",
+      "sources": [
+        {
+          "citation_id": "b5fea447-a691-5fe1-a81b-f09d6828b3a1",
+          "document_id": "2af380a2-d8ad-4df9-8be0-505c240125da",
+          "title": "Formateo e instalación limpia de Windows",
+          "filename": "synthetic.md",
+          "version": "1",
+          "revision": 1,
+          "procedure_id": "24",
+          "page": null,
+          "section": "Document",
+          "paragraph": 1,
+          "sha256": "d7c62f9b438979da2cf9583191de0b672272aaa9f5e2dcb9c515c75c9a4647c7",
+          "quote": "",
+          "url": "/api/v1/knowledge/sources/b5fea447-a691-5fe1-a81b-f09d6828b3a1",
+          "quote_available_at_source": true
+        }
+      ],
+      "options": [
+        {
+          "id": "2af380a2-d8ad-4df9-8be0-505c240125da",
+          "title": "Formateo e instalación limpia de Windows",
+          "scope": "Laboratorio sintético",
+          "version": "1",
+          "procedure_id": "24",
+          "current_revision": 1
+        }
+      ],
+      "documentation_sufficient": true,
+      "knowledge_type": "documented_evidence",
+      "retrieval": {
+        "retrieval_ms": 2750.54,
+        "semantic_score": 0.340892,
+        "hybrid_score": 0.01639344262295082,
+        "candidate_documents": 1
+      },
+      "seconds": 2.753,
+      "expected": "answered",
+      "passed": true
+    },
+    "C": {
+      "status": "clarification_required",
+      "answer": "Hay varios procedimientos con ese identificador. ¿A cuál te refieres? Indica título, ámbito o selecciona una opción.",
+      "conversation_id": "17263784-d691-4047-a364-4f24e2aa11d1",
+      "intent": "identify",
+      "sources": [],
+      "options": [
+        {
+          "id": "2af380a2-d8ad-4df9-8be0-505c240125da",
+          "title": "Formateo e instalación limpia de Windows",
+          "scope": "Laboratorio sintético",
+          "version": "1",
+          "procedure_id": "24",
+          "current_revision": 1
+        },
+        {
+          "id": "71912f44-1380-4b0e-b1fe-cd3c502a4f14",
+          "title": "Sustitución de tóner de impresoras",
+          "scope": "Laboratorio sintético",
+          "version": "1",
+          "procedure_id": "24",
+          "current_revision": 1
+        },
+        {
+          "id": "ae10b2d7-567d-4b8e-b36e-a90d9cfdb7b9",
+          "title": "Revisión de nómina",
+          "scope": "Laboratorio sintético",
+          "version": "1",
+          "procedure_id": "24",
+          "current_revision": 1
+        }
+      ],
+      "documentation_sufficient": false,
+      "knowledge_type": "documented_evidence",
+      "retrieval": {},
+      "seconds": 0.001,
+      "expected": "clarification_required",
+      "passed": true
+    },
+    "D": {
+      "status": "answered",
+      "answer": "Documento identificado: «Formateo e instalación limpia de Windows» (versión 1). [b5fea447-a691-5fe1-a81b-f09d6828b3a1]\nNo se incluyen pasos de ejecución porque la consulta pide identificar el procedimiento.",
+      "conversation_id": "17263784-d691-4047-a364-4f24e2aa11d1",
+      "intent": "identify",
+      "sources": [
+        {
+          "citation_id": "b5fea447-a691-5fe1-a81b-f09d6828b3a1",
+          "document_id": "2af380a2-d8ad-4df9-8be0-505c240125da",
+          "title": "Formateo e instalación limpia de Windows",
+          "filename": "synthetic.md",
+          "version": "1",
+          "revision": 1,
+          "procedure_id": "24",
+          "page": null,
+          "section": "Document",
+          "paragraph": 1,
+          "sha256": "d7c62f9b438979da2cf9583191de0b672272aaa9f5e2dcb9c515c75c9a4647c7",
+          "quote": "",
+          "url": "/api/v1/knowledge/sources/b5fea447-a691-5fe1-a81b-f09d6828b3a1",
+          "quote_available_at_source": true
+        }
+      ],
+      "options": [
+        {
+          "id": "2af380a2-d8ad-4df9-8be0-505c240125da",
+          "title": "Formateo e instalación limpia de Windows",
+          "scope": "Laboratorio sintético",
+          "version": "1",
+          "procedure_id": "24",
+          "current_revision": 1
+        }
+      ],
+      "documentation_sufficient": true,
+      "knowledge_type": "documented_evidence",
+      "retrieval": {
+        "retrieval_ms": 1863.97,
+        "semantic_score": 0.561497,
+        "hybrid_score": 0.03278688524590164,
+        "candidate_documents": 3,
+        "evidence_check_ms": 3034.02
+      },
+      "seconds": 4.9,
+      "expected": "answered",
+      "passed": true
+    },
+    "E": {
+      "status": "insufficient_evidence",
+      "answer": "No encontré información suficiente en la documentación autorizada y vigente. No puedo afirmar un procedimiento de la empresa sin esa evidencia.",
+      "conversation_id": "54e85534-584a-4eae-be14-2cd04956ae16",
+      "intent": "information",
+      "sources": [],
+      "options": [],
+      "documentation_sufficient": false,
+      "knowledge_type": "documented_evidence",
+      "retrieval": {},
+      "seconds": 2.92,
+      "expected": "insufficient_evidence",
+      "passed": true
+    },
+    "E_related": {
+      "status": "insufficient_evidence",
+      "answer": "No encontré información suficiente en la documentación autorizada y vigente. No puedo afirmar un procedimiento de la empresa sin esa evidencia.",
+      "conversation_id": "3209a09b-44d3-4a04-94ec-520d61faa08b",
+      "intent": "information",
+      "sources": [],
+      "options": [],
+      "documentation_sufficient": false,
+      "knowledge_type": "documented_evidence",
+      "retrieval": {},
+      "seconds": 5.258,
+      "expected": "insufficient_evidence",
+      "passed": true
+    },
+    "F": {
+      "status": "conflict",
+      "answer": "Hay varias versiones o copias del mismo procedimiento. Confirma cuál está vigente; no combinaré sus instrucciones.",
+      "conversation_id": "138bad13-1bb4-4c11-95c2-5730533fd8d9",
+      "intent": "identify",
+      "sources": [],
+      "options": [
+        {
+          "id": "1a75761d-18d9-43db-a07a-775b24a25c4d",
+          "title": "Rotación de credenciales de VPN",
+          "scope": "Laboratorio sintético",
+          "version": "1",
+          "procedure_id": "80",
+          "current_revision": 1
+        },
+        {
+          "id": "027155f8-b258-4c7c-a0dc-d71e6b622571",
+          "title": "Rotación de credenciales de VPN",
+          "scope": "Laboratorio sintético",
+          "version": "2",
+          "procedure_id": "80",
+          "current_revision": 1
+        }
+      ],
+      "documentation_sufficient": false,
+      "knowledge_type": "documented_evidence",
+      "retrieval": {},
+      "seconds": 0.001,
+      "expected": "conflict",
+      "passed": true
+    },
+    "long": {
+      "status": "answered",
+      "answer": "Documento identificado: «Formateo e instalación limpia de Windows» (versión 1). [b5fea447-a691-5fe1-a81b-f09d6828b3a1]\nNo se incluyen pasos de ejecución porque la consulta pide identificar el procedimiento.",
+      "conversation_id": "003d1510-e42e-4029-ad92-f815225aa204",
+      "intent": "identify",
+      "sources": [
+        {
+          "citation_id": "b5fea447-a691-5fe1-a81b-f09d6828b3a1",
+          "document_id": "2af380a2-d8ad-4df9-8be0-505c240125da",
+          "title": "Formateo e instalación limpia de Windows",
+          "filename": "synthetic.md",
+          "version": "1",
+          "revision": 1,
+          "procedure_id": "24",
+          "page": null,
+          "section": "Document",
+          "paragraph": 1,
+          "sha256": "d7c62f9b438979da2cf9583191de0b672272aaa9f5e2dcb9c515c75c9a4647c7",
+          "quote": "",
+          "url": "/api/v1/knowledge/sources/b5fea447-a691-5fe1-a81b-f09d6828b3a1",
+          "quote_available_at_source": true
+        }
+      ],
+      "options": [
+        {
+          "id": "2af380a2-d8ad-4df9-8be0-505c240125da",
+          "title": "Formateo e instalación limpia de Windows",
+          "scope": "Laboratorio sintético",
+          "version": "1",
+          "procedure_id": "24",
+          "current_revision": 1
+        }
+      ],
+      "documentation_sufficient": true,
+      "knowledge_type": "documented_evidence",
+      "retrieval": {
+        "retrieval_ms": 2730.96,
+        "semantic_score": 0.605312,
+        "hybrid_score": 0.03278688524590164,
+        "candidate_documents": 5,
+        "evidence_check_ms": 3151.46
+      },
+      "seconds": 5.885,
+      "expected": "answered",
+      "passed": true
+    },
+    "revocation_pending": {
+      "status": "clarification_required",
+      "answer": "Hay varios procedimientos con ese identificador. ¿A cuál te refieres? Indica título, ámbito o selecciona una opción.",
+      "conversation_id": "d20ffa32-72ea-425f-be1f-7db5e559a145",
+      "intent": "identify",
+      "sources": [],
+      "options": [
+        {
+          "id": "2af380a2-d8ad-4df9-8be0-505c240125da",
+          "title": "Formateo e instalación limpia de Windows",
+          "scope": "Laboratorio sintético",
+          "version": "1",
+          "procedure_id": "24",
+          "current_revision": 1
+        },
+        {
+          "id": "71912f44-1380-4b0e-b1fe-cd3c502a4f14",
+          "title": "Sustitución de tóner de impresoras",
+          "scope": "Laboratorio sintético",
+          "version": "1",
+          "procedure_id": "24",
+          "current_revision": 1
+        },
+        {
+          "id": "ae10b2d7-567d-4b8e-b36e-a90d9cfdb7b9",
+          "title": "Revisión de nómina",
+          "scope": "Laboratorio sintético",
+          "version": "1",
+          "procedure_id": "24",
+          "current_revision": 1
+        }
+      ],
+      "documentation_sufficient": false,
+      "knowledge_type": "documented_evidence",
+      "retrieval": {},
+      "seconds": 0.001,
+      "expected": "clarification_required",
+      "passed": true
+    },
+    "revoked_followup": {
+      "status": "insufficient_evidence",
+      "answer": "No encontré información suficiente en la documentación autorizada y vigente. No puedo afirmar un procedimiento de la empresa sin esa evidencia.",
+      "conversation_id": "d20ffa32-72ea-425f-be1f-7db5e559a145",
+      "intent": "identify",
+      "sources": [],
+      "options": [],
+      "documentation_sufficient": false,
+      "knowledge_type": "documented_evidence",
+      "retrieval": {},
+      "seconds": 2.867,
+      "expected": "insufficient_evidence",
+      "passed": true
+    },
+    "unauthorized": {
+      "status": "insufficient_evidence",
+      "answer": "No encontré información suficiente en la documentación autorizada y vigente. No puedo afirmar un procedimiento de la empresa sin esa evidencia.",
+      "conversation_id": "6a35462b-87dc-45ce-a0a2-e24cb1c24dd4",
+      "intent": "identify",
+      "sources": [],
+      "options": [],
+      "documentation_sufficient": false,
+      "knowledge_type": "documented_evidence",
+      "retrieval": {},
+      "seconds": 0.001,
+      "expected": "insufficient_evidence",
+      "passed": true
+    }
+  },
+  "http": {
+    "root": "D:\\ITGlasses\\storage\\acceptance\\http-20261020-093408",
+    "baseline": {
+      "t": 1792510448.741887,
+      "phase": "baseline",
+      "free_ram_mib": 6487.81,
+      "gpu_used_mib": 1543,
+      "gpu_utilization_percent": 13,
+      "processes": [
+        {
+          "Id": 26004,
+          "CPU": 100.875,
+          "WorkingSet64": 55189504
+        }
+      ]
+    },
+    "ingestion": [
+      {
+        "format": ".md",
+        "bytes": 69,
+        "chunks": 1,
+        "seconds": 2.779
+      },
+      {
+        "format": ".txt",
+        "bytes": 69,
+        "chunks": 1,
+        "seconds": 2.555
+      },
+      {
+        "format": ".docx",
+        "bytes": 36665,
+        "chunks": 2,
+        "seconds": 2.94
+      },
+      {
+        "format": ".pdf",
+        "bytes": 700,
+        "chunks": 1,
+        "seconds": 2.716
+      }
+    ],
+    "embedding_seconds": 28.403,
+    "embedding_loaded": {
+      "models": [
+        {
+          "name": "qwen3-embedding:0.6b",
+          "model": "qwen3-embedding:0.6b",
+          "size": 994605793,
+          "digest": "ac6da0dfba84a81fdbfbaf330198c33cd77c4cdfc53e8bc50eb581914a15621d",
+          "details": {
+            "parent_model": "",
+            "format": "gguf",
+            "family": "qwen3",
+            "families": [
+              "qwen3"
+            ],
+            "parameter_size": "595.78M",
+            "quantization_level": "Q8_0"
+          },
+          "expires_at": "2026-10-20T09:35:07.0816845-06:00",
+          "size_vram": 0,
+          "context_length": 2048,
+          "runner": "llamacpp"
+        }
+      ]
+    },
+    "health": {
+      "status": "ok"
+    },
+    "status": {
+      "embedding_model": "qwen3-embedding:0.6b",
+      "embedding_available": true,
+      "embedding_device": "cpu",
+      "eligible_documents": 0,
+      "answer_mode": "validated_excerpts",
+      "multiuser_authorization": false
+    },
+    "query": {
+      "status": "answered",
+      "answer": "Extractos de la documentación (no se han ejecutado comandos):\n\n[0d1042d1-371c-5065-88e9-a49624d275f7]\nEl procedimiento consiste en formatear el disco y reinstalar Windows.",
+      "conversation_id": "64246cb0-0abf-4fb7-b758-3e0b45af3a22",
+      "intent": "information",
+      "sources": [
+        {
+          "citation_id": "0d1042d1-371c-5065-88e9-a49624d275f7",
+          "document_id": "a61ee174-a644-407c-870b-19b7ec6d5007",
+          "title": "Formateo e instalación limpia de Windows",
+          "filename": "windows.md",
+          "version": "1",
+          "revision": 1,
+          "procedure_id": "40",
+          "page": null,
+          "section": "Document",
+          "paragraph": 1,
+          "sha256": "d7c62f9b438979da2cf9583191de0b672272aaa9f5e2dcb9c515c75c9a4647c7",
+          "quote": "El procedimiento consiste en formatear el disco y reinstalar Windows.",
+          "url": "/api/v1/knowledge/sources/0d1042d1-371c-5065-88e9-a49624d275f7"
+        }
+      ],
+      "options": [
+        {
+          "id": "a61ee174-a644-407c-870b-19b7ec6d5007",
+          "title": "Formateo e instalación limpia de Windows",
+          "scope": "HTTP synthetic test",
+          "version": "1",
+          "procedure_id": "40",
+          "current_revision": 1
+        }
+      ],
+      "documentation_sufficient": true,
+      "knowledge_type": "documented_evidence",
+      "retrieval": {
+        "retrieval_ms": 2174.15,
+        "semantic_score": 0.683725,
+        "hybrid_score": 0.03252247488101534,
+        "candidate_documents": 1,
+        "evidence_check_ms": 27281.72
+      }
+    },
+    "query_seconds": 29.502,
+    "pdf_source_page": 1,
+    "error_checks": {
+      "withdrawn_source": 404,
+      "empty_question": 422,
+      "unsupported_file": 400
+    },
+    "listeners": [
+      "TCP    127.0.0.1:8001         0.0.0.0:0              LISTENING       30272",
+      "TCP    127.0.0.1:11434        0.0.0.0:0              LISTENING       26004"
+    ],
+    "passed": true,
+    "minimum_free_ram_mib": 5532.78,
+    "peak_total_gpu_mib": 4412,
+    "peak_ollama_working_set_mib": 958.18,
+    "embedding_cpu_seconds_observed": 73.078,
+    "embedding_peak_working_set_mib": 958.18
+  },
+  "disk_bytes": {
+    ".venv": 113114898,
+    ".cache": 1501028609,
+    "storage/models": 5633755453,
+    "storage/acceptance": 469303,
+    "storage/knowledge": 0,
+    "documents/managed": 0
+  },
+  "free_disk_bytes": {
+    "C": 9067036672,
+    "D": 767771082752
+  },
+  "embedding_blob_bytes": 639150592,
+  "limits": [
+    "Small synthetic corpus only",
+    "System memory samples include other applications",
+    "Process CPU seconds/working sets include Ollama server and runtime children",
+    "One repetition per acceptance scenario; not a percentile benchmark"
+  ]
+}
