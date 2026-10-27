@@ -1,0 +1,971 @@
+"""Unified assistant service.
+
+Three guarantees are implemented here:
+
+* **Isolated session memory** - every conversation keeps its own procedure,
+  current step and citations in a :class:`~backend.app.assistant.memory.SessionStore`.
+* **Deterministic procedure extraction** - steps come from the authorized
+  document text, never from the language model.
+* **Grounded Spanish answers** - answers quote the evidence and carry the
+  citation of the chunk they came from.
+"""
+import asyncio
+import re
+import uuid
+
+from backend.app.assistant.memory import SessionStore
+from backend.app.assistant.procedures import flatten
+from backend.app.assistant.references import detect_reference
+from backend.app.assistant.web_search import (
+    WebSearchService,
+    _WEB_NEED_QUERY,
+    WebSearchResult,
+)
+from backend.app.knowledge.social import detect_social_intent, social_response
+
+TOKEN = re.compile(r"[a-z0-9]+")
+ACCENTS = str.maketrans("áàäâãéèëêíìïîóòöôõúùüûñç", "aaaaaeeeeiiiiooooouuuunc")
+SENTENCE_END = re.compile(r"[.!?;:]")
+
+# Ordinary conceptual questions ("¿qué es X?", "explícame X", "diferencia
+# entre X e Y"). They ask for an explanation, not for a company procedure, so
+# they are answered by the general provider instead of the grounded knowledge
+# pipeline.
+CONCEPTUAL_QUESTION = re.compile(
+    r"qu[eé]\s+(?:es|son|significa)\b"
+    r"|\bdefinicion\b|\bdefin(?:e|icio|icioname|ame|iendo)\b"
+    r"|\bexplic(?:a|ame|ar|ando|acion)\b"
+    r"|\bdiferencia\s+entre\b"
+    r"|\bpara\s+qu[eé]\s+sirve\b"
+    r"|\bcomo\s+funciona\b"
+    r"|\bwhat\s+(?:is|are)\b|\bexplain\b|\bdifference\s+between\b"
+    r"|\bhow\s+does\b.*\bwork\b",
+    re.IGNORECASE,
+)
+
+# Topics that always belong to the authorized documentation. A question that
+# mentions one of them stays in the knowledge route, where evidence is
+# mandatory, even when it also looks conceptual.
+DOCUMENTED_TOPIC = re.compile(
+    r"\bprocedimientos?\b|\bmanuales?\b|\bpol[ií]ticas?\b|\bempresa\b"
+    r"|\boficiales?\b|\bgu[ií]as?\b|\binstruccion(?:es)?\b"
+    r"|\bpasos?\b|\bdocumentos?\b|\bcomandos?\b|\bcredenciales?\b"
+    r"|\bconfiguraci[oó]n\b|\bdirectriz(?:es)?\b|\bnormativa\b"
+    r"|\bprocedures?\b|\bmanuals?\b|\bpolic(?:y|ies)\b|\bguidelines?\b"
+    r"|\binstructions?\b|\bsteps?\b|\bdocuments?\b|\bcommands?\b",
+    re.IGNORECASE,
+)
+
+# The knowledge service refuses a *company* question it cannot verify with
+# this sentence. Such a refusal must be preserved, because the user asked for
+# a documented procedure that does not exist.
+COMPANY_REFUSAL_MARK = "no pude verificar"
+
+# Answer used when the general provider cannot be reached. It states that the
+# route is unavailable instead of inventing an explanation.
+GENERAL_UNAVAILABLE = (
+    "El chat general no está disponible en este momento porque el modelo local "
+    "no responde. No puedo responder esta pregunta en este momento."
+)
+
+
+def _tokens(text):
+    return set(TOKEN.findall((text or "").casefold()))
+
+
+def _strip_spanish_prefix(text):
+    """Remove Spanish procedural prefixes from text.
+
+    Strips common Spanish prefixes like 'pasos de', 'procedures de',
+    'procedures a' procedure-related phrases so that matching works
+    regardless of language.
+    """
+    prefixes = [
+        r"^pasos?\s+de\s+",
+        r"^procedures?\s+de\s+",
+        r"^procedures?\s+a\s+",
+    ]
+    for pattern in prefixes:
+        text = re.sub(pattern, "", text, flags=re.IGNORECASE)
+    return text
+
+
+def _fold(text):
+    """Lowercase and remove accents so comparisons ignore spelling variants."""
+    return (text or "").casefold().translate(ACCENTS)
+
+
+def _contains_phrase(haystack, phrase):
+    """Whole-word containment test on an already folded string."""
+    if not haystack or not phrase:
+        return False
+    pattern = r"(?<![a-z0-9])" + re.escape(phrase) + r"(?![a-z0-9])"
+    return re.search(pattern, haystack) is not None
+
+
+def _contains_any(haystack, phrases):
+    """True when any of ``phrases`` occurs as a whole word in ``haystack``."""
+    for phrase in phrases:
+        if _contains_phrase(haystack, phrase):
+            return True
+    return False
+
+
+def _proper_nouns(text):
+    """Return the capitalized words of ``text`` that look like proper nouns.
+
+    A word at the start of a sentence is not considered a proper noun (it is
+    capitalized only because Spanish sentences start with a capital), and
+    single letters are ignored.
+    """
+    names = []
+    sentence_start = True
+    for match in re.finditer(r"[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9'-]*|[.!?;:]", text or ""):
+        word = match.group()
+        if word in ".!?;:":
+            sentence_start = True
+            continue
+        if len(word) < 2 or not word[0].isupper():
+            sentence_start = False
+            continue
+        if sentence_start:
+            sentence_start = False
+            continue
+        names.append(_fold(word))
+    return names
+
+
+def _sentence_count(text):
+    """Count the sentences of ``text``."""
+    stripped = (text or "").strip()
+    if not stripped:
+        return 0
+    ends = len(SENTENCE_END.findall(stripped))
+    return max(1, ends)
+
+
+def match_procedures(procedures, message):
+    """Return the procedures whose title is referenced by ``message``.
+
+    Matching is deterministic: every word of the title must appear in the
+    message, and the longest matching title wins.
+    """
+    message = _strip_spanish_prefix(message)
+    message_tokens = _tokens(message)
+    matches = []
+    for procedure in procedures or []:
+        title_tokens = _tokens(procedure.get("title"))
+        if not title_tokens:
+            continue
+        if title_tokens <= message_tokens:
+            matches.append(procedure)
+    matches.sort(key=lambda p: len(_tokens(p.get("title"))), reverse=True)
+    return matches
+
+
+class UnifiedAssistantService:
+    def __init__(self, knowledge_service, provider, web_search=None):
+        self.knowledge = knowledge_service
+        self.provider = provider
+        self.sessions = SessionStore()
+        self.web_search = web_search if web_search is not None else WebSearchService()
+
+    @staticmethod
+    def _needs_web(message):
+        """True when the message asks for a live, public fact worth a web lookup.
+
+        Only the general route reaches this point; a question that touches a
+        documented company topic is handled by the knowledge path before ever
+        calling for public sources.
+        """
+        return bool(message and _WEB_NEED_QUERY.search(message))
+
+    # ------------------------------------------------------------------ state
+    @staticmethod
+    def _scope_steps(state):
+        """Steps of the procedure the conversation is currently about.
+
+        A section that documents a single numbered step with lettered items
+        (``1.`` followed by ``a.``..``h.``) is expanded, because those items
+        are the steps the reader actually follows.
+        """
+        steps = state.get("active_steps") or []
+        if len(steps) == 1 and steps[0].get("substeps"):
+            expanded = []
+            for step in steps:
+                for index, substep in enumerate(step["substeps"], start=1):
+                    expanded.append({**step, "number": index, "text": substep,
+                                     "substeps": [], "procedure": step.get("procedure")})
+            return expanded
+        return steps
+
+    @staticmethod
+    def _document_steps(state):
+        """Every step of the active document, in document order."""
+        return state.get("document_steps") or []
+
+    def _movement_steps(self, state):
+        """The ordered steps used to move forward/backward in a procedure."""
+        scope = self._scope_steps(state)
+        document = self._document_steps(state)
+        if len(scope) > 1:
+            return scope
+        if document:
+            return document
+        return scope
+
+    # ------------------------------------------------------------- generation
+    _TRANSLATION_MARKERS = (
+        "explicaci", "explica:", "por ejemplo", "consejo", "nota:", "recuerda que",
+        "importante:", "ademas", "asimismo", "en resumen", "puedes", "debes ",
+        "traduccion",
+    )
+
+    # Bilingual polarity groups. Each group is
+    # (english_negative, english_positive, spanish_negative, spanish_positive).
+    # If the source states one polarity and the translation states the other
+    # one without repeating the original polarity, the instruction has been
+    # inverted and the translation is rejected.
+    _POLARITY_GROUPS = (
+        (("turn off", "shut down", "power off", "unplug"),
+         ("turn on", "power on", "switch on", "plug in"),
+         ("apague", "apagar", "apagado", "desconectado", "desenchufe"),
+         ("encienda", "encender", "encendido", "conectado", "enchufe")),
+        (("disconnect", "unplug"),
+         ("connect", "plug in", "attach"),
+         ("desconecte", "desconectar", "desenchufe"),
+         ("conecte", "conectar", "enchufe", "conecte")),
+        (("disable", "deactivate"),
+         ("enable", "activate"),
+         ("deshabilite", "deshabilitar", "inhabilite", "inhabilitar"),
+         ("habilite", "habilitar", "active", "activar")),
+        (("uninstall", "remove"),
+         ("install", "add"),
+         ("desinstale", "desinstalar", "elimine", "eliminar"),
+         ("instale", "instalar", "agregue", "agregar")),
+        (("close", "shut"),
+         ("open", "start"),
+         ("cierre", "cerrar", "cerrado"),
+         ("abra", "abrir", "abierto")),
+        (("reject", "deny", "refuse"),
+         ("accept", "allow", "permit"),
+         ("rechace", "rechazar", "niegue", "negar"),
+         ("acepte", "aceptar", "permita", "permitir")),
+        (("remove", "delete", "erase"),
+         ("keep", "retain", "save"),
+         ("elimine", "eliminar", "borre", "borrar"),
+         ("mantenga", "mantener", "guarde", "guardar")),
+    )
+
+    # Technical terms that a faithful translation is expected to keep in
+    # English. They are used to tell a legitimate verbatim term apart from a
+    # fabricated name.
+    _TECHNICAL_TERMS = frozenset("""
+        ethernet wifi usb hdmi vga displayport lan wan vpn dhcp dns ntp
+        windows linux macos macosx android ios windowsupdate
+        bios uefi cpu gpu ram ssd nvme hdd mbr gpt bcd boot bootable
+        bios setup pnp uefi
+        ad active directory dns dhcp ip ipv4 ipv6 tcp udp mac gateway
+        subnet vlan switch router firewall proxy smtp imap pop ssl tls
+        ssh rdp vnc telnet http https ftp smb nfs ldap radius sso vpn
+        nic emac usb lan
+        centris network support inline remote probe
+        hp lenovo dell asus acer msi gigabyte
+        microsoft google intel amd nvidia realtek
+        f12 f2 f10 f1 esc del tab
+    """.split())
+
+    async def _translate(self, state, text, instruction):
+        """Ask the local model for a Spanish phrasing of ``text``.
+
+        The model is only allowed to *translate* the evidence. Any answer that
+        adds explanations, examples or extra instructions is rejected and the
+        original evidence is returned instead, so the assistant can never
+        introduce content that is not in the authorized document.
+        """
+        text = text or ""
+        if not text:
+            return ""
+        cache = state.setdefault("translations", {})
+        if text in cache:
+            return cache[text]
+        prompt = (
+            "Traduce al espanol el texto de abajo. Devuelve UNICAMENTE la traduccion, "
+            "en una sola linea, sin explicaciones, sin ejemplos, sin notas, sin "
+            "instrucciones adicionales y sin anadir informacion que no aparezca en el "
+            "texto original. Conserva los terminos tecnicos.\n\nTexto:\n" + text
+        )
+        answer = ""
+        try:
+            answer = await self.provider.generate(prompt)
+        except Exception:  # noqa: BLE001
+            answer = ""
+        answer = self._clean_translation(text, answer or "")
+        cache[text] = answer
+        return answer
+
+    @classmethod
+    def _clean_translation(cls, source, answer):
+        """Return a safe translation of ``source`` or the source itself.
+
+        The check is deliberately conservative: a candidate is only accepted
+        when it looks like a faithful rendering of the source. Anything that
+        adds commentary, examples, instructions or new data is discarded in
+        favour of the authorized original text.
+        """
+        source = (source or "").strip()
+        answer = (answer or "").strip()
+        if not answer:
+            return source
+        # Only the first line is used; extra lines are unsolicited commentary.
+        line = answer.splitlines()[0].strip()
+        if not line:
+            return source
+        lowered = line.casefold()
+        if any(marker in lowered for marker in cls._TRANSLATION_MARKERS):
+            return source
+        if len(line) > max(60, int(len(source) * 2.2)):
+            return source
+        if not re.search(r"[a-zA-ZáéíóúñÁÉÍÓÚÑ]", line):
+            return source
+        # A translation may not introduce or drop numbers, versions or commands.
+        source_numbers = set(re.findall(r"\d+", source))
+        if set(re.findall(r"\d+", line)) != source_numbers:
+            return source
+        # New lines, bullets or quotes are formatting the model invented.
+        # Quoted text is only acceptable when the source is quoted too.
+        invented_format = re.search(r"[\n•·‣*>|]", line)
+        if invented_format:
+            return source
+        quotes = "\"'“”«»‘’"
+        if any(char in line for char in quotes) and not any(char in source for char in quotes):
+            return source
+        if not cls._is_grounded(source, line):
+            return source
+        return line
+
+    @classmethod
+    def _is_grounded(cls, source, translation):
+        """Check that the translation does not invert or fabricate the source.
+
+        The check is deliberately *high precision* rather than high recall: it
+        only rejects a candidate when it can prove the candidate is wrong. A
+        rejection is safe because the authorized original text is always kept
+        visible, but a false rejection would needlessly hide the translation.
+
+        Three properties are verified:
+
+        1. **Polarity** -- a step that says "off" may not be translated as
+           "on" (and vice versa). An inverted instruction is dangerous.
+        2. **Proper nouns** -- capitalized names in the source (products,
+           networks, users) must survive in the translation. Inventing a
+           brand, port or tool that is not in the source is fabrication.
+        3. **Structure** -- the translation must not introduce a second
+           instruction (an extra sentence, list item or command) that the
+           source does not have.
+        """
+        src = _fold(source)
+        tr = _fold(translation)
+        if cls._polarity_changed(src, tr):
+            return False
+        if cls._invents_proper_noun(source, translation):
+            return False
+        if cls._adds_instructions(source, translation):
+            return False
+        if cls._invents_detail(source, translation):
+            return False
+        return True
+
+    @classmethod
+    def _polarity_changed(cls, source, translation):
+        """Detect an inverted on/off style instruction.
+
+        The source is English and the translation is Spanish, so the two
+        halves of a polarity group are compared *across* languages: the
+        English side is looked up in the source, the Spanish side in the
+        translation. Both sides also accept their own language, so a source
+        that is already Spanish is handled as well.
+        """
+        src = _fold(source)
+        tr = _fold(translation)
+        for en_neg, en_pos, es_neg, es_pos in cls._POLARITY_GROUPS:
+            src_neg = _contains_any(src, en_neg + es_neg)
+            src_pos = _contains_any(src, en_pos + es_pos)
+            tr_neg = _contains_any(tr, es_neg + en_neg)
+            tr_pos = _contains_any(tr, es_pos + en_pos)
+            # The source states one polarity and the translation states the
+            # other one without repeating the original polarity: inverted.
+            if src_neg and tr_pos and not tr_neg:
+                return True
+            if src_pos and tr_neg and not tr_pos:
+                return True
+        return False
+
+    # Capitalized Spanish words that only look like proper nouns because they
+    # start a sentence or because Spanish capitalizes some common nouns.
+    _SPANISH_COMMON = frozenset("""
+        seleccione pulse introduzca continúe continue encienda apague
+        conecte desconecte reinicie cierre abra configure haga espere
+        anote utilice asegúrese asegurese puede debe luego después
+        antes ahora usted rough archivo archivos grupo grupos red redes
+        equipo equipos sistema sistemas opciones opcion recien añadido
+        added nuevo nuevas nuevo
+    """.split())
+
+    # Bilingual pairs used to recognise a translated common noun. If the
+    # capitalized word of the translation is the Spanish counterpart of a word
+    # of the source, the translation is legitimate.
+    _BILINGUAL_GLOSSARY = {
+        "archivo": ("file", "files"),
+        "archivos": ("file", "files"),
+        "recien": ("newly",),
+        "anadido": ("added", "add"),
+        "añadido": ("added", "add"),
+        "adicionado": ("added", "add"),
+        "soporte": ("support",),
+        "remoto": ("remote",),
+        "red": ("network",),
+        "redes": ("network",),
+        "espera": ("wait",),
+        "confirma": ("confirm",),
+        "confirme": ("confirm",),
+        "confirmar": ("confirm",),
+        "computadora": ("computer",),
+        "ordenador": ("computer",),
+        "funcionalidad": ("functionality",),
+        "apagada": ("off",),
+        "apagado": ("off",),
+        "encendido": ("on",),
+        "cable": ("cable",),
+        "boton": ("button",),
+        "tecla": ("key",),
+        "credenciales": ("credentials",),
+        "administrador": ("administrator", "admin"),
+        "nombre": ("name",),
+        "hospedaje": ("host", "hostname"),
+        "aplicaciones": ("apps", "application", "applications"),
+        "grupo": ("group",),
+        "actualizaciones": ("updates", "update"),
+        "opcion": ("option",),
+        "prueba": ("probe", "test"),
+        "herramienta": ("tool", "utility"),
+        "proceso": ("process",),
+        "pendientes": ("pending",),
+        "equipo": ("equipment",),
+        "sistema": ("system",),
+        "dispositivo": ("device",),
+        "unidades": ("units", "unit"),
+        "servicio": ("service",),
+        "servicios": ("services",),
+        "instruccion": ("instruction",),
+        "instrucciones": ("instructions",),
+        "pantalla": ("screen",),
+        "teclado": ("keyboard",),
+        "memoria": ("memory",),
+        "puerto": ("port", "ports"),
+        "video": ("video",),
+        "audio": ("audio",),
+        "contrasena": ("password",),
+        "usuario": ("user",),
+        "sesion": ("session",),
+        "licencia": ("license",),
+        "imagen": ("image",),
+        "unidad": ("unit",),
+        "carpeta": ("folder",),
+        "campos": ("field", "fields"),
+        "campo": ("field",),
+    }
+
+    # Concrete details that a translation may only mention when the source
+    # mentions them too. They are strong signals that the model added a
+    # specification of its own (a port, a coloured socket, a slot, ...).
+    _DETAIL_TERMS = {
+        "puerto": ("port", "ports"),
+        "ports": ("port", "ports"),
+        "toma": ("jack", "socket", "outlet"),
+        "tomas": ("jack", "socket", "outlet"),
+        "jack": ("jack", "socket"),
+        "ranura": ("slot", "slots"),
+        "ranuras": ("slot", "slots"),
+        "slot": ("slot", "slots"),
+        "piloto": ("led", "lights"),
+        "led": ("led",),
+        "etiqueta": ("label", "labels", "sticker"),
+        "pegatina": ("sticker", "label"),
+        "amarilla": ("yellow",),
+        "amarillo": ("yellow",),
+        "roja": ("red",),
+        "rojo": ("red",),
+        "verde": ("green",),
+        "azul": ("blue",),
+        "gris": ("gray", "grey"),
+        "negra": ("black",),
+        "negro": ("black",),
+    }
+
+    @classmethod
+    def _has_counterpart(cls, name, source_tokens):
+        """True when ``name`` is the counterpart of a word of the source."""
+        for english in cls._BILINGUAL_GLOSSARY.get(name, ()):
+            if english in source_tokens:
+                return True
+        return False
+
+    @classmethod
+    def _invents_proper_noun(cls, source, translation):
+        """Detect a capitalized name in the translation that is not in the source.
+
+        Technical terms that the translator legitimately keeps in English
+        (Ethernet, Windows, IPV4, AD, BIOS) are recognized through the
+        glossary, so they do not count as inventions. Ordinary Spanish
+        sentence-initial words are ignored as well.
+        """
+        src_names = set(_proper_nouns(source))
+        tr_names = _proper_nouns(translation)
+        if not tr_names:
+            return False
+        source_tokens = _tokens(source)
+        known = set(src_names)
+        # Terms the translator is expected to keep verbatim.
+        for token in _tokens(translation):
+            if token in cls._TECHNICAL_TERMS:
+                known.add(token)
+        # Every token of the source is legitimate content of the translation.
+        known |= source_tokens
+        for name in tr_names:
+            if name in known or name in cls._SPANISH_COMMON:
+                continue
+            # A capitalized Spanish noun that translates a word of the source
+            # is not an invention.
+            if cls._has_counterpart(name, source_tokens):
+                continue
+            return True
+        return False
+
+    @classmethod
+    def _invents_detail(cls, source, translation):
+        """Detect a concrete detail in the translation that the source lacks.
+
+        A translation that mentions a port, a coloured socket or a slot the
+        source never mentions is describing a different action.
+        """
+        source_tokens = _tokens(source)
+        for token in _tokens(translation):
+            counterparts = cls._DETAIL_TERMS.get(token)
+            if counterparts is None:
+                continue
+            # The detail is allowed when the source mentions it, either with
+            # the same wording or with its counterpart in the other language.
+            if token in source_tokens:
+                continue
+            if any(english in source_tokens for english in counterparts):
+                continue
+            return True
+        return False
+
+    @classmethod
+    def _adds_instructions(cls, source, translation):
+        """Detect an extra instruction that the source does not contain."""
+        # The source is a single step; a translation that carries a second
+        # sentence is adding instructions.
+        src_sentences = _sentence_count(source)
+        tr_sentences = _sentence_count(translation)
+        if tr_sentences > src_sentences:
+            return True
+        # A translation that is markedly longer than the source tends to add
+        # content rather than translate it.
+        if len(translation) > max(90, int(len(source) * 2.5)):
+            return True
+        return False
+
+    @staticmethod
+    def _citation(step, document_title):
+        source = step.get("source") or {}
+        title = source.get("title") or document_title or "documento autorizado"
+        parts = [str(title)]
+        if source.get("page"):
+            parts.append(f"página {source['page']}")
+        if source.get("version"):
+            parts.append(f"versión {source['version']}")
+        procedure = step.get("procedure")
+        if procedure:
+            parts.append(f"procedimiento {procedure}")
+        return "[Fuente: " + ", ".join(parts) + "]"
+
+    async def _answer_step(self, state, step, ordinal):
+        document_title = state.get("active_document")
+        procedure = step.get("procedure") or state.get("active_procedure") or ""
+        header = f"Paso {ordinal}"
+        if procedure:
+            header += f" de «{procedure}»"
+        original = (step.get("text") or "").strip()
+        body = await self._translate(state, original, "")
+        lines = [f"{header}: {body}"]
+        # The literal authorized text is always shown when it differs from the
+        # translation, so the user can verify the wording against the manual.
+        if body != original and original:
+            lines.append(f"Texto del documento: {original}")
+        substeps = step.get("substeps") or []
+        if substeps:
+            lines.append("Incluye: " + "; ".join(substeps) + ".")
+        lines.append(self._citation(step, document_title))
+        return "\n".join(lines)
+
+    async def _answer_steps(self, state, message):
+        """Answer a request for the complete list of steps.
+
+        Uses the structured procedure catalog when available, formatting steps
+        deterministically without calling the model unnecessarily. Falls back to
+        translation only when the catalog lacks step data.
+        """
+        procedures = state.get("procedures") or []
+        matched = match_procedures(procedures, message)
+        if not matched:
+            matched = [p for p in procedures if p.get("steps")]
+        if not matched:
+            return None
+        blocks = []
+        for procedure in matched:
+            steps = procedure.get("steps") or []
+            title = procedure.get("title") or "Procedimiento"
+            lines = [f"«{title}» ({len(steps)} pasos):"]
+            # Use steps from the catalog directly - format deterministically.
+            # Translate each step's text naturally into Spanish, but sequentially
+            # (not concurrently) to avoid overwhelming the model and to preserve
+            # error handling per step.
+            for index, step in enumerate(steps, start=1):
+                original = (step.get("text") or "").strip()
+                # Translate the step text; if translation fails, use original
+                try:
+                    body = await self._translate(state, original, "")
+                except Exception:
+                    body = original
+                lines.append(f"{index}. {body}")
+            # Cite the source document from the first step
+            if steps:
+                lines.append(self._citation(steps[0], state.get("active_document")))
+            blocks.append("\n".join(lines))
+        state["active_steps"] = matched[0].get("steps") or []
+        state["active_procedure"] = matched[0].get("title")
+        state["current_step_index"] = 0
+        return "\n\n".join(blocks)
+
+    def _answer_document(self, state):
+        sources = state.get("active_sources") or []
+        title = state.get("active_document")
+        if not title:
+            return None
+        source = sources[0] if sources else {}
+        details = [f"El procedimiento aparece en «{title}»"]
+        if source.get("filename"):
+            details.append(f"archivo {source['filename']}")
+        if source.get("page"):
+            details.append(f"página {source['page']}")
+        if source.get("version"):
+            details.append(f"versión {source['version']}")
+        if source.get("revision"):
+            details.append(f"revisión {source['revision']}")
+        answer = ", ".join(details) + "."
+        if source.get("citation_id"):
+            answer += (f" [Fuente: {title}, página {source.get('page')}, "
+                       f"cita {source['citation_id']}]")
+        return answer
+
+    def _answer_procedure(self, state):
+        procedure = None
+        for candidate in state.get("procedures") or []:
+            if candidate.get("title") == state.get("active_procedure"):
+                procedure = candidate
+                break
+        if procedure is None:
+            steps = self._scope_steps(state) or self._document_steps(state)
+            if not steps:
+                return None
+            procedure = {"title": state.get("active_procedure") or "Procedimiento actual",
+                         "steps": steps}
+        steps = procedure.get("steps") or []
+        answer = (f"El procedimiento «{procedure.get('title') or 'actual'}» "
+                  f"tiene {len(steps)} pasos: ")
+        answer += " ".join(f"{index}) {step.get('text')}. "
+                           for index, step in enumerate(steps, start=1))
+        if steps:
+            answer += " " + self._citation(steps[0], state.get("active_document"))
+        return answer.strip()
+
+    # ------------------------------------------------------------------ chat
+    @staticmethod
+    def _is_conceptual(message):
+        """True for an ordinary conceptual question about a topic.
+
+        A conceptual question asks for an explanation ("¿qué es X?", "explícame
+        X", "diferencia entre X e Y"). It is answered by the general provider
+        instead of the grounded knowledge pipeline.
+        """
+        text = message or ""
+        if DOCUMENTED_TOPIC.search(text):
+            # The question is about the authorized documentation, so evidence
+            # is mandatory and the knowledge route must handle it.
+            return False
+        return CONCEPTUAL_QUESTION.search(text) is not None
+
+    @staticmethod
+    def _continues_general(state, message):
+        """True when the message continues a general (non-document) exchange.
+
+        A follow-up of a general question ("y el firewall?") carries no
+        reference of its own, so it keeps the route of the conversation as long
+        as it does not ask about the authorized documentation.
+        """
+        if state.get("active_route") != "general":
+            return False
+        text = (message or "").strip()
+        if not text:
+            return False
+        return DOCUMENTED_TOPIC.search(text) is None
+
+    async def _general_answer(self, state, message):
+        """Answer with the general provider, optionally enriched with public sources.
+
+        Public sources are requested only when the message asks for a live fact
+        (``versi[o]n``, ``última``, ``latest``...). They are cited in the prompt and
+        stored on the state so the chat layer can return them to the caller.
+        """
+        state["web_sources"] = []
+
+        web_block = ""
+        if self._needs_web(message) and self.web_search is not None:
+            try:
+                web = await self.web_search.search(message, max_results=5)
+            except Exception:  # noqa: BLE001 - never break the answer on a web fault
+                web = []
+            if web:
+                state["web_sources"] = [
+                    {"title": s2.title, "url": s2.url, "snippet": s2.snippet}
+                    for s2 in web
+                ]
+                refs = "\n".join(
+                    f"- [{w['title']}]({w['url']}): {w['snippet']}"
+                    for w in state["web_sources"][:5]
+                )
+                web_block = (
+                    "\nFuentes públicas de referencia (pueden estar desactualizadas):"
+                    "\n" + refs + "\nResponde basándote en estas fuentes públicas y en tus propios conocimientos."
+                )
+
+        history = state.get("history") or []
+        context = ""
+        if history:
+            recent = "\n".join(f"Usuario: {q}\nAsistente: {a}" for q, a in history[-4:])
+            context = (
+                "\n\nConversación previa:\n" + recent +
+                "\n\nResponde de forma coherente con la conversación previa."
+            )
+        prompt = (
+            "Eres un asistente de soporte técnico. Responde en español, de forma "
+            "breve y clara, a la siguiente pregunta del usuario.\n"
+            "conocimientos. Si no sabes la respuesta, dilo claramente." + (message or "") +
+            context + web_block
+        )
+        try:
+            answer = await self.provider.generate(prompt)
+        except Exception as exc:  # noqa: BLE001
+            import logging
+            logging.getLogger("assistant").exception("general provider failed: %s", exc)
+            return GENERAL_UNAVAILABLE
+        answer = (answer or "").strip()
+        return answer or GENERAL_UNAVAILABLE
+
+    async def chat(self, message, session_id=None):
+        session_id, state = self.sessions.get(session_id)
+        message = (message or "").strip()
+
+        # Social messages never disturb the procedure continuity of the session.
+        social = detect_social_intent(message)
+        if social:
+            answer = social_response(social)
+            state["active_route"] = "social"
+            self.sessions.remember(state, message, answer)
+            return {"answer": answer, "session_id": session_id, "route": "social", "sources": []}
+
+        reference = detect_reference(message)
+        kind = reference["kind"] if reference else None
+
+        # References that can be answered directly from the session state.
+        if kind in {"ordinal", "next", "previous", "last"}:
+            answer = await self._answer_movement(state, kind, reference.get("number"))
+            if answer is not None:
+                state["active_route"] = "knowledge"
+                self.sessions.remember(state, message, answer)
+                return {"answer": answer, "session_id": session_id, "route": "knowledge",
+                        "sources": state.get("active_sources") or []}
+        if kind == "document":
+            answer = self._answer_document(state)
+            if answer is not None:
+                state["active_route"] = "knowledge"
+                self.sessions.remember(state, message, answer)
+                return {"answer": answer, "session_id": session_id, "route": "knowledge",
+                        "sources": state.get("active_sources") or []}
+        if kind == "procedure":
+            answer = self._answer_procedure(state)
+            if answer is not None:
+                state["active_route"] = "knowledge"
+                self.sessions.remember(state, message, answer)
+                return {"answer": answer, "session_id": session_id, "route": "knowledge",
+                        "sources": state.get("active_sources") or []}
+        if kind == "steps":
+            answer = await self._answer_steps(state, message)
+            if answer is not None:
+                state["active_route"] = "knowledge"
+                self.sessions.remember(state, message, answer)
+                return {"answer": answer, "session_id": session_id, "route": "knowledge",
+                        "sources": state.get("active_sources") or []}
+
+        # Ordinary conceptual questions are answered by the general provider.
+        # They do not ask for company documentation, so the grounded pipeline
+        # is not used and no citation is invented.
+        if self._needs_web(message) or self._is_conceptual(message) or self._continues_general(state, message):
+            answer = await self._general_answer(state, message)
+            state["active_route"] = "general"
+            self.sessions.remember(state, message, answer)
+            return {"answer": answer, "session_id": session_id, "route": "general",
+                    "sources": []}
+
+        # Everything else goes through the grounded knowledge pipeline.
+        try:
+            from backend.app.knowledge.models import KnowledgeRequest
+            request = KnowledgeRequest(message=message,
+                                       conversation_id=state.get("knowledge_conversation_id"))
+            result = await self.knowledge.query(request)
+        except Exception as exc:  # noqa: BLE001
+            import logging
+            logging.getLogger("assistant").exception("knowledge query failed: %s", exc)
+            answer = "No se pudo consultar la documentación autorizada en este momento."
+            state["active_route"] = "knowledge"
+            self.sessions.remember(state, message, answer)
+            return {"answer": answer, "session_id": session_id, "route": "knowledge", "sources": []}
+
+        state["knowledge_conversation_id"] = result.conversation_id
+        state["active_route"] = "knowledge"
+        if result.sources:
+            state["active_sources"] = result.sources
+            state["active_document"] = result.sources[0].get("title")
+            state["active_document_id"] = result.sources[0].get("document_id")
+            self._load_catalog(state, request.message)
+
+        answer = None
+        if kind == "steps":
+            answer = await self._answer_steps(state, message)
+        if answer is None and kind in {"ordinal", "next", "previous", "last"}:
+            answer = await self._answer_movement(state, kind, reference.get("number"))
+        if answer is None and kind == "document":
+            answer = self._answer_document(state)
+        if answer is None and kind == "procedure":
+            answer = self._answer_procedure(state)
+        if answer is None:
+            answer = result.answer
+
+        # The documentation does not cover the topic. A company question keeps
+        # its refusal, but an ordinary question is answered by the general
+        # provider instead of returning an empty answer.
+        if (result.status == "insufficient_evidence"
+                and COMPANY_REFUSAL_MARK not in (answer or "").casefold()
+                and not DOCUMENTED_TOPIC.search(message or "")):
+            general = await self._general_answer(state, message)
+            if general:
+                answer = general
+                state["active_route"] = "general"
+                self.sessions.remember(state, message, answer)
+                return {"answer": answer, "session_id": session_id, "route": "general",
+                        "sources": result.sources}
+
+        self.sessions.remember(state, message, answer)
+        return {"answer": answer, "session_id": session_id, "route": "knowledge",
+                "sources": result.sources}
+
+    def _load_catalog(self, state, message=None):
+        """Rebuild the deterministic procedure catalog of the active document.
+
+        The conversation stays anchored to the procedure the user actually asked
+        about (the supplied message) instead of the bare document title. Follow-up
+        steps, including ordinals over lettered checks, therefore resolve against
+        the correct procedure instead of a later adjacent section on the same
+        page. A procedure is never silently replaced by a later section.
+        """
+        document_id = state.get("active_document_id")
+        if not document_id or not self.knowledge:
+            state["procedures"] = []
+            state["document_steps"] = []
+            state["active_steps"] = []
+            state["active_procedure"] = None
+            return
+
+        try:
+            catalog = self.knowledge.procedure_catalog(document_id)
+        except Exception:  # noqa: BLE001
+            catalog = None
+        if not catalog:
+            state["procedures"] = []
+            state["document_steps"] = []
+            state["active_steps"] = []
+            state["active_procedure"] = None
+            return
+
+        procedures = catalog.get("procedures") or []
+        state["procedures"] = procedures
+        state["document_steps"] = flatten(procedures)
+
+        # The user's question selects the procedure. If the message does not name
+        # one, keep whatever procedure was anchored earlier in this conversation.
+        anchor = (message or "").strip() or state.get("active_document") or ""
+        matches = match_procedures(procedures, anchor)
+        if matches:
+            state["active_procedure"] = matches[0].get("title")
+            state["active_steps"] = (matches[0].get("steps") or [])
+        elif state.get("active_procedure"):
+            entry = next((p for p in procedures if p.get("title") == state["active_procedure"]), None)
+            state["active_steps"] = (entry.get("steps") if entry is not None else [])
+        else:
+            fallback = match_procedures(procedures, state.get("active_document") or "")
+            if fallback:
+                state["active_procedure"] = fallback[0].get("title")
+                state["active_steps"] = (fallback[0].get("steps") or [])
+            else:
+                state["active_procedure"] = None
+                state["active_steps"] = []
+
+    async def _answer_movement(self, state, kind, number):
+        """Answer ordinal / next / previous / last step references."""
+        steps = self._movement_steps(state)
+        if not steps:
+            return None
+        if kind == "ordinal":
+            if not number or number < 1:
+                return None
+            step = steps[number - 1] if 1 <= number <= len(steps) else None
+            if step is None:
+                return (f"No existe el paso {number} en el procedimiento actual. "
+                        f"El procedimiento documentado tiene {len(steps)} pasos.")
+            ordinal = number
+            state["current_step_index"] = steps.index(step)
+        elif kind == "next":
+            index = state.get("current_step_index", 0)
+            if index + 1 >= len(steps):
+                return "Ya estás en el último paso del procedimiento."
+            index += 1
+            state["current_step_index"] = index
+            step = steps[index]
+            ordinal = index + 1
+        elif kind == "previous":
+            index = state.get("current_step_index", 0)
+            if index <= 0:
+                return "Ya estás en el primer paso del procedimiento."
+            index -= 1
+            state["current_step_index"] = index
+            step = steps[index]
+            ordinal = index + 1
+        else:  # last
+            index = len(steps) - 1
+            state["current_step_index"] = index
+            step = steps[index]
+            ordinal = len(steps)
+        return await self._answer_step(state, step, ordinal)
