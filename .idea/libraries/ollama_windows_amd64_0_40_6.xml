@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="ollama-windows-amd64-0.40.6">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/.cache/downloads/ollama-windows-amd64-0.40.6.zip!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

@@ -28,3 +28,7 @@ P0_DEBUG_SUMMARY.md
 *.egg-info/
 dist/
 build/
+
+!tests/test_speech_nlu_phase3.py
+work/whisper-eval/model/
+/work/whisper-eval/model/

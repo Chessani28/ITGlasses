@@ -17,10 +17,11 @@ def exact_ids(text):
 
 def intent(text):
     text = normalize(text)
+    # Steps take priority over identification when both are requested
+    if re.search(r"pasos|paso a paso|instrucciones|como (?:hago|hacer|ejecut|realiz)|detall|how (?:do|to)|mu[eé]strame|pasame|dame los", text):
+        return "steps"
     if re.search(r"como se llama|nombre|que (?:es|significa)|definicion|no recuerdo", text):
         return "identify"
-    if re.search(r"pasos|paso a paso|instrucciones|como (?:hago|hacer|ejecut|realiz)|detall|how (?:do|to)", text):
-        return "steps"
     ids = exact_ids(text)
     if ids and {procedure_id(t) for t in tokens(text) if t != "numero"} <= set(ids):
         return "identify"
@@ -37,24 +38,44 @@ class Retriever:
             rows = [r for r in rows if r["document_id"] in candidates]
         if not rows:
             return []
-        fingerprint = await self.embeddings.fingerprint()
-        if any(r["embedding_digest"] != fingerprint or r["embedding_model"] != self.embeddings.model for r in rows):
-            raise KnowledgeError("reindex_required", "The embedding model changed. Reindex the eligible documents before querying.", 409)
-        # All query segments contribute; no silent truncation of long questions.
-        segments = [question[i:i + 1000] for i in range(0, len(question), 1000)]
-        query_vectors = await self.embeddings.embed(segments, query=True)
-        vectors = np.asarray([np.frombuffer(r["vector"], dtype="<f4") for r in rows])
-        if vectors.ndim != 2 or vectors.shape[1] != query_vectors.shape[1]:
-            raise KnowledgeError("reindex_required", "Embedding dimensions differ. Reindex documents.", 409)
-        scores = (vectors @ query_vectors.T).max(axis=1)
+        try:
+            fingerprint = await self.embeddings.fingerprint()
+        except KnowledgeError as e:
+            if e.code == "embedding_unavailable":
+                # Fall back to lexical (BM25) search only when embedding model is unavailable
+                pass
+            else:
+                raise
+        else:
+            if any(r["embedding_digest"] != fingerprint or r["embedding_model"] != self.embeddings.model for r in rows):
+                raise KnowledgeError("reindex_required", "The embedding model changed. Reindex the eligible documents before querying.", 409)
+            # All query segments contribute; no silent truncation of long questions.
+            segments = [question[i:i + 1000] for i in range(0, len(question), 1000)]
+            query_vectors = await self.embeddings.embed(segments, query=True)
+            vectors = np.asarray([np.frombuffer(r["vector"], dtype="<f4") for r in rows])
+            if vectors.ndim != 2 or vectors.shape[1] != query_vectors.shape[1]:
+                raise KnowledgeError("reindex_required", "Embedding dimensions differ. Reindex documents.", 409)
+            scores = (vectors @ query_vectors.T).max(axis=1)
+            lexical = self.store.lexical(tokens(question))
+            semantic_order = sorted(range(len(rows)), key=lambda i: (-float(scores[i]), rows[i]["id"]))
+            ranks = {i: rank + 1 for rank, i in enumerate(semantic_order)}
+            query_tokens = set(tokens(question))
+            result = []
+            for index, row in enumerate(rows):
+                overlap = len(query_tokens & set(tokens(row["title"] + " " + row["scope"] + " " + row["text"])))
+                lexical_rank = lexical.get(row["id"])
+                score = 1 / (60 + ranks[index]) + (1 / (60 + lexical_rank) if lexical_rank else 0)
+                result.append({**row, "semantic": round(float(scores[index]), 6), "hybrid": score, "overlap": overlap})
+            return sorted(result, key=lambda r: (-r["hybrid"], -r["semantic"], r["id"]))
+        # Fallback: lexical-only BM25 ranking without semantic scoring
         lexical = self.store.lexical(tokens(question))
-        semantic_order = sorted(range(len(rows)), key=lambda i: (-float(scores[i]), rows[i]["id"]))
-        ranks = {i: rank + 1 for rank, i in enumerate(semantic_order)}
         query_tokens = set(tokens(question))
         result = []
         for index, row in enumerate(rows):
             overlap = len(query_tokens & set(tokens(row["title"] + " " + row["scope"] + " " + row["text"])))
             lexical_rank = lexical.get(row["id"])
-            score = 1 / (60 + ranks[index]) + (1 / (60 + lexical_rank) if lexical_rank else 0)
-            result.append({**row, "semantic": round(float(scores[index]), 6), "hybrid": score, "overlap": overlap})
-        return sorted(result, key=lambda r: (-r["hybrid"], -r["semantic"], r["id"]))
+            if not lexical_rank:
+                continue
+            score = 1 / (60 + lexical_rank)
+            result.append({**row, "semantic": 0.0, "hybrid": score, "overlap": overlap, "lexical_only": True})
+        return sorted(result, key=lambda r: (-r["hybrid"], -r["overlap"], r["id"]))

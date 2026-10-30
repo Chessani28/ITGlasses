@@ -103,6 +103,16 @@ class Store:
                 JOIN revisions r ON r.document_id=d.id AND r.revision=c.revision
                 WHERE d.authorized=1 AND d.withdrawn=0''')]
 
+    def document_chunks(self, document_id):
+        """Return every eligible chunk of a document, ordered by page/paragraph."""
+        with self.connect() as db:
+            return [dict(row) for row in db.execute('''SELECT c.*,d.title,d.scope,d.procedure_id,
+                d.procedure_key,r.version,r.sha256,r.filename
+                FROM chunks c JOIN documents d ON d.id=c.document_id AND d.current_revision=c.revision
+                JOIN revisions r ON r.document_id=d.id AND r.revision=c.revision
+                WHERE c.document_id=? AND d.authorized=1 AND d.withdrawn=0
+                ORDER BY COALESCE(c.page,0), COALESCE(c.paragraph,0), c.offset''', (document_id,))]
+
     def evidence(self, identifier):
         return next((c for c in self.eligible_chunks() if c["id"] == identifier), None)
 

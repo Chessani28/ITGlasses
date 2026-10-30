@@ -1,0 +1,52 @@
+[
+  {
+    "text": "¿Qué es una VPN?",
+    "path": "D:\\ITGlasses\\work\\speech-eval\\synthetic-00.wav",
+    "kind": "synthetic Piper es_ES, NOT human Mexican Spanish"
+  },
+  {
+    "text": "¿Cómo funciona una VPN?",
+    "path": "D:\\ITGlasses\\work\\speech-eval\\synthetic-01.wav",
+    "kind": "synthetic Piper es_ES, NOT human Mexican Spanish"
+  },
+  {
+    "text": "¿Qué es una dirección IP?",
+    "path": "D:\\ITGlasses\\work\\speech-eval\\synthetic-02.wav",
+    "kind": "synthetic Piper es_ES, NOT human Mexican Spanish"
+  },
+  {
+    "text": "¿Cómo configuro el DNS?",
+    "path": "D:\\ITGlasses\\work\\speech-eval\\synthetic-03.wav",
+    "kind": "synthetic Piper es_ES, NOT human Mexican Spanish"
+  },
+  {
+    "text": "¿Cómo actualizo la BIOS?",
+    "path": "D:\\ITGlasses\\work\\speech-eval\\synthetic-04.wav",
+    "kind": "synthetic Piper es_ES, NOT human Mexican Spanish"
+  },
+  {
+    "text": "¿Qué es un SSD NVMe?",
+    "path": "D:\\ITGlasses\\work\\speech-eval\\synthetic-05.wav",
+    "kind": "synthetic Piper es_ES, NOT human Mexican Spanish"
+  },
+  {
+    "text": "¿Cómo reviso la memoria RAM?",
+    "path": "D:\\ITGlasses\\work\\speech-eval\\synthetic-06.wav",
+    "kind": "synthetic Piper es_ES, NOT human Mexican Spanish"
+  },
+  {
+    "text": "¿Qué hago si Windows no arranca?",
+    "path": "D:\\ITGlasses\\work\\speech-eval\\synthetic-07.wav",
+    "kind": "synthetic Piper es_ES, NOT human Mexican Spanish"
+  },
+  {
+    "text": "Explícame el cuarto paso.",
+    "path": "D:\\ITGlasses\\work\\speech-eval\\synthetic-08.wav",
+    "kind": "synthetic Piper es_ES, NOT human Mexican Spanish"
+  },
+  {
+    "text": "¿Y qué pasa si eso no funciona?",
+    "path": "D:\\ITGlasses\\work\\speech-eval\\synthetic-09.wav",
+    "kind": "synthetic Piper es_ES, NOT human Mexican Spanish"
+  }
+]

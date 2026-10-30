@@ -3,10 +3,11 @@ import {api, chatPayload, documentState, elapsed, jsonOptions, limits, sourcePat
 import {initVoice} from "./voice-ui.mjs";
 let voiceActive = false;
 const $ = id => document.getElementById(id);
-const state = {mode: "knowledge", busy: false, documentBusy: false, updating: null, withdrawing: null,
-  sourceRequest: 0, chats: {knowledge: {messages: [], conversation: null}, general: {messages: [], conversation: null}}};
+const state = {mode: "assistant", busy: false, documentBusy: false, updating: null, withdrawing: null,
+  sourceRequest: 0, chats: {assistant: {messages: [], conversation: null}, knowledge: {messages: [], conversation: null}, general: {messages: [], conversation: null}}};
 const welcome = $("welcome");
 const modeText = {
+  assistant: {eyebrow: "ASISTENTE UNIFICADO", title: "Asistente ITGlasses.", subtitle: "Una conversación.", description: "Conversación natural, conocimiento general y documentación autorizada en un solo modo.", context: "Asistente · contexto de sesión del backend.", prompt: "Escribe tu pregunta…", label: "Asistente ITGlasses · fuentes cuando aplique"},
   knowledge: {eyebrow: "CONOCIMIENTO CON EVIDENCIA", title: "Tu documentación.", subtitle: "Respuestas con respaldo.",
     description: "Encuentra procedimientos, resuelve dudas y consulta las fuentes. Todo desde tu equipo, con tus documentos autorizados.",
     context: "Conocimiento · contexto temporal del backend. No se guarda al recargar.",
@@ -86,16 +87,26 @@ function renderChat() {
     if (entry.ms !== undefined) heading.append(node("span", "message-time", elapsed(entry.ms)));
     if (entry.status) heading.append(node("span", "badge neutral", ({
       answered: "Respuesta documentada", clarification_required: "Necesita aclaración", conflict: "Versiones en conflicto",
-      insufficient_evidence: "Evidencia insuficiente"
+      insufficient_evidence: "Evidencia insuficiente",
+      general: "Chat general", knowledge: "Respuesta documentada", social: "Conversación"
     })[entry.status] || entry.status));
     const text = node("div", "message-text", entry.text);
     if (entry.pending) text.prepend(node("span", "loading-dot"));
     body.append(heading, text);
     if (entry.sources?.length) {
       const citations = node("div", "citation-list");
-      entry.sources.forEach(source => citations.append(action(
-        `▤ ${source.title || source.filename || "Fuente"}${source.page ? ` · p. ${source.page}` : ""}`,
-        "citation", () => inspectSource(source.citation_id))));
+      entry.sources.forEach(source => {
+        const label = `▤ ${source.title || source.filename || "Fuente"}${source.page ? ` · p. ${source.page}` : ""}`;
+        if (!source.citation_id && /^https?:\/\//i.test(source.url || "")) {
+          const link = node("a", "citation", label);
+          link.href = source.url;
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+          citations.append(link);
+        } else {
+          citations.append(action(label, "citation", () => inspectSource(source.citation_id)));
+        }
+      });
       body.append(citations);
     }
     if (entry.options?.length && ["clarification_required", "conflict"].includes(entry.status)) {
@@ -136,11 +147,12 @@ async function sendMessage(message, choiceId, signal) {
   $("message").value = ""; updateCounter(); renderChat(); updateControls();
   pendingScroll();
   try {
-    const {data, ms} = await api(mode === "knowledge" ? "/api/v1/knowledge/chat" : "/api/v1/chat", {...jsonOptions(payload), signal}, 300000);
+    const {data, ms} = await api(mode === "assistant" ? "/api/v1/assistant/chat" : (mode === "knowledge" ? "/api/v1/knowledge/chat" : "/api/v1/chat"), {...jsonOptions(payload), signal}, 300000);
     result = data;
     if (typeof data.answer !== "string") throw new Error("El backend no devolvió una respuesta de chat válida.");
+    if (mode === "assistant") chat.conversation = data.session_id || chat.conversation;
     if (mode === "knowledge") chat.conversation = data.conversation_id || null;
-    Object.assign(pending, {text: data.answer, ms, status: data.status, sources: mode === "knowledge" ? data.sources : [],
+    Object.assign(pending, {text: data.answer, ms, status: data.status || data.route, sources: mode === "assistant" ? (data.sources || []) : (mode === "knowledge" ? data.sources : []),
       options: data.options, conversation: chat.conversation});
   } catch (error) {
     if (error.code === "conversation_expired") {
@@ -338,5 +350,5 @@ $("confirm-withdraw").addEventListener("click", () => {
   if (doc) mutateDocument(doc, "withdraw");
 });
 const voice = initVoice({send: (text, signal) => sendMessage(text, undefined, signal), lock: active => {voiceActive = active; updateControls();}});
-setMode("knowledge");
+setMode("assistant");
 refreshStatus();

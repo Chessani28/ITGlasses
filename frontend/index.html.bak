@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#101315">
+  <title>ITGlasses · Laboratorio local</title>
+  <link rel="icon" href="/ui/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/ui/styles.css">
+  <script type="module" src="/ui/app.js"></script>
+</head>
+<body>
+  <a class="skip" href="#main">Ir al contenido</a>
+  <aside class="sidebar">
+    <a class="brand" href="/" aria-label="ITGlasses, inicio"><span class="brand-icon">it<span>g</span></span><span>ITGlasses<small>LOCAL WORKSPACE</small></span></a>
+    <div class="workspace-label">ESPACIO DE PRUEBAS</div>
+    <nav aria-label="Navegación principal">
+      <button class="nav-button active" data-page="chat" aria-current="page"><span aria-hidden="true">◈</span> Conversaciones</button>
+      <button class="nav-button" data-page="documents"><span aria-hidden="true">▤</span> Documentos <span id="document-count" class="nav-count">—</span></button>
+      <button class="nav-button" data-page="system"><span aria-hidden="true">◉</span> Estado del sistema</button>
+    </nav>
+    <div class="sidebar-note"><span class="small-mark">↳</span><p>Tu conocimiento,<br>en tu equipo.</p><small>Documentos y consultas se procesan localmente.</small></div>
+    <div class="local-footer"><span class="dot"></span><div>Entorno local<small>127.0.0.1 · Fase 5</small></div><span class="lock-icon" aria-hidden="true">⌂</span></div>
+  </aside>
+  <main id="main" tabindex="-1">
+    <header class="topbar"><div><span class="breadcrumb">Workspace</span><span class="slash">/</span><span id="page-title">Conversaciones</span></div><div class="top-actions"><span id="connection" class="badge neutral">Comprobando conexión</span><button id="refresh-status" class="icon-button" title="Actualizar estado" aria-label="Actualizar estado">↻</button></div></header>
+    <section id="chat-page" class="page chat-page" aria-label="Conversaciones">
+      <div class="chat-toolbar"><button id="new-chat" class="text-button">＋ Nueva conversación</button></div>
+
+      <details class="voice-panel" open>
+        <summary>◉ Asistente de voz <span class="badge neutral">LOCAL · CPU</span></summary>
+        <div class="voice-heading"><div><strong id="voice-state" data-state="idle">En espera</strong><small id="voice-mic">○ MICRÓFONO APAGADO</small></div>
+  <div class="voice-buttons"><button id="voice-start" class="primary-button" type="button">Activar micrófono</button><button id="voice-stop" class="danger-button" type="button" disabled>■ Detener / interrumpir</button></div>
+  <label class="diagnostic-toggle"><input type="checkbox" id="voice-diagnostic-toggle"> Modo diagnóstico · desarrollo</label></div>
+        <p id="voice-detail" role="status">Pulsa Activar para conceder permiso. El audio se procesa en este equipo.</p>
+        <p class="voice-transcription" id="voice-transcript" aria-live="polite">Tu transcripción aparecerá aquí. Las respuestas y citas aparecerán en el chat.</p>
+        <div id="voice-diagnostic-section" hidden>
+          <h3>Diagnóstico de grabación</h3>
+          <div id="voice-recording-status" class="voice-diagnostic-item"></div>
+          <div class="voice-diagnostic-grid">
+            <div class="voice-diagnostic-item"><small>Duración grabación</small><strong id="voice-recording-duration">—</strong></div>
+            <div class="voice-diagnostic-item"><small>Motivo parada</small><strong id="voice-record-stop-reason">—</strong></div>
+            <div class="voice-diagnostic-item"><small>Duración habla</small><strong id="voice-speech-duration">—</strong></div>
+            <div class="voice-diagnostic-item"><small>Energía RMS</small><strong id="voice-audio-energy">—</strong></div>
+            <div class="voice-diagnostic-item"><small>Confianza Vosk</small><strong id="voice-confidence">—</strong></div>
+            <div class="voice-diagnostic-item"><small>Motivos aclaración</small><strong id="voice-clarification-reasons">—</strong></div>
+          </div>
+          <div class="voice-diagnostic-row">
+            <label for="voice-playback-btn">Reproducir grabación capturada:</label>
+            <button id="voice-playback-btn" class="secondary-button" disabled>Reproducir</button>
+          </div>
+          <div class="voice-diagnostic-row">
+            <audio id="voice-playback-audio" controls style="width:100%"></audio>
+          </div>
+          <details id="voice-diag-toggle-row" class="open"><summary>Ajustes de grabación desarrollador</summary>
+            <form id="voice-diag-settings-form" hidden>
+              <div class="field-row">
+                <label>Silence timeout (s)<input id="voice-diag-silent-timeout" type="number" min="1.1" max="2.0" step="0.1" value="1.1"></label>
+                <label>Energy threshold<input id="voice-diag-threshold" type="number" min="0.008" max="0.012" step="0.001" value="0.012"></label>
+                <label>Pre-speech buffer (s)<input id="voice-diag-prespeak-buffer" type="number" min="0.2" max="0.3" step="0.05" value="0.25"></label>
+                <label>Max duration (s)<input id="voice-diag-max-duration" type="number" min="10" max="30" step="1" value="28"></label>
+              </div>
+              <p id="voice-diag-feedback" class="feedback" role="status"></p>
+              <button id="voice-diag-save" class="secondary-button" type="button">Guardar ajustes</button>
+            </form>
+          </details>
+        </div>
+        <audio id="voice-audio" controls aria-label="Respuesta hablada local"></audio><small id="voice-timing"></small>
+        <details><summary>Preferencias de voz</summary><fieldset id="voice-preferences">
+          <label><input id="voice-wake" type="checkbox"> Esperar «Oye, ITGlasses» · experimental</label>
+          <label><input id="voice-speak" type="checkbox" checked> Leer las respuestas</label>
+          <label>Ventana de seguimiento<select id="voice-window"><option value="15">15 segundos</option><option value="30">30 segundos</option><option value="60">60 segundos</option></select></label>
+          <label>Voz española<select id="voice-speaker"><option value="0">Sharvard · hablante 1</option><option value="1">Sharvard · hablante 2</option></select></label>
+          <label>Velocidad<select id="voice-speed"><option value="0.85">Pausada</option><option value="1" selected>Normal</option><option value="1.15">Ágil</option></select></label>
+          <label>Umbral del micrófono<select id="voice-threshold"><option value="0.006">Sensible</option><option value="0.012" selected>Normal</option><option value="0.025">Menos sensible</option></select></label>
+          <label class="voice-wide">Frases reconocidas, separadas por coma<input id="voice-aliases" maxlength="250" value="oye itglasses, oye it glasses, oye iti clases, oye y ti clases, oye y te clases"></label>
+        </fieldset><p>La activación compara transcripciones: puede fallar o activarse por error. Ajusta las frases según la transcripción visible. No es un detector profesional de palabra clave.</p></details>
+        <small>Habla y deja una pausa de 1,1 segundos. Máximo 28 segundos por turno. La captura se ignora durante la respuesta para evitar eco. Detener libera el micrófono; una petición de chat ya enviada puede continuar en el servidor. El chat general no conserva contexto semántico.</small>
+      </details>
+
+      <div id="conversation" class="conversation" role="log" aria-label="Mensajes de la conversación" aria-live="polite">
+        <div id="welcome" class="welcome">
+          <div class="hero-symbol" aria-hidden="true"><span>▤</span><i>✦</i></div>
+          <span class="eyebrow" id="welcome-eyebrow">CONOCIMIENTO CON EVIDENCIA</span>
+          <h1 id="welcome-title">Tu documentación.<br><em>Respuestas con respaldo.</em></h1>
+          <p id="welcome-description">Encuentra procedimientos, resuelve dudas y consulta las fuentes.<br>Todo desde tu equipo, con tus documentos autorizados.</p>
+          <div class="suggestions" id="suggestions">
+            <button data-prompt="¿Cuál es el procedimiento 24?"><span>↗</span><strong>Busca un procedimiento</strong><small>«¿Cuál es el procedimiento 24?»</small></button>
+            <button data-prompt="Necesito instalar Windows desde cero con una USB. ¿Cómo se llama ese proceso?"><span>↗</span><strong>Descríbelo con tus palabras</strong><small>«Quiero instalar Windows desde cero…»</small></button>
+          </div>
+          <div class="welcome-foot"><span class="dot"></span> Fuentes verificables <span>·</span> Procesamiento local</div>
+        </div>
+      </div>
+      <div class="composer-area">
+        <div id="context-note" class="context-note">Conocimiento · contexto temporal del backend. No se guarda al recargar.</div>
+        <form id="chat-form" class="composer">
+          <label class="sr-only" for="message">Tu pregunta</label>
+          <textarea id="message" rows="2" maxlength="16000" placeholder="Describe lo que necesitas encontrar…" required></textarea>
+          <div class="composer-bottom"><span id="composer-mode"><span class="dot"></span> Documentación autorizada</span><div><span id="character-count">0 / 16000</span><button id="send" type="submit" aria-label="Enviar pregunta">↑</button></div></div>
+        </form>
+        <div class="composer-hint"><span>Enter para enviar · Shift + Enter para una nueva línea</span><span>Revisa las fuentes antes de actuar.</span></div>
+      </div>
+    </section>
+    <section id="documents-page" class="page content-page" hidden aria-label="Documentos">
+      <div class="section-heading"><div><span class="eyebrow">BIBLIOTECA LOCAL</span><h1>Tu base de conocimiento</h1><p>Sube, autoriza y organiza la documentación que puede consultar el asistente.</p></div><button id="refresh-documents" class="secondary-button">↻ Actualizar lista</button></div>
+      <form id="upload-form" class="panel upload-panel">
+        <div class="panel-heading"><div><h2 id="upload-title">Añadir documento</h2><p>PDF, DOCX, TXT o Markdown · hasta 10 MiB</p></div><button id="cancel-update" class="text-button" type="button" hidden>Cancelar actualización</button></div>
+        <label class="file-picker" for="document-file"><span aria-hidden="true">↥</span><strong>Selecciona un archivo</strong><small>Se indexará en este equipo</small><input id="document-file" type="file" accept=".pdf,.docx,.txt,.md" required></label>
+        <div class="metadata-grid">
+          <label class="wide">Título<input id="document-title" maxlength="200" required placeholder="Ej. Instalación limpia de Windows"></label>
+          <label>Versión<input id="document-version" maxlength="50" value="1" required></label>
+          <label>ID del procedimiento <span class="optional">opcional</span><input id="document-procedure" maxlength="80" placeholder="Ej. 24"></label>
+          <label>Ámbito<input id="document-scope" maxlength="100" value="General" required></label>
+          <label>Clave del procedimiento <span class="optional">opcional</span><input id="document-key" maxlength="200" placeholder="Ej. windows-clean-install"></label>
+        </div>
+        <p class="field-help">Usa la misma clave para versiones del mismo procedimiento. La autorización habilita su uso como evidencia.</p>
+        <div class="upload-footer"><label class="checkbox-label"><input id="document-authorized" type="checkbox"> Autorizar para consultas</label><button id="upload-submit" class="primary-button" type="submit">Subir e indexar <span aria-hidden="true">↗</span></button></div>
+        <p id="upload-feedback" class="feedback" role="status"></p>
+      </form>
+      <div class="list-heading"><h2>Documentos registrados <span id="list-count" class="badge neutral">—</span></h2><small>La retirada es lógica; conserva el archivo original.</small></div>
+      <p id="documents-feedback" class="feedback" role="status"></p>
+      <div id="document-list" class="document-list"><div class="empty-panel">Cargando documentos…</div></div>
+    </section>
+    <section id="system-page" class="page content-page" hidden aria-label="Estado del sistema">
+      <div class="section-heading"><div><span class="eyebrow">SERVICIOS LOCALES</span><h1>Estado del sistema</h1><p>Disponibilidad reportada por el backend. Sin métricas de hardware estimadas.</p></div></div>
+      <div class="status-grid">
+        <article class="panel status-card"><span class="eyebrow">API</span><h2>Backend FastAPI</h2><p id="backend-status">Comprobando…</p><small>Servidor de esta interfaz</small></article>
+        <article class="panel status-card"><span class="eyebrow">CHAT GENERAL</span><h2>Proveedor LLM</h2><p id="provider-status">Comprobando…</p><small id="provider-model">—</small></article>
+        <article class="panel status-card"><span class="eyebrow">RECUPERACIÓN</span><h2>Conocimiento</h2><p id="knowledge-status">Comprobando…</p><small id="embedding-model">—</small></article>
+      </div>
+      <div class="panel system-note"><h2>Cómo interpretar el estado</h2><p id="provider-note">Esperando la respuesta del proveedor.</p><p>La disponibilidad del modelo de embeddings no garantiza una respuesta: también se necesita documentación autorizada y evidencia suficiente. El modelo de respuestas de Conocimiento se verifica al realizar la consulta.</p><p>La latencia de cada petición aparece junto a su resultado. El backend no expone aquí consumo de CPU, RAM ni VRAM.</p><small id="status-updated">Sin comprobaciones todavía.</small></div>
+    </section>
+    <footer class="page-footer"><span>ITGlasses / Local AI assistant</span><span>Diseñado para explorar. Respaldado por tus fuentes.</span></footer>
+  </main>
+  <dialog id="source-dialog" aria-labelledby="source-title"><div class="dialog-heading"><div><span class="eyebrow">EVIDENCIA DOCUMENTAL</span><h2 id="source-title">Fuente</h2></div><button id="close-source" class="icon-button" aria-label="Cerrar fuente">×</button></div><p id="source-meta"></p><pre id="source-text"></pre><p id="source-feedback" role="status"></p></dialog>
+  <dialog id="withdraw-dialog" aria-labelledby="withdraw-title"><h2 id="withdraw-title">¿Retirar este documento?</h2><p id="withdraw-description"></p><p>Dejará de utilizarse en nuevas respuestas y aclaraciones pendientes. El archivo original se conserva.</p><div class="dialog-actions"><button id="cancel-withdraw" class="secondary-button">Cancelar</button><button id="confirm-withdraw" class="danger-button">Retirar documento</button></div></dialog>
+  <noscript>Activa JavaScript para utilizar esta interfaz local.</noscript>
+</body>
+</html>

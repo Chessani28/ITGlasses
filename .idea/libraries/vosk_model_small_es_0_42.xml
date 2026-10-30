@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="vosk-model-small-es-0.42">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/storage/voice/downloads/vosk-model-small-es-0.42.zip!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

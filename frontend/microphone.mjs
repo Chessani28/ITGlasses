@@ -21,7 +21,7 @@ export function pcmWav(chunks, sampleRate) {
 }
 export class Segmenter {
   constructor(rate, emit, threshold = 0.012, activity = () => {}) { this.rate = rate; this.emit = emit; this.threshold = threshold; this.activity = activity; this.reset(); }
-  reset() { this.chunks = []; this.pre = []; this.length = 0; this.silence = 0; this.voiced = 0; }
+  reset() { this.chunks = []; this.pre = []; this.length = 0; this.silence = 0; this.voiced = 0; this.speechStart = 0; this.speechEnd = 0; this.speechMs = 0; }
   push(samples) {
     const power = Math.sqrt(samples.reduce((sum, n) => sum + n * n, 0) / samples.length);
     const voiced = power >= this.threshold;
@@ -31,14 +31,26 @@ export class Segmenter {
     }
     if (!this.chunks.length) { this.chunks = this.pre; this.length = this.pre.reduce((s, x) => s + x.length, 0); this.pre = []; }
     this.chunks.push(samples); this.length += samples.length;
-    this.voiced += voiced ? samples.length : 0; this.silence = voiced ? 0 : this.silence + samples.length;
+    if (voiced) {
+      this.voiced += samples.length;
+      if (this.speechStart === 0) this.speechStart = this.length - samples.length;
+      this.speechEnd = this.length;
+      this.speechMs = this.speechEnd - this.speechStart;
+    } else {
+      this.silence = this.silence + samples.length;
+    }
     if (this.length >= this.rate * 28 || this.silence >= this.rate * 1.1) {
-      if (this.voiced >= this.rate * 0.25) this.emit(pcmWav(this.chunks, this.rate));
+      if (this.voiced >= this.rate * 0.25) {
+        const blob = pcmWav(this.chunks, this.rate);
+        blob.possiblyIncomplete = this.length >= this.rate * 28 && this.silence < this.rate * 1.1;
+        blob.voiceDiagnostics = { recordingDurationMs: this.length, stopReason: "silence_timeout", speechDurationMs: this.speechMs, energyRms: power, confidence: null, clarificationReasons: [] };
+        this.emit(blob);
+      }
       this.reset();
     }
   }
 }
-export async function captureMicrophone(emit, enabled, threshold, activity, failed) {
+export async function captureMicrophone(emit, enabled, threshold, activity, failed, diagnostic = false, settings = {}) {
   if (!navigator.mediaDevices?.getUserMedia || !globalThis.AudioWorkletNode) throw new Error("Este navegador no admite captura local. Usa Chrome o Edge en localhost.");
   const stream = await navigator.mediaDevices.getUserMedia({audio: {channelCount: 1, echoCancellation: true, noiseSuppression: true}, video: false});
   let context, source, processor;
@@ -47,10 +59,10 @@ export async function captureMicrophone(emit, enabled, threshold, activity, fail
     context = new AudioContext(); await context.audioWorklet.addModule("/ui/voice-worklet.js");
     source = context.createMediaStreamSource(stream);
     processor = new AudioWorkletNode(context, "voice-capture");
-    const segmenter = new Segmenter(context.sampleRate, emit, threshold, activity);
+    const segmenter = new Segmenter(context.sampleRate, emit, threshold, activity, settings.maxDurationMs, settings.silenceTimeoutMs);
     processor.port.onmessage = event => { if (enabled()) segmenter.push(event.data); else segmenter.reset(); };
     source.connect(processor); processor.connect(context.destination); await context.resume();
     stream.getAudioTracks()[0].addEventListener("ended", () => { stop(); failed?.("El micrófono se desconectó o perdió el permiso."); });
-    return {stop};
+    return { stop, diagnostic };
   } catch (error) { stop(); throw error; }
 }

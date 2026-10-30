@@ -1,6 +1,6 @@
 /** Shared request contracts. No browser state or model behavior is simulated. */
 export const MAX_FILE_BYTES = 10 * 1024 * 1024;
-export const limits = {general: 4000, knowledge: 16000};
+export const limits = {assistant: 4000, general: 4000, knowledge: 16000};
 export function validateFile(file) {
   if (!file) throw new Error("Selecciona un archivo.");
   if (!/\.(pdf|docx|txt|md)$/i.test(file.name)) throw new Error("Formato no admitido. Usa PDF, DOCX, TXT o Markdown.");
@@ -11,6 +11,10 @@ export function chatPayload(mode, message, conversationId, choiceId) {
   const trimmed = message.trim();
   if (!trimmed || trimmed.length > limits[mode]) throw new Error(`Escribe entre 1 y ${limits[mode]} caracteres.`);
   const payload = {message: trimmed};
+  if (mode === "assistant") {
+    if (conversationId) payload.session_id = conversationId;
+    return payload;
+  }
   if (mode === "knowledge") {
     if (conversationId) payload.conversation_id = conversationId;
     if (choiceId) payload.choice_document_id = choiceId;

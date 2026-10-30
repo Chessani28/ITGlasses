@@ -207,11 +207,6 @@ class UnifiedAssistantService:
     def _movement_steps(self, state):
         """The ordered steps used to move forward/backward in a procedure."""
         scope = self._scope_steps(state)
-        document = self._document_steps(state)
-        if len(scope) > 1:
-            return scope
-        if document:
-            return document
         return scope
 
     # ------------------------------------------------------------- generation
@@ -624,9 +619,11 @@ class UnifiedAssistantService:
             matched = [p for p in procedures if p.get("steps")]
         if not matched:
             return None
+        if len(matched) > 1:
+            return "¿Qué procedimiento quieres consultar? Opciones: " + "; ".join(p.get("title", "") for p in matched)
         blocks = []
         for procedure in matched:
-            steps = procedure.get("steps") or []
+            steps = self._scope_steps({"active_steps": procedure.get("steps") or []})
             title = procedure.get("title") or "Procedimiento"
             lines = [f"«{title}» ({len(steps)} pasos):"]
             # Use steps from the catalog directly - format deterministically.
@@ -635,11 +632,8 @@ class UnifiedAssistantService:
             # error handling per step.
             for index, step in enumerate(steps, start=1):
                 original = (step.get("text") or "").strip()
-                # Translate the step text; if translation fails, use original
-                try:
-                    body = await self._translate(state, original, "")
-                except Exception:
-                    body = original
+                # Preserve the exact authorized wording in complete procedure lists.
+                body = original
                 lines.append(f"{index}. {body}")
             # Cite the source document from the first step
             if steps:
@@ -701,7 +695,10 @@ class UnifiedAssistantService:
         X", "diferencia entre X e Y"). It is answered by the general provider
         instead of the grounded knowledge pipeline.
         """
-        text = message or ""
+        text = _fold(message or "")
+        company_scope = re.search(r"\b(?:empresa|interno|interna|autorizad[oa]s?|oficial|politica|manual|documento|segun)\b", text)
+        if not company_scope and re.search(r"^(?:¿)?(?:como (?:configuro|actualizo|reviso|instalo)|que hago si)\b", text):
+            return True
         if DOCUMENTED_TOPIC.search(text):
             # The question is about the authorized documentation, so evidence
             # is mandatory and the knowledge route must handle it.
@@ -747,10 +744,8 @@ class UnifiedAssistantService:
                     f"- [{w['title']}]({w['url']}): {w['snippet']}"
                     for w in state["web_sources"][:5]
                 )
-                web_block = (
-                    "\nFuentes públicas de referencia (pueden estar desactualizadas):"
-                    "\n" + refs + "\nResponde basándote en estas fuentes públicas y en tus propios conocimientos."
-                )
+                return "Resultados recuperados de internet en esta consulta (extractos de las fuentes):\n\n" + refs
+            return "No se pudo realizar la búsqueda pública en este momento. No tengo resultados actuales verificados para responder."
 
         history = state.get("history") or []
         context = ""
@@ -779,19 +774,37 @@ class UnifiedAssistantService:
         session_id, state = self.sessions.get(session_id)
         message = (message or "").strip()
 
+        if not state.get("history") and re.search(r"\b(?:eso|lo anterior|no funciona)\b", message, re.I) and not re.search(r"\b(?:windows|vpn|dns|bios|ssd|ram|cpu|gpu)\b", message, re.I):
+            return {"answer": "¿A qué problema o procedimiento te refieres?", "session_id": session_id, "route": "general", "sources": []}
+
         # Social messages never disturb the procedure continuity of the session.
         social = detect_social_intent(message)
         if social:
             answer = social_response(social)
-            state["active_route"] = "social"
             self.sessions.remember(state, message, answer)
             return {"answer": answer, "session_id": session_id, "route": "social", "sources": []}
 
+        # Revalidate cached evidence before answering any document follow-up.
+        if state.get("active_document_id") and self.knowledge:
+            self._load_catalog(state)
+            if hasattr(self.knowledge, "store"):
+                state["active_sources"] = [s for s in state.get("active_sources", [])
+                                           if self.knowledge.store.evidence(s.get("citation_id"))]
+
+
         reference = detect_reference(message)
         kind = reference["kind"] if reference else None
+        if re.search(r"\bpasos\b", message, re.I) and match_procedures(state.get("procedures"), message):
+            kind = "steps"
 
         # References that can be answered directly from the session state.
         if kind in {"ordinal", "next", "previous", "last"}:
+            named = match_procedures(state.get("procedures"), message)
+            if len(named) == 1:
+                if state.get("active_procedure") != named[0].get("title"):
+                    state["current_step_index"] = 0
+                state["active_procedure"] = named[0].get("title")
+                state["active_steps"] = named[0].get("steps") or []
             answer = await self._answer_movement(state, kind, reference.get("number"))
             if answer is not None:
                 state["active_route"] = "knowledge"
@@ -823,7 +836,22 @@ class UnifiedAssistantService:
         # Ordinary conceptual questions are answered by the general provider.
         # They do not ask for company documentation, so the grounded pipeline
         # is not used and no citation is invented.
-        if self._needs_web(message) or self._is_conceptual(message) or self._continues_general(state, message):
+        if self._needs_web(message):
+            # Never export a document turn or its conversation history to public search.
+            private = re.search(r"manual|guideline|documento|credencial|contrase|intern[oa]|empresa|seg[uú]n|https?://|token|password", message, re.I)
+            if self.knowledge:
+                private = private or any(_contains_phrase(_fold(message), _fold(d["title"]))
+                                         for d in self.knowledge.store.documents())
+            if private:
+                return {"answer": "No enviaré esta consulta documental o sensible a un buscador público. Formula una consulta pública sin contenido interno.",
+                        "session_id": session_id, "route": "general", "sources": []}
+            answer = await self._general_answer(state, message)
+            state["active_route"] = "general"
+            self.sessions.remember(state, message, answer)
+            return {"answer": answer, "session_id": session_id, "route": "general",
+                    "sources": state.get("web_sources") or []}
+
+        if self._is_conceptual(message) or self._continues_general(state, message):
             answer = await self._general_answer(state, message)
             state["active_route"] = "general"
             self.sessions.remember(state, message, answer)
@@ -847,6 +875,18 @@ class UnifiedAssistantService:
         state["knowledge_conversation_id"] = result.conversation_id
         state["active_route"] = "knowledge"
         if result.sources:
+            document_ids = {s.get("document_id") for s in result.sources if s.get("document_id")}
+            if len(document_ids) > 1:
+                choices = sorted({s.get("title", "Documento") for s in result.sources})
+                answer = "Encontré varios documentos autorizados. ¿Cuál quieres consultar? " + "; ".join(choices)
+                self.sessions.clear_procedure(state)
+                state["active_document_id"] = None
+                state["active_document"] = None
+                state["active_sources"] = []
+                self.sessions.remember(state, message, answer)
+                return {"answer": answer, "session_id": session_id, "route": "knowledge", "sources": result.sources}
+            if state.get("active_document_id") != result.sources[0].get("document_id"):
+                self.sessions.clear_procedure(state)
             state["active_sources"] = result.sources
             state["active_document"] = result.sources[0].get("title")
             state["active_document_id"] = result.sources[0].get("document_id")
@@ -876,7 +916,7 @@ class UnifiedAssistantService:
                 state["active_route"] = "general"
                 self.sessions.remember(state, message, answer)
                 return {"answer": answer, "session_id": session_id, "route": "general",
-                        "sources": result.sources}
+                        "sources": []}
 
         self.sessions.remember(state, message, answer)
         return {"answer": answer, "session_id": session_id, "route": "knowledge",
@@ -919,6 +959,8 @@ class UnifiedAssistantService:
         anchor = (message or "").strip() or state.get("active_document") or ""
         matches = match_procedures(procedures, anchor)
         if matches:
+            if state.get("active_procedure") != matches[0].get("title"):
+                state["current_step_index"] = 0
             state["active_procedure"] = matches[0].get("title")
             state["active_steps"] = (matches[0].get("steps") or [])
         elif state.get("active_procedure"):
@@ -937,7 +979,7 @@ class UnifiedAssistantService:
         """Answer ordinal / next / previous / last step references."""
         steps = self._movement_steps(state)
         if not steps:
-            return None
+            return "¿De qué procedimiento quieres que explique el paso? Indica el documento y el procedimiento."
         if kind == "ordinal":
             if not number or number < 1:
                 return None

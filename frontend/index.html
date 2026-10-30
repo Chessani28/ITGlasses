@@ -26,13 +26,48 @@
   <main id="main" tabindex="-1">
     <header class="topbar"><div><span class="breadcrumb">Workspace</span><span class="slash">/</span><span id="page-title">Conversaciones</span></div><div class="top-actions"><span id="connection" class="badge neutral">Comprobando conexión</span><button id="refresh-status" class="icon-button" title="Actualizar estado" aria-label="Actualizar estado">↻</button></div></header>
     <section id="chat-page" class="page chat-page" aria-label="Conversaciones">
-      <div class="chat-toolbar"><div class="mode-switch" role="group" aria-label="Modo de conversación"><button data-mode="knowledge" class="selected" aria-pressed="true">Conocimiento</button><button data-mode="general" aria-pressed="false">Chat general</button></div><button id="new-chat" class="text-button">＋ Nueva conversación</button></div>
-<div class="mode-description" id="mode-description"><small>Consulta procedimientos y respuestas basadas en los manuales disponibles.</small></div>
+      <div class="chat-toolbar"><button id="new-chat" class="text-button">＋ Nueva conversación</button></div>
+
       <details class="voice-panel" open>
         <summary>◉ Asistente de voz <span class="badge neutral">LOCAL · CPU</span></summary>
-        <div class="voice-heading"><div><strong id="voice-state" data-state="idle">En espera</strong><small id="voice-mic">○ MICRÓFONO APAGADO</small></div><div class="voice-buttons"><button id="voice-start" class="primary-button" type="button">Activar micrófono</button><button id="voice-stop" class="danger-button" type="button" disabled>■ Detener / interrumpir</button></div></div>
+        <div class="voice-heading"><div><strong id="voice-state" data-state="idle">En espera</strong><small id="voice-mic">○ MICRÓFONO APAGADO</small></div>
+  <div class="voice-buttons"><button id="voice-start" class="primary-button" type="button">Activar micrófono</button><button id="voice-stop" class="danger-button" type="button" disabled>■ Detener / interrumpir</button></div>
+  <label class="diagnostic-toggle"><input type="checkbox" id="voice-diagnostic-toggle"> Modo diagnóstico · desarrollo</label></div>
         <p id="voice-detail" role="status">Pulsa Activar para conceder permiso. El audio se procesa en este equipo.</p>
         <p class="voice-transcription" id="voice-transcript" aria-live="polite">Tu transcripción aparecerá aquí. Las respuestas y citas aparecerán en el chat.</p>
+        <div id="voice-diagnostic-section" hidden>
+          <h3>Diagnóstico de grabación</h3>
+          <div id="voice-recording-status" class="voice-diagnostic-item"></div>
+          <div class="voice-diagnostic-grid">
+            <div class="voice-diagnostic-item"><small>Duración grabación</small><strong id="voice-recording-duration">—</strong></div>
+            <div class="voice-diagnostic-item"><small>Motivo parada</small><strong id="voice-record-stop-reason">—</strong></div>
+            <div class="voice-diagnostic-item"><small>Duración habla</small><strong id="voice-speech-duration">—</strong></div>
+            <div class="voice-diagnostic-item"><small>Energía RMS</small><strong id="voice-audio-energy">—</strong></div>
+            <div class="voice-diagnostic-item"><small>Transcripción original</small><strong id="voice-transcript-raw">—</strong></div>
+<div class="voice-diagnostic-item"><small>Transcripción normalizada</small><strong id="voice-transcript-normalized">—</strong></div>
+          <div class="voice-diagnostic-item"><small>Confianza Vosk</small><strong id="voice-confidence">—</strong></div>
+            <div class="voice-diagnostic-item"><small>Motivos aclaración</small><strong id="voice-clarification-reasons">—</strong></div>
+          </div>
+          <div class="voice-diagnostic-row">
+            <label for="voice-playback-btn">Reproducir grabación capturada:</label>
+            <button id="voice-playback-btn" class="secondary-button" disabled>Reproducir</button>
+          </div>
+          <div class="voice-diagnostic-row">
+            <audio id="voice-playback-audio" controls style="width:100%"></audio>
+          </div>
+          <details id="voice-diag-toggle-row" class="open"><summary>Ajustes de grabación desarrollador</summary>
+            <form id="voice-diag-settings-form" hidden>
+              <div class="field-row">
+                <label>Silence timeout (s)<input id="voice-diag-silent-timeout" type="number" min="1.1" max="2.0" step="0.1" value="1.1"></label>
+                <label>Energy threshold<input id="voice-diag-threshold" type="number" min="0.008" max="0.012" step="0.001" value="0.012"></label>
+                <label>Pre-speech buffer (s)<input id="voice-diag-prespeak-buffer" type="number" min="0.2" max="0.3" step="0.05" value="0.25"></label>
+                <label>Max duration (s)<input id="voice-diag-max-duration" type="number" min="10" max="30" step="1" value="28"></label>
+              </div>
+              <p id="voice-diag-feedback" class="feedback" role="status"></p>
+              <button id="voice-diag-save" class="secondary-button" type="button">Guardar ajustes</button>
+            </form>
+          </details>
+        </div>
         <audio id="voice-audio" controls aria-label="Respuesta hablada local"></audio><small id="voice-timing"></small>
         <details><summary>Preferencias de voz</summary><fieldset id="voice-preferences">
           <label><input id="voice-wake" type="checkbox"> Esperar «Oye, ITGlasses» · experimental</label>

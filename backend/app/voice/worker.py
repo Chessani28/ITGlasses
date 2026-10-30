@@ -26,17 +26,33 @@ def main():
     task = json.load(sys.stdin)
     models = Path(task["models"])
     if task["kind"] == "stt":
+        from .transcription import audio_quality, transcription_result
+        with wave.open(task["input"], "rb") as audio:
+            pcm = audio.readframes(audio.getnframes())
+        quality = audio_quality(pcm)
+        quality["tail_rms"] = audio_quality(pcm[-6400:])["rms"]
+        if quality["silence"]:
+            result = transcription_result("", [], quality)
+            result.update(cpu_seconds=round(time.process_time() - started, 3), peak_working_set_mib=peak_memory())
+            print(json.dumps(result))
+            return
         from vosk import Model, KaldiRecognizer, SetLogLevel
         SetLogLevel(-1)
         model = Model(str(models / "vosk-model-small-es-0.42"))
         recognizer = KaldiRecognizer(model, 16000)
+        recognizer.SetWords(True)
         parts = []
+        words = []
         with wave.open(task["input"], "rb") as audio:
             while data := audio.readframes(4000):
                 if recognizer.AcceptWaveform(data):
-                    parts.append(json.loads(recognizer.Result()).get("text", ""))
-        parts.append(json.loads(recognizer.FinalResult()).get("text", ""))
-        result = {"text": " ".join(part for part in parts if part), "engine": "vosk"}
+                    segment = json.loads(recognizer.Result())
+                    parts.append(segment.get("text", ""))
+                    words.extend(segment.get("result", []))
+        segment = json.loads(recognizer.FinalResult())
+        parts.append(segment.get("text", ""))
+        words.extend(segment.get("result", []))
+        result = transcription_result(" ".join(part for part in parts if part), words, quality)
     else:
         from piper import PiperVoice, SynthesisConfig
         import onnxruntime

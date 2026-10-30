@@ -12,6 +12,14 @@ from .service import MAX_AUDIO, VOICE_NAME, VoiceService, validate_audio
 router = APIRouter(prefix="/api/v1/voice")
 
 
+class DiagnosticSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    energy_threshold: float = Field(default=0.012, ge=0.008, le=0.012)
+    silence_timeout: float = Field(default=1.1, ge=1.1, le=2.0)
+    pre_speech_buffer: float = Field(default=0.25, ge=0.2, le=0.3)
+    max_duration_ms: int = Field(default=28000, ge=10000, le=30000)
+
+
 class SpeechRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     text: str = Field(min_length=1, max_length=6000, strict=True)
@@ -33,6 +41,24 @@ def speech_service(request):
 @router.get("/status")
 async def status(request: Request):
     return speech_service(request).status()
+
+
+@router.get("/diagnostic/settings")
+async def diagnostic_settings(request: Request):
+    svc = speech_service(request)
+    status = svc.status()
+    return {"energy_threshold": 0.012, "silence_timeout": 1.1, "pre_speech_buffer": 0.25,
+            "max_duration_ms": 28000, "stt_engine": status.get("stt_engine", "vosk"),
+            "note": "Development-only settings. Production defaults preserved."}
+
+
+@router.put("/diagnostic/settings")
+async def update_diagnostic_settings(payload: DiagnosticSettings, request: Request):
+    # Development-only: diagnostic settings are applied in-browser at capture time.
+    # The active STT engine (Vosk) is not changed.
+    return {"status": "accepted", "energy_threshold": payload.energy_threshold,
+            "silence_timeout": payload.silence_timeout, "pre_speech_buffer": payload.pre_speech_buffer,
+            "max_duration_ms": payload.max_duration_ms, "note": "Development-only settings applied. Not saved to production."}
 
 
 @router.post("/transcribe")

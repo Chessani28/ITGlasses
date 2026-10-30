@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, Request
 
-from backend.app.api.schemas import ChatRequest, ChatResponse, HealthResponse, StatusResponse
+from backend.app.api.auth import require_auth
+from backend.app.api.schemas import (AssistantRequest, AssistantResponse, ChatRequest, ChatResponse,
+                                    HealthResponse, StatusResponse)
 from backend.app.providers.base import LLMProvider
 
 router = APIRouter()
@@ -29,3 +31,23 @@ async def chat(payload: ChatRequest, provider: LLMProvider = Depends(get_provide
     await provider.ensure_available()
     answer = await provider.generate(payload.message)
     return ChatResponse(answer=answer, provider=provider.name, model=provider.model)
+
+
+@router.post("/api/v1/assistant/chat", response_model=AssistantResponse, dependencies=[Depends(require_auth)])
+async def assistant_chat(payload: AssistantRequest, request: Request):
+    try:
+        from backend.app.knowledge.routes import service as get_knowledge_service
+        knowledge = get_knowledge_service(request)
+    except Exception as exc:  # noqa: BLE001
+        import logging
+        logging.getLogger("assistant").exception("knowledge service unavailable: %s", exc)
+        knowledge = None
+    provider = request.app.state.provider
+    from backend.app.assistant.service import UnifiedAssistantService
+    if not hasattr(request.app.state, "assistant"):
+        request.app.state.assistant = UnifiedAssistantService(knowledge, provider)
+    else:
+        request.app.state.assistant.knowledge = knowledge
+        request.app.state.assistant.provider = provider
+    result = await request.app.state.assistant.chat(payload.message, payload.session_id)
+    return AssistantResponse(**result)

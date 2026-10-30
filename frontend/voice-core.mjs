@@ -25,7 +25,7 @@ export function normalizeProcedureNumbers(text) {
 }
 export function spokenAnswer(data) {
   const body = data.answer.replace(/\[[a-f0-9-]{36}\]/gi, "");
-  const prefix = data.knowledge_type === "documented_evidence" ? "Respuesta de documentación. " : "Conocimiento general, no una política de la empresa. ";
+  const prefix = (data.knowledge_type === "documented_evidence" || (data.route === "knowledge" && data.sources?.length)) ? "Respuesta de documentación. " : "Conocimiento general, no una política de la empresa. ";
   const sources = data.sources?.length ? ` Consulta las ${data.sources.length} fuentes en pantalla.` : "";
   const text = prefix + body + sources;
   if (text.length > 6000) throw new Error("La respuesta completa supera el límite de voz. Puedes leerla en pantalla o pedir una respuesta más breve.");
@@ -70,6 +70,11 @@ export class VoiceController {
   }
   async utterance(audio) {
     if (!this.active || !["idle", "listening"].includes(this.phase)) return;
+    if (audio?.possiblyIncomplete) {
+      this.state(this.phase, "La grabación alcanzó el límite. Repite la pregunta en una frase más corta.");
+      this.activity();
+      return;
+    }
     const epoch = this.epoch, waitingWake = this.waitingWake;
     this.clock.clearTimeout(this.timer); this.abort = new AbortController();
     this.state("transcribing", "Reconocimiento local en CPU…");
@@ -77,6 +82,11 @@ export class VoiceController {
       const transcript = await this.io.transcribe(audio, this.abort.signal);
       if (epoch !== this.epoch) return;
       this.io.transcript(transcript.text, transcript.elapsed_ms);
+      if (transcript.needs_clarification) {
+        this.arm(waitingWake);
+        this.state(this.phase, transcript.clarification || "No entendí con claridad. Repite la pregunta.");
+        return;
+      }
       let question = transcript.text.trim();
       if (waitingWake) question = wakeQuestion(question, this.preferences.aliases);
       if (question === null) { this.arm(true); return; }

@@ -82,6 +82,22 @@ class KnowledgeService:
         metadata = Metadata(**{key: old[key] for key in ["title", "scope", "procedure_id", "procedure_key", "authorized", "version"]})
         return await self.ingest(revision["filename"], Path(revision["path"]).read_bytes(), metadata, document_id, expected_revision=old["current_revision"])
 
+    def procedure_catalog(self, document_id):
+        """Return the ordered procedures/steps of an authorized document.
+
+        Only documents that are authorized and not withdrawn are read, so the
+        assistant can never surface steps from a restricted revision.
+        """
+        document = self.store.get(document_id)
+        if not document or not document["authorized"] or document["withdrawn"]:
+            return None
+        chunks = self.store.document_chunks(document_id)
+        if not chunks:
+            return None
+        from backend.app.assistant.procedures import parse_document
+        procedures = parse_document(chunks)
+        return {"document": document, "procedures": procedures}
+
     async def access(self, document_id, authorized=None, withdrawn=None):
         async with self.lock:
             if not self.store.get(document_id):
@@ -130,7 +146,7 @@ class KnowledgeService:
             # Contextual follow-up: if message starts with "y si/eso/eso no funciona" etc.
             # and we have a previous topic, try to use session context
             followup_patterns = re.compile(
-                r"^(?:y\s+(?:si|eso|qué|que)|¿?y\s+(?:si|eso)|eso\s+no\s+funciona|si\s+no\s+funciona|y\s+si\s+no)",
+                r"^(?:y\s+(?:si|eso|qué|que)|¿?y\s+(?:si|eso)|eso\s+no\s+funciona|si\s+no\s+funciona|y\s+si\s+no|pasame|pásame|dame|mu[eé]strame|muestrame|los pasos|las instrucciones)",
                 re.IGNORECASE,
             )
             if request.conversation_id and session.get("last_topic") and followup_patterns.match(request.message.strip()):
@@ -212,13 +228,21 @@ class KnowledgeService:
             for row in ranked:
                 best_by_doc.setdefault(row["document_id"], row)
             # Conservative gates; calibrated on synthetic positives and hard negatives.
-            relevant = [r for r in best_by_doc.values() if r["semantic"] >= 0.55 or (r["semantic"] >= 0.42 and r["overlap"] >= 2)]
+            # When running in BM25 lexical-only mode, the semantic score is 0.0;
+            # use the hybrid (BM25) score and overlap count instead.
+            first_doc = list(best_by_doc.values())[0] if best_by_doc else None
+            if first_doc and first_doc.get("lexical_only"):
+                relevant = [r for r in best_by_doc.values() if r["overlap"] >= 2]
+            else:
+                relevant = [r for r in best_by_doc.values() if r["semantic"] >= 0.55 or (r["semantic"] >= 0.42 and r["overlap"] >= 2)]
             if exact:
                 relevant = list(best_by_doc.values())[:1]
             if not relevant:
                 return missing()
             best = relevant[0]
-            rivals = [r for r in relevant[1:] if abs(r["semantic"] - best["semantic"]) < 0.055]
+            rivals = [r for r in relevant[1:] if
+                      (r["overlap"] >= best["overlap"] if best.get("lexical_only")
+                       else abs(r["semantic"] - best["semantic"]) < 0.055)]
             selected_document = available[best["document_id"]]
             conflicts = [d for d in documents if d["procedure_key"] == selected_document["procedure_key"]]
             if len(conflicts) > 1 and not request.choice_document_id:
@@ -230,7 +254,15 @@ class KnowledgeService:
             stats = {"retrieval_ms": retrieval_ms, "semantic_score": best["semantic"], "hybrid_score": best["hybrid"], "candidate_documents": len(best_by_doc)}
             if len(request.message) > 1800:
                 return respond("clarification_required", "La consulta es extensa. Encontré este candidato; confirma si buscas su nombre o sus pasos y acota la pregunta para verificar la evidencia.", [selected_document], stats=stats)
-            if exact and mode == "identify":
+            # A named structured procedure is exact source evidence, not an LLM decision.
+            from backend.app.assistant.service import match_procedures
+            catalog = self.procedure_catalog(selected_document["id"])
+            matched = match_procedures(catalog["procedures"], request.message) if catalog and mode == "steps" else []
+            if len(matched) == 1:
+                citation_ids = {s["source"]["citation_id"] for s in matched[0]["steps"]}
+                rows = [r for r in self.store.document_chunks(selected_document["id"]) if r["id"] in citation_ids]
+                selected = list(range(len(rows)))
+            elif exact and mode == "identify":
                 selected = [0]
             else:
                 start = time.perf_counter()
@@ -256,5 +288,12 @@ class KnowledgeService:
             else:
                 if mode == "steps" and not any(re.search(r"(?:^|\n)\s*(?:\d+[.)]|[-*])\s|paso\s+\d", row["text"], re.I) for row in evidence):
                     return missing()
-                answer = "Extractos de la documentación (no se han ejecutado comandos):\n\n" + "\n\n".join(f'[{row["id"]}]\n{row["text"]}' for row in evidence)
+                # Try grounded generation with Ollama first
+                try:
+                    if hasattr(self.selector, "generate_grounded_answer"):
+                        answer = await self.selector.generate_grounded_answer(request.message, evidence)
+                    else:
+                        answer = "Según la documentación autorizada:\n\n" + "\n\n".join(row["text"] for row in evidence)
+                except Exception:
+                    answer = "Según la documentación autorizada:\n\n" + "\n\n".join(row["text"] for row in evidence)
             return respond("answered", answer, [selected_document], sources, stats)

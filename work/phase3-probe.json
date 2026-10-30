@@ -1,0 +1,315 @@
+{
+  "reference_baseline": {
+    "correct": 4,
+    "total": 10,
+    "cases": [
+      {
+        "text": "Explícame el paso 4",
+        "expected_kind": "ordinal",
+        "expected_number": 4,
+        "actual": {
+          "kind": "ordinal",
+          "number": 4,
+          "text": "Explícame el paso 4"
+        },
+        "passed": true
+      },
+      {
+        "text": "Explícame el cuarto paso",
+        "expected_kind": "ordinal",
+        "expected_number": 4,
+        "actual": {
+          "kind": "ordinal",
+          "number": 4,
+          "text": "Explícame el cuarto paso"
+        },
+        "passed": true
+      },
+      {
+        "text": "Explícame el paso cuatro",
+        "expected_kind": "ordinal",
+        "expected_number": 4,
+        "actual": null,
+        "passed": false
+      },
+      {
+        "text": "Explícame el paso 3 del procedimiento",
+        "expected_kind": "ordinal",
+        "expected_number": 3,
+        "actual": {
+          "kind": "ordinal",
+          "number": 3,
+          "text": "Explícame el paso 3 del procedimiento"
+        },
+        "passed": true
+      },
+      {
+        "text": "No, me refería al paso cinco",
+        "expected_kind": "ordinal",
+        "expected_number": 5,
+        "actual": null,
+        "passed": false
+      },
+      {
+        "text": "¿Y el anterior?",
+        "expected_kind": "previous",
+        "expected_number": null,
+        "actual": {
+          "kind": "previous",
+          "number": null,
+          "text": "¿Y el anterior?"
+        },
+        "passed": true
+      },
+      {
+        "text": "¿Qué es un usuario final?",
+        "expected_kind": null,
+        "expected_number": null,
+        "actual": {
+          "kind": "last",
+          "number": null,
+          "text": "¿Qué es un usuario final?"
+        },
+        "passed": false
+      },
+      {
+        "text": "¿Cómo restauro la versión anterior de Windows?",
+        "expected_kind": null,
+        "expected_number": null,
+        "actual": {
+          "kind": "previous",
+          "number": null,
+          "text": "¿Cómo restauro la versión anterior de Windows?"
+        },
+        "passed": false
+      },
+      {
+        "text": "¿Qué pasa si Windows sigue sin arrancar?",
+        "expected_kind": null,
+        "expected_number": null,
+        "actual": {
+          "kind": "next",
+          "number": null,
+          "text": "¿Qué pasa si Windows sigue sin arrancar?"
+        },
+        "passed": false
+      },
+      {
+        "text": "En el segundo equipo explícame el paso cuatro",
+        "expected_kind": "ordinal",
+        "expected_number": 4,
+        "actual": {
+          "kind": "ordinal",
+          "number": 2,
+          "text": "En el segundo equipo explícame el paso cuatro"
+        },
+        "passed": false
+      }
+    ]
+  },
+  "reference_improved": {
+    "correct": 10,
+    "total": 10,
+    "cases": [
+      {
+        "text": "Explícame el paso 4",
+        "expected_kind": "ordinal",
+        "expected_number": 4,
+        "actual": {
+          "kind": "ordinal",
+          "number": 4,
+          "text": "Explícame el paso 4"
+        },
+        "passed": true
+      },
+      {
+        "text": "Explícame el cuarto paso",
+        "expected_kind": "ordinal",
+        "expected_number": 4,
+        "actual": {
+          "kind": "ordinal",
+          "number": 4,
+          "text": "Explícame el cuarto paso"
+        },
+        "passed": true
+      },
+      {
+        "text": "Explícame el paso cuatro",
+        "expected_kind": "ordinal",
+        "expected_number": 4,
+        "actual": {
+          "kind": "ordinal",
+          "number": 4,
+          "text": "Explícame el paso cuatro"
+        },
+        "passed": true
+      },
+      {
+        "text": "Explícame el paso 3 del procedimiento",
+        "expected_kind": "ordinal",
+        "expected_number": 3,
+        "actual": {
+          "kind": "ordinal",
+          "number": 3,
+          "text": "Explícame el paso 3 del procedimiento"
+        },
+        "passed": true
+      },
+      {
+        "text": "No, me refería al paso cinco",
+        "expected_kind": "ordinal",
+        "expected_number": 5,
+        "actual": {
+          "kind": "ordinal",
+          "number": 5,
+          "text": "No, me refería al paso cinco"
+        },
+        "passed": true
+      },
+      {
+        "text": "¿Y el anterior?",
+        "expected_kind": "previous",
+        "expected_number": null,
+        "actual": {
+          "kind": "previous",
+          "number": null,
+          "text": "¿Y el anterior?"
+        },
+        "passed": true
+      },
+      {
+        "text": "¿Qué es un usuario final?",
+        "expected_kind": null,
+        "expected_number": null,
+        "actual": null,
+        "passed": true
+      },
+      {
+        "text": "¿Cómo restauro la versión anterior de Windows?",
+        "expected_kind": null,
+        "expected_number": null,
+        "actual": null,
+        "passed": true
+      },
+      {
+        "text": "¿Qué pasa si Windows sigue sin arrancar?",
+        "expected_kind": null,
+        "expected_number": null,
+        "actual": null,
+        "passed": true
+      },
+      {
+        "text": "En el segundo equipo explícame el paso cuatro",
+        "expected_kind": "ordinal",
+        "expected_number": 4,
+        "actual": {
+          "kind": "ordinal",
+          "number": 4,
+          "text": "En el segundo equipo explícame el paso cuatro"
+        },
+        "passed": true
+      }
+    ]
+  },
+  "status": {
+    "status": "ready",
+    "provider": "ollama",
+    "model": "qwen3:4b-instruct-2507-q4_K_M",
+    "mock": false,
+    "rag_enabled": false,
+    "local_only": true
+  },
+  "stt_status": 200,
+  "stt": {
+    "text": "qué hago si windows no arranca",
+    "raw_text": "qué hago si windows no arranca",
+    "normalized_text": "qué hago si windows no arranca",
+    "words": [
+      {
+        "conf": 1.0,
+        "end": 0.18,
+        "start": 0.0,
+        "word": "qué"
+      },
+      {
+        "conf": 1.0,
+        "end": 0.42,
+        "start": 0.18,
+        "word": "hago"
+      },
+      {
+        "conf": 1.0,
+        "end": 0.6,
+        "start": 0.42,
+        "word": "si"
+      },
+      {
+        "conf": 1.0,
+        "end": 1.02,
+        "start": 0.6,
+        "word": "windows"
+      },
+      {
+        "conf": 1.0,
+        "end": 1.17,
+        "start": 1.02,
+        "word": "no"
+      },
+      {
+        "conf": 1.0,
+        "end": 1.68,
+        "start": 1.17,
+        "word": "arranca"
+      }
+    ],
+    "confidence_kind": "vosk_word_estimate_uncalibrated",
+    "needs_clarification": false,
+    "quality_reasons": [],
+    "clarification": null,
+    "audio_quality": {
+      "rms": 0.169178,
+      "clipped_fraction": 0.0,
+      "duration_seconds": 1.695,
+      "silence": false,
+      "tail_rms": 0.025083
+    },
+    "engine": "vosk",
+    "cpu_seconds": 0.984,
+    "peak_working_set_mib": 152.05,
+    "elapsed_ms": 2040
+  },
+  "assistant_status": 200,
+  "assistant": {
+    "answer": "Si Windows no arranca, intenta lo siguiente:\n\n1. **Apaga el equipo y enciéndelo nuevamente** – A veces, un simple reinicio resuelve el problema.\n\n2. **Presiona F8 o F12 al encender** – Esto te permite acceder al menú de arranque, donde puedes elegir \"Arrancar en modo seguro\".\n\n3. **Verifica si hay errores en el disco** – Si ves mensajes de error, puede ser un problema de disco o sistema.\n\n4. **Usa una unidad de recuperación de Windows** – Inicia desde una USB o DVD de recuperación de Windows para reparar el sistema.\n\n5. **Repara el sistema con el instalador** – Si todo falla, puedes usar el disco de instalación para reparar o reinstalar Windows.\n\nSi no sabes cómo hacerlo, busca en el menú de arranque o consulta el soporte de Windows.  \n⚠️ *No puedo verificar o ejecutar comandos en tu sistema.*",
+    "session_id": "001eb4ea-e54d-481d-91a0-189d3a8b1f08",
+    "route": "general",
+    "sources": []
+  },
+  "tts_status": 200,
+  "tts_wav": true,
+  "tts_elapsed_ms": "11742",
+  "end_to_end_ms": 24151,
+  "silence": {
+    "text": "",
+    "raw_text": "",
+    "normalized_text": "",
+    "words": [],
+    "confidence_kind": null,
+    "needs_clarification": true,
+    "quality_reasons": [
+      "no_speech"
+    ],
+    "clarification": "No pude reconocer la pregunta con suficiente claridad. Repítela completa o escríbela.",
+    "audio_quality": {
+      "rms": 0.0,
+      "clipped_fraction": 0.0,
+      "duration_seconds": 1.695,
+      "silence": true,
+      "tail_rms": 0.0
+    },
+    "engine": "vosk",
+    "cpu_seconds": 0.0,
+    "peak_working_set_mib": 14.41,
+    "elapsed_ms": 120
+  }
+}

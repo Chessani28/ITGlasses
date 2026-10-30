@@ -1,0 +1,4216 @@
+{
+  "model": "Whisper base multilingual",
+  "compute_type": "int8",
+  "cpu_threads": 2,
+  "settings": {
+    "language": "es",
+    "beam_size": 5,
+    "temperature": 0,
+    "vad_filter": true,
+    "condition_on_previous_text": false,
+    "initial_prompt": null
+  },
+  "repetitions": 3,
+  "input_kind": "synthetic Piper es_ES, NOT human Mexican Spanish",
+  "resources_before": {
+    "available_bytes": 8335425536,
+    "gpu_used_mib": "1042",
+    "ollama_models": []
+  },
+  "production_before": {
+    "backend/app/voice/worker.py": "09a9c39e38ed2b3f2a57a072de174027f4f4aa447af89ac7a6d10eb8a0505c3f",
+    "backend/app/voice/service.py": "0faea3cd3ee799003461229f6d548103b9554b38cb8f816b1a1b16a7a5109fc0",
+    "backend/app/voice/routes.py": "28c79165653409ef4a6f52a7371271615de974d72c9ba06557fd7cc59a32bd5b",
+    "config.toml": "e372773a1c9b29a772c269f3c8b5f7156537e219597cf250bf57687aa673fe90",
+    "requirements-voice.txt": "2f23201c5aba9dd8c03adc73854b66ec516a82fa398b067fc388882cc20d480d"
+  },
+  "cases": [
+    {
+      "text": "¿Qué es una VPN?",
+      "path": "D:\\ITGlasses\\work\\speech-eval\\synthetic-00.wav",
+      "kind": "synthetic Piper es_ES, NOT human Mexican Spanish",
+      "sha256": "95df807cc95659ff79c75c964dc84ec3ea3d74d733fac04650d5d121251be29a",
+      "runs": {
+        "vosk": [
+          {
+            "text": "es una pena",
+            "raw_text": "es una pena",
+            "normalized_text": "es una pena",
+            "words": [
+              {
+                "conf": 1.0,
+                "end": 0.27,
+                "start": 0.005199,
+                "word": "es"
+              },
+              {
+                "conf": 1.0,
+                "end": 0.468275,
+                "start": 0.27,
+                "word": "una"
+              },
+              {
+                "conf": 0.540984,
+                "end": 0.84,
+                "start": 0.6,
+                "word": "pena"
+              }
+            ],
+            "confidence_kind": "vosk_word_estimate_uncalibrated",
+            "needs_clarification": true,
+            "quality_reasons": [
+              "low_confidence"
+            ],
+            "clarification": "No pude reconocer la pregunta con suficiente claridad. Repítela completa o escríbela.",
+            "audio_quality": {
+              "rms": 0.177755,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.021625,
+              "silence": false,
+              "tail_rms": 0.032661
+            },
+            "engine": "vosk",
+            "cpu_seconds": 0.875,
+            "peak_working_set_mib": 145.63,
+            "elapsed_ms": 1014,
+            "available_before_bytes": 8331153408,
+            "minimum_available_bytes": 8155525120
+          },
+          {
+            "text": "es una pena",
+            "raw_text": "es una pena",
+            "normalized_text": "es una pena",
+            "words": [
+              {
+                "conf": 1.0,
+                "end": 0.27,
+                "start": 0.005199,
+                "word": "es"
+              },
+              {
+                "conf": 1.0,
+                "end": 0.468275,
+                "start": 0.27,
+                "word": "una"
+              },
+              {
+                "conf": 0.540984,
+                "end": 0.84,
+                "start": 0.6,
+                "word": "pena"
+              }
+            ],
+            "confidence_kind": "vosk_word_estimate_uncalibrated",
+            "needs_clarification": true,
+            "quality_reasons": [
+              "low_confidence"
+            ],
+            "clarification": "No pude reconocer la pregunta con suficiente claridad. Repítela completa o escríbela.",
+            "audio_quality": {
+              "rms": 0.177755,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.021625,
+              "silence": false,
+              "tail_rms": 0.032661
+            },
+            "engine": "vosk",
+            "cpu_seconds": 0.938,
+            "peak_working_set_mib": 145.73,
+            "elapsed_ms": 1011,
+            "available_before_bytes": 8173674496,
+            "minimum_available_bytes": 8013840384
+          },
+          {
+            "text": "es una pena",
+            "raw_text": "es una pena",
+            "normalized_text": "es una pena",
+            "words": [
+              {
+                "conf": 1.0,
+                "end": 0.27,
+                "start": 0.005199,
+                "word": "es"
+              },
+              {
+                "conf": 1.0,
+                "end": 0.468275,
+                "start": 0.27,
+                "word": "una"
+              },
+              {
+                "conf": 0.540984,
+                "end": 0.84,
+                "start": 0.6,
+                "word": "pena"
+              }
+            ],
+            "confidence_kind": "vosk_word_estimate_uncalibrated",
+            "needs_clarification": true,
+            "quality_reasons": [
+              "low_confidence"
+            ],
+            "clarification": "No pude reconocer la pregunta con suficiente claridad. Repítela completa o escríbela.",
+            "audio_quality": {
+              "rms": 0.177755,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.021625,
+              "silence": false,
+              "tail_rms": 0.032661
+            },
+            "engine": "vosk",
+            "cpu_seconds": 0.953,
+            "peak_working_set_mib": 145.69,
+            "elapsed_ms": 1012,
+            "available_before_bytes": 8806043648,
+            "minimum_available_bytes": 8435040256
+          }
+        ],
+        "whisper": [
+          {
+            "text": "que es una huplena.",
+            "needs_clarification": false,
+            "quality_reasons": [],
+            "segments": [
+              {
+                "text": " que es una huplena.",
+                "start": 0.0,
+                "end": 1.0,
+                "avg_logprob": -0.6226373791694642,
+                "no_speech_prob": 0.009158620610833168,
+                "compression_ratio": 0.7037037037037037
+              }
+            ],
+            "confidence_kind": null,
+            "policy": "experimental decoder diagnostics, NOT calibrated confidence",
+            "audio_quality": {
+              "rms": 0.177755,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.021625,
+              "silence": false,
+              "tail_rms": 0.032661
+            },
+            "load_ms": 722,
+            "decode_ms": 1051,
+            "worker_elapsed_ms": 1773,
+            "cpu_seconds": 2.812,
+            "peak_working_set_mib": 314.84,
+            "device": "cpu",
+            "compute_type": "int8_float32",
+            "elapsed_ms": 2025,
+            "available_before_bytes": 8299974656,
+            "minimum_available_bytes": 7956598784
+          },
+          {
+            "text": "que es una huplena.",
+            "needs_clarification": false,
+            "quality_reasons": [],
+            "segments": [
+              {
+                "text": " que es una huplena.",
+                "start": 0.0,
+                "end": 1.0,
+                "avg_logprob": -0.6226373791694642,
+                "no_speech_prob": 0.009158620610833168,
+                "compression_ratio": 0.7037037037037037
+              }
+            ],
+            "confidence_kind": null,
+            "policy": "experimental decoder diagnostics, NOT calibrated confidence",
+            "audio_quality": {
+              "rms": 0.177755,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.021625,
+              "silence": false,
+              "tail_rms": 0.032661
+            },
+            "load_ms": 652,
+            "decode_ms": 957,
+            "worker_elapsed_ms": 1609,
+            "cpu_seconds": 2.828,
+            "peak_working_set_mib": 314.61,
+            "device": "cpu",
+            "compute_type": "int8_float32",
+            "elapsed_ms": 1920,
+            "available_before_bytes": 8207818752,
+            "minimum_available_bytes": 7875842048
+          },
+          {
+            "text": "que es una huplena.",
+            "needs_clarification": false,
+            "quality_reasons": [],
+            "segments": [
+              {
+                "text": " que es una huplena.",
+                "start": 0.0,
+                "end": 1.0,
+                "avg_logprob": -0.6226373791694642,
+                "no_speech_prob": 0.009158620610833168,
+                "compression_ratio": 0.7037037037037037
+              }
+            ],
+            "confidence_kind": null,
+            "policy": "experimental decoder diagnostics, NOT calibrated confidence",
+            "audio_quality": {
+              "rms": 0.177755,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.021625,
+              "silence": false,
+              "tail_rms": 0.032661
+            },
+            "load_ms": 798,
+            "decode_ms": 898,
+            "worker_elapsed_ms": 1697,
+            "cpu_seconds": 2.641,
+            "peak_working_set_mib": 314.78,
+            "device": "cpu",
+            "compute_type": "int8_float32",
+            "elapsed_ms": 2015,
+            "available_before_bytes": 8838610944,
+            "minimum_available_bytes": 8306274304
+          }
+        ]
+      },
+      "vosk": {
+        "text": "es una pena",
+        "raw_text": "es una pena",
+        "normalized_text": "es una pena",
+        "words": [
+          {
+            "conf": 1.0,
+            "end": 0.27,
+            "start": 0.005199,
+            "word": "es"
+          },
+          {
+            "conf": 1.0,
+            "end": 0.468275,
+            "start": 0.27,
+            "word": "una"
+          },
+          {
+            "conf": 0.540984,
+            "end": 0.84,
+            "start": 0.6,
+            "word": "pena"
+          }
+        ],
+        "confidence_kind": "vosk_word_estimate_uncalibrated",
+        "needs_clarification": true,
+        "quality_reasons": [
+          "low_confidence"
+        ],
+        "clarification": "No pude reconocer la pregunta con suficiente claridad. Repítela completa o escríbela.",
+        "audio_quality": {
+          "rms": 0.177755,
+          "clipped_fraction": 0.0,
+          "duration_seconds": 1.021625,
+          "silence": false,
+          "tail_rms": 0.032661
+        },
+        "engine": "vosk",
+        "cpu_seconds": 0.875,
+        "peak_working_set_mib": 145.63,
+        "elapsed_ms": 1014,
+        "available_before_bytes": 8331153408,
+        "minimum_available_bytes": 8155525120
+      },
+      "whisper": {
+        "text": "que es una huplena.",
+        "needs_clarification": false,
+        "quality_reasons": [],
+        "segments": [
+          {
+            "text": " que es una huplena.",
+            "start": 0.0,
+            "end": 1.0,
+            "avg_logprob": -0.6226373791694642,
+            "no_speech_prob": 0.009158620610833168,
+            "compression_ratio": 0.7037037037037037
+          }
+        ],
+        "confidence_kind": null,
+        "policy": "experimental decoder diagnostics, NOT calibrated confidence",
+        "audio_quality": {
+          "rms": 0.177755,
+          "clipped_fraction": 0.0,
+          "duration_seconds": 1.021625,
+          "silence": false,
+          "tail_rms": 0.032661
+        },
+        "load_ms": 722,
+        "decode_ms": 1051,
+        "worker_elapsed_ms": 1773,
+        "cpu_seconds": 2.812,
+        "peak_working_set_mib": 314.84,
+        "device": "cpu",
+        "compute_type": "int8_float32",
+        "elapsed_ms": 2025,
+        "available_before_bytes": 8299974656,
+        "minimum_available_bytes": 7956598784
+      }
+    },
+    {
+      "text": "¿Cómo funciona una VPN?",
+      "path": "D:\\ITGlasses\\work\\speech-eval\\synthetic-01.wav",
+      "kind": "synthetic Piper es_ES, NOT human Mexican Spanish",
+      "sha256": "15cc5c7f1093b4d7bc378dafb2978de839f3cff82552a387fd16005093bd7863",
+      "runs": {
+        "vosk": [
+          {
+            "text": "cómo funciona una o pene",
+            "raw_text": "cómo funciona una o pene",
+            "normalized_text": "cómo funciona una o pene",
+            "words": [
+              {
+                "conf": 0.822387,
+                "end": 0.27,
+                "start": 0.0,
+                "word": "cómo"
+              },
+              {
+                "conf": 1.0,
+                "end": 0.78,
+                "start": 0.27,
+                "word": "funciona"
+              },
+              {
+                "conf": 0.998705,
+                "end": 0.960672,
+                "start": 0.78,
+                "word": "una"
+              },
+              {
+                "conf": 0.454514,
+                "end": 1.023774,
+                "start": 0.960672,
+                "word": "o"
+              },
+              {
+                "conf": 0.262019,
+                "end": 1.44,
+                "start": 1.062941,
+                "word": "pene"
+              }
+            ],
+            "confidence_kind": "vosk_word_estimate_uncalibrated",
+            "needs_clarification": true,
+            "quality_reasons": [
+              "low_confidence"
+            ],
+            "clarification": "No pude reconocer la pregunta con suficiente claridad. Repítela completa o escríbela.",
+            "audio_quality": {
+              "rms": 0.21256,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.4744375,
+              "silence": false,
+              "tail_rms": 0.031788
+            },
+            "engine": "vosk",
+            "cpu_seconds": 0.906,
+            "peak_working_set_mib": 145.5,
+            "elapsed_ms": 1012,
+            "available_before_bytes": 8171806720,
+            "minimum_available_bytes": 7988281344
+          },
+          {
+            "text": "cómo funciona una o pene",
+            "raw_text": "cómo funciona una o pene",
+            "normalized_text": "cómo funciona una o pene",
+            "words": [
+              {
+                "conf": 0.822387,
+                "end": 0.27,
+                "start": 0.0,
+                "word": "cómo"
+              },
+              {
+                "conf": 1.0,
+                "end": 0.78,
+                "start": 0.27,
+                "word": "funciona"
+              },
+              {
+                "conf": 0.998705,
+                "end": 0.960672,
+                "start": 0.78,
+                "word": "una"
+              },
+              {
+                "conf": 0.454514,
+                "end": 1.023774,
+                "start": 0.960672,
+                "word": "o"
+              },
+              {
+                "conf": 0.262019,
+                "end": 1.44,
+                "start": 1.062941,
+                "word": "pene"
+              }
+            ],
+            "confidence_kind": "vosk_word_estimate_uncalibrated",
+            "needs_clarification": true,
+            "quality_reasons": [
+              "low_confidence"
+            ],
+            "clarification": "No pude reconocer la pregunta con suficiente claridad. Repítela completa o escríbela.",
+            "audio_quality": {
+              "rms": 0.21256,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.4744375,
+              "silence": false,
+              "tail_rms": 0.031788
+            },
+            "engine": "vosk",
+            "cpu_seconds": 0.906,
+            "peak_working_set_mib": 145.29,
+            "elapsed_ms": 1012,
+            "available_before_bytes": 8129896448,
+            "minimum_available_bytes": 7919480832
+          },
+          {
+            "text": "cómo funciona una o pene",
+            "raw_text": "cómo funciona una o pene",
+            "normalized_text": "cómo funciona una o pene",
+            "words": [
+              {
+                "conf": 0.822387,
+                "end": 0.27,
+                "start": 0.0,
+                "word": "cómo"
+              },
+              {
+                "conf": 1.0,
+                "end": 0.78,
+                "start": 0.27,
+                "word": "funciona"
+              },
+              {
+                "conf": 0.998705,
+                "end": 0.960672,
+                "start": 0.78,
+                "word": "una"
+              },
+              {
+                "conf": 0.454514,
+                "end": 1.023774,
+                "start": 0.960672,
+                "word": "o"
+              },
+              {
+                "conf": 0.262019,
+                "end": 1.44,
+                "start": 1.062941,
+                "word": "pene"
+              }
+            ],
+            "confidence_kind": "vosk_word_estimate_uncalibrated",
+            "needs_clarification": true,
+            "quality_reasons": [
+              "low_confidence"
+            ],
+            "clarification": "No pude reconocer la pregunta con suficiente claridad. Repítela completa o escríbela.",
+            "audio_quality": {
+              "rms": 0.21256,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.4744375,
+              "silence": false,
+              "tail_rms": 0.031788
+            },
+            "engine": "vosk",
+            "cpu_seconds": 0.922,
+            "peak_working_set_mib": 145.35,
+            "elapsed_ms": 1012,
+            "available_before_bytes": 7968124928,
+            "minimum_available_bytes": 7787319296
+          }
+        ],
+        "whisper": [
+          {
+            "text": "como funciona una obvene.",
+            "needs_clarification": false,
+            "quality_reasons": [],
+            "segments": [
+              {
+                "text": " como funciona una obvene.",
+                "start": 0.0,
+                "end": 2.0,
+                "avg_logprob": -0.7552706837654114,
+                "no_speech_prob": 0.04334595799446106,
+                "compression_ratio": 0.8064516129032258
+              }
+            ],
+            "confidence_kind": null,
+            "policy": "experimental decoder diagnostics, NOT calibrated confidence",
+            "audio_quality": {
+              "rms": 0.21256,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.4744375,
+              "silence": false,
+              "tail_rms": 0.031788
+            },
+            "load_ms": 672,
+            "decode_ms": 945,
+            "worker_elapsed_ms": 1617,
+            "cpu_seconds": 2.703,
+            "peak_working_set_mib": 314.79,
+            "device": "cpu",
+            "compute_type": "int8_float32",
+            "elapsed_ms": 1925,
+            "available_before_bytes": 8607358976,
+            "minimum_available_bytes": 7900954624
+          },
+          {
+            "text": "como funciona una obvene.",
+            "needs_clarification": false,
+            "quality_reasons": [],
+            "segments": [
+              {
+                "text": " como funciona una obvene.",
+                "start": 0.0,
+                "end": 2.0,
+                "avg_logprob": -0.7552706837654114,
+                "no_speech_prob": 0.04334595799446106,
+                "compression_ratio": 0.8064516129032258
+              }
+            ],
+            "confidence_kind": null,
+            "policy": "experimental decoder diagnostics, NOT calibrated confidence",
+            "audio_quality": {
+              "rms": 0.21256,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.4744375,
+              "silence": false,
+              "tail_rms": 0.031788
+            },
+            "load_ms": 904,
+            "decode_ms": 927,
+            "worker_elapsed_ms": 1831,
+            "cpu_seconds": 2.766,
+            "peak_working_set_mib": 314.75,
+            "device": "cpu",
+            "compute_type": "int8_float32",
+            "elapsed_ms": 2118,
+            "available_before_bytes": 8055873536,
+            "minimum_available_bytes": 7801032704
+          },
+          {
+            "text": "como funciona una obvene.",
+            "needs_clarification": false,
+            "quality_reasons": [],
+            "segments": [
+              {
+                "text": " como funciona una obvene.",
+                "start": 0.0,
+                "end": 2.0,
+                "avg_logprob": -0.7552706837654114,
+                "no_speech_prob": 0.04334595799446106,
+                "compression_ratio": 0.8064516129032258
+              }
+            ],
+            "confidence_kind": null,
+            "policy": "experimental decoder diagnostics, NOT calibrated confidence",
+            "audio_quality": {
+              "rms": 0.21256,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.4744375,
+              "silence": false,
+              "tail_rms": 0.031788
+            },
+            "load_ms": 719,
+            "decode_ms": 1005,
+            "worker_elapsed_ms": 1724,
+            "cpu_seconds": 2.844,
+            "peak_working_set_mib": 314.68,
+            "device": "cpu",
+            "compute_type": "int8_float32",
+            "elapsed_ms": 2017,
+            "available_before_bytes": 8028786688,
+            "minimum_available_bytes": 7695237120
+          }
+        ]
+      },
+      "vosk": {
+        "text": "cómo funciona una o pene",
+        "raw_text": "cómo funciona una o pene",
+        "normalized_text": "cómo funciona una o pene",
+        "words": [
+          {
+            "conf": 0.822387,
+            "end": 0.27,
+            "start": 0.0,
+            "word": "cómo"
+          },
+          {
+            "conf": 1.0,
+            "end": 0.78,
+            "start": 0.27,
+            "word": "funciona"
+          },
+          {
+            "conf": 0.998705,
+            "end": 0.960672,
+            "start": 0.78,
+            "word": "una"
+          },
+          {
+            "conf": 0.454514,
+            "end": 1.023774,
+            "start": 0.960672,
+            "word": "o"
+          },
+          {
+            "conf": 0.262019,
+            "end": 1.44,
+            "start": 1.062941,
+            "word": "pene"
+          }
+        ],
+        "confidence_kind": "vosk_word_estimate_uncalibrated",
+        "needs_clarification": true,
+        "quality_reasons": [
+          "low_confidence"
+        ],
+        "clarification": "No pude reconocer la pregunta con suficiente claridad. Repítela completa o escríbela.",
+        "audio_quality": {
+          "rms": 0.21256,
+          "clipped_fraction": 0.0,
+          "duration_seconds": 1.4744375,
+          "silence": false,
+          "tail_rms": 0.031788
+        },
+        "engine": "vosk",
+        "cpu_seconds": 0.906,
+        "peak_working_set_mib": 145.5,
+        "elapsed_ms": 1012,
+        "available_before_bytes": 8171806720,
+        "minimum_available_bytes": 7988281344
+      },
+      "whisper": {
+        "text": "como funciona una obvene.",
+        "needs_clarification": false,
+        "quality_reasons": [],
+        "segments": [
+          {
+            "text": " como funciona una obvene.",
+            "start": 0.0,
+            "end": 2.0,
+            "avg_logprob": -0.7552706837654114,
+            "no_speech_prob": 0.04334595799446106,
+            "compression_ratio": 0.8064516129032258
+          }
+        ],
+        "confidence_kind": null,
+        "policy": "experimental decoder diagnostics, NOT calibrated confidence",
+        "audio_quality": {
+          "rms": 0.21256,
+          "clipped_fraction": 0.0,
+          "duration_seconds": 1.4744375,
+          "silence": false,
+          "tail_rms": 0.031788
+        },
+        "load_ms": 672,
+        "decode_ms": 945,
+        "worker_elapsed_ms": 1617,
+        "cpu_seconds": 2.703,
+        "peak_working_set_mib": 314.79,
+        "device": "cpu",
+        "compute_type": "int8_float32",
+        "elapsed_ms": 1925,
+        "available_before_bytes": 8607358976,
+        "minimum_available_bytes": 7900954624
+      }
+    },
+    {
+      "text": "¿Qué es una dirección IP?",
+      "path": "D:\\ITGlasses\\work\\speech-eval\\synthetic-02.wav",
+      "kind": "synthetic Piper es_ES, NOT human Mexican Spanish",
+      "sha256": "8bf112943ae9d691bdc1f905bb0b7d94e09e5d632b3ba423a8350b9ffb300b16",
+      "runs": {
+        "vosk": [
+          {
+            "text": "es una dirección IP",
+            "raw_text": "es una dirección ip",
+            "normalized_text": "es una dirección IP",
+            "words": [
+              {
+                "conf": 0.971309,
+                "end": 0.27,
+                "start": 0.00675,
+                "word": "es"
+              },
+              {
+                "conf": 1.0,
+                "end": 0.45,
+                "start": 0.27,
+                "word": "una"
+              },
+              {
+                "conf": 1.0,
+                "end": 1.02,
+                "start": 0.45,
+                "word": "dirección"
+              },
+              {
+                "conf": 0.963968,
+                "end": 1.32,
+                "start": 1.02,
+                "word": "ip"
+              }
+            ],
+            "confidence_kind": "vosk_word_estimate_uncalibrated",
+            "needs_clarification": false,
+            "quality_reasons": [],
+            "clarification": null,
+            "audio_quality": {
+              "rms": 0.187797,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.3815625,
+              "silence": false,
+              "tail_rms": 0.083049
+            },
+            "engine": "vosk",
+            "cpu_seconds": 0.875,
+            "peak_working_set_mib": 144.96,
+            "elapsed_ms": 1011,
+            "available_before_bytes": 7931211776,
+            "minimum_available_bytes": 7779401728
+          },
+          {
+            "text": "es una dirección IP",
+            "raw_text": "es una dirección ip",
+            "normalized_text": "es una dirección IP",
+            "words": [
+              {
+                "conf": 0.971309,
+                "end": 0.27,
+                "start": 0.00675,
+                "word": "es"
+              },
+              {
+                "conf": 1.0,
+                "end": 0.45,
+                "start": 0.27,
+                "word": "una"
+              },
+              {
+                "conf": 1.0,
+                "end": 1.02,
+                "start": 0.45,
+                "word": "dirección"
+              },
+              {
+                "conf": 0.963968,
+                "end": 1.32,
+                "start": 1.02,
+                "word": "ip"
+              }
+            ],
+            "confidence_kind": "vosk_word_estimate_uncalibrated",
+            "needs_clarification": false,
+            "quality_reasons": [],
+            "clarification": null,
+            "audio_quality": {
+              "rms": 0.187797,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.3815625,
+              "silence": false,
+              "tail_rms": 0.083049
+            },
+            "engine": "vosk",
+            "cpu_seconds": 0.922,
+            "peak_working_set_mib": 145.18,
+            "elapsed_ms": 1011,
+            "available_before_bytes": 8726814720,
+            "minimum_available_bytes": 8573169664
+          },
+          {
+            "text": "es una dirección IP",
+            "raw_text": "es una dirección ip",
+            "normalized_text": "es una dirección IP",
+            "words": [
+              {
+                "conf": 0.971309,
+                "end": 0.27,
+                "start": 0.00675,
+                "word": "es"
+              },
+              {
+                "conf": 1.0,
+                "end": 0.45,
+                "start": 0.27,
+                "word": "una"
+              },
+              {
+                "conf": 1.0,
+                "end": 1.02,
+                "start": 0.45,
+                "word": "dirección"
+              },
+              {
+                "conf": 0.963968,
+                "end": 1.32,
+                "start": 1.02,
+                "word": "ip"
+              }
+            ],
+            "confidence_kind": "vosk_word_estimate_uncalibrated",
+            "needs_clarification": false,
+            "quality_reasons": [],
+            "clarification": null,
+            "audio_quality": {
+              "rms": 0.187797,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.3815625,
+              "silence": false,
+              "tail_rms": 0.083049
+            },
+            "engine": "vosk",
+            "cpu_seconds": 0.906,
+            "peak_working_set_mib": 145.72,
+            "elapsed_ms": 1011,
+            "available_before_bytes": 8704032768,
+            "minimum_available_bytes": 8552509440
+          }
+        ],
+        "whisper": [
+          {
+            "text": "¿Qué es una dirección IP?",
+            "needs_clarification": false,
+            "quality_reasons": [],
+            "segments": [
+              {
+                "text": " ¿Qué es una dirección IP?",
+                "start": 0.0,
+                "end": 1.32,
+                "avg_logprob": -0.46889337626370514,
+                "no_speech_prob": 0.007312383037060499,
+                "compression_ratio": 0.7777777777777778
+              }
+            ],
+            "confidence_kind": null,
+            "policy": "experimental decoder diagnostics, NOT calibrated confidence",
+            "audio_quality": {
+              "rms": 0.187797,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.3815625,
+              "silence": false,
+              "tail_rms": 0.083049
+            },
+            "load_ms": 736,
+            "decode_ms": 977,
+            "worker_elapsed_ms": 1713,
+            "cpu_seconds": 2.938,
+            "peak_working_set_mib": 314.85,
+            "device": "cpu",
+            "compute_type": "int8_float32",
+            "elapsed_ms": 2022,
+            "available_before_bytes": 7922360320,
+            "minimum_available_bytes": 7625687040
+          },
+          {
+            "text": "¿Qué es una dirección IP?",
+            "needs_clarification": false,
+            "quality_reasons": [],
+            "segments": [
+              {
+                "text": " ¿Qué es una dirección IP?",
+                "start": 0.0,
+                "end": 1.32,
+                "avg_logprob": -0.46889337626370514,
+                "no_speech_prob": 0.007312383037060499,
+                "compression_ratio": 0.7777777777777778
+              }
+            ],
+            "confidence_kind": null,
+            "policy": "experimental decoder diagnostics, NOT calibrated confidence",
+            "audio_quality": {
+              "rms": 0.187797,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.3815625,
+              "silence": false,
+              "tail_rms": 0.083049
+            },
+            "load_ms": 649,
+            "decode_ms": 947,
+            "worker_elapsed_ms": 1596,
+            "cpu_seconds": 2.719,
+            "peak_working_set_mib": 314.71,
+            "device": "cpu",
+            "compute_type": "int8_float32",
+            "elapsed_ms": 1815,
+            "available_before_bytes": 8735940608,
+            "minimum_available_bytes": 8413540352
+          },
+          {
+            "text": "¿Qué es una dirección IP?",
+            "needs_clarification": false,
+            "quality_reasons": [],
+            "segments": [
+              {
+                "text": " ¿Qué es una dirección IP?",
+                "start": 0.0,
+                "end": 1.32,
+                "avg_logprob": -0.46889337626370514,
+                "no_speech_prob": 0.007312383037060499,
+                "compression_ratio": 0.7777777777777778
+              }
+            ],
+            "confidence_kind": null,
+            "policy": "experimental decoder diagnostics, NOT calibrated confidence",
+            "audio_quality": {
+              "rms": 0.187797,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.3815625,
+              "silence": false,
+              "tail_rms": 0.083049
+            },
+            "load_ms": 880,
+            "decode_ms": 904,
+            "worker_elapsed_ms": 1784,
+            "cpu_seconds": 2.656,
+            "peak_working_set_mib": 314.71,
+            "device": "cpu",
+            "compute_type": "int8_float32",
+            "elapsed_ms": 2017,
+            "available_before_bytes": 8691195904,
+            "minimum_available_bytes": 8361345024
+          }
+        ]
+      },
+      "vosk": {
+        "text": "es una dirección IP",
+        "raw_text": "es una dirección ip",
+        "normalized_text": "es una dirección IP",
+        "words": [
+          {
+            "conf": 0.971309,
+            "end": 0.27,
+            "start": 0.00675,
+            "word": "es"
+          },
+          {
+            "conf": 1.0,
+            "end": 0.45,
+            "start": 0.27,
+            "word": "una"
+          },
+          {
+            "conf": 1.0,
+            "end": 1.02,
+            "start": 0.45,
+            "word": "dirección"
+          },
+          {
+            "conf": 0.963968,
+            "end": 1.32,
+            "start": 1.02,
+            "word": "ip"
+          }
+        ],
+        "confidence_kind": "vosk_word_estimate_uncalibrated",
+        "needs_clarification": false,
+        "quality_reasons": [],
+        "clarification": null,
+        "audio_quality": {
+          "rms": 0.187797,
+          "clipped_fraction": 0.0,
+          "duration_seconds": 1.3815625,
+          "silence": false,
+          "tail_rms": 0.083049
+        },
+        "engine": "vosk",
+        "cpu_seconds": 0.875,
+        "peak_working_set_mib": 144.96,
+        "elapsed_ms": 1011,
+        "available_before_bytes": 7931211776,
+        "minimum_available_bytes": 7779401728
+      },
+      "whisper": {
+        "text": "¿Qué es una dirección IP?",
+        "needs_clarification": false,
+        "quality_reasons": [],
+        "segments": [
+          {
+            "text": " ¿Qué es una dirección IP?",
+            "start": 0.0,
+            "end": 1.32,
+            "avg_logprob": -0.46889337626370514,
+            "no_speech_prob": 0.007312383037060499,
+            "compression_ratio": 0.7777777777777778
+          }
+        ],
+        "confidence_kind": null,
+        "policy": "experimental decoder diagnostics, NOT calibrated confidence",
+        "audio_quality": {
+          "rms": 0.187797,
+          "clipped_fraction": 0.0,
+          "duration_seconds": 1.3815625,
+          "silence": false,
+          "tail_rms": 0.083049
+        },
+        "load_ms": 736,
+        "decode_ms": 977,
+        "worker_elapsed_ms": 1713,
+        "cpu_seconds": 2.938,
+        "peak_working_set_mib": 314.85,
+        "device": "cpu",
+        "compute_type": "int8_float32",
+        "elapsed_ms": 2022,
+        "available_before_bytes": 7922360320,
+        "minimum_available_bytes": 7625687040
+      }
+    },
+    {
+      "text": "¿Cómo configuro el DNS?",
+      "path": "D:\\ITGlasses\\work\\speech-eval\\synthetic-03.wav",
+      "kind": "synthetic Piper es_ES, NOT human Mexican Spanish",
+      "sha256": "3f4c4d6c3b2376ec71ae3acc71993be80e4bb8624239732bfe55d4d65732c911",
+      "runs": {
+        "vosk": [
+          {
+            "text": "como configuró el de en ese",
+            "raw_text": "como configuró el de en ese",
+            "normalized_text": "como configuró el de en ese",
+            "words": [
+              {
+                "conf": 0.720596,
+                "end": 0.24,
+                "start": 0.0,
+                "word": "como"
+              },
+              {
+                "conf": 0.970651,
+                "end": 0.899444,
+                "start": 0.24,
+                "word": "configuró"
+              },
+              {
+                "conf": 0.937348,
+                "end": 0.99,
+                "start": 0.9,
+                "word": "el"
+              },
+              {
+                "conf": 1.0,
+                "end": 1.115434,
+                "start": 0.99,
+                "word": "de"
+              },
+              {
+                "conf": 0.550219,
+                "end": 1.2,
+                "start": 1.115434,
+                "word": "en"
+              },
+              {
+                "conf": 0.550219,
+                "end": 1.53,
+                "start": 1.2,
+                "word": "ese"
+              }
+            ],
+            "confidence_kind": "vosk_word_estimate_uncalibrated",
+            "needs_clarification": true,
+            "quality_reasons": [
+              "low_confidence"
+            ],
+            "clarification": "No pude reconocer la pregunta con suficiente claridad. Repítela completa o escríbela.",
+            "audio_quality": {
+              "rms": 0.1732,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.5325,
+              "silence": false,
+              "tail_rms": 0.032668
+            },
+            "engine": "vosk",
+            "cpu_seconds": 0.875,
+            "peak_working_set_mib": 143.96,
+            "elapsed_ms": 1010,
+            "available_before_bytes": 8620974080,
+            "minimum_available_bytes": 8483090432
+          },
+          {
+            "text": "como configuró el de en ese",
+            "raw_text": "como configuró el de en ese",
+            "normalized_text": "como configuró el de en ese",
+            "words": [
+              {
+                "conf": 0.720596,
+                "end": 0.24,
+                "start": 0.0,
+                "word": "como"
+              },
+              {
+                "conf": 0.970651,
+                "end": 0.899444,
+                "start": 0.24,
+                "word": "configuró"
+              },
+              {
+                "conf": 0.937348,
+                "end": 0.99,
+                "start": 0.9,
+                "word": "el"
+              },
+              {
+                "conf": 1.0,
+                "end": 1.115434,
+                "start": 0.99,
+                "word": "de"
+              },
+              {
+                "conf": 0.550219,
+                "end": 1.2,
+                "start": 1.115434,
+                "word": "en"
+              },
+              {
+                "conf": 0.550219,
+                "end": 1.53,
+                "start": 1.2,
+                "word": "ese"
+              }
+            ],
+            "confidence_kind": "vosk_word_estimate_uncalibrated",
+            "needs_clarification": true,
+            "quality_reasons": [
+              "low_confidence"
+            ],
+            "clarification": "No pude reconocer la pregunta con suficiente claridad. Repítela completa o escríbela.",
+            "audio_quality": {
+              "rms": 0.1732,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.5325,
+              "silence": false,
+              "tail_rms": 0.032668
+            },
+            "engine": "vosk",
+            "cpu_seconds": 0.875,
+            "peak_working_set_mib": 143.88,
+            "elapsed_ms": 1011,
+            "available_before_bytes": 8770150400,
+            "minimum_available_bytes": 8639520768
+          },
+          {
+            "text": "como configuró el de en ese",
+            "raw_text": "como configuró el de en ese",
+            "normalized_text": "como configuró el de en ese",
+            "words": [
+              {
+                "conf": 0.720596,
+                "end": 0.24,
+                "start": 0.0,
+                "word": "como"
+              },
+              {
+                "conf": 0.970651,
+                "end": 0.899444,
+                "start": 0.24,
+                "word": "configuró"
+              },
+              {
+                "conf": 0.937348,
+                "end": 0.99,
+                "start": 0.9,
+                "word": "el"
+              },
+              {
+                "conf": 1.0,
+                "end": 1.115434,
+                "start": 0.99,
+                "word": "de"
+              },
+              {
+                "conf": 0.550219,
+                "end": 1.2,
+                "start": 1.115434,
+                "word": "en"
+              },
+              {
+                "conf": 0.550219,
+                "end": 1.53,
+                "start": 1.2,
+                "word": "ese"
+              }
+            ],
+            "confidence_kind": "vosk_word_estimate_uncalibrated",
+            "needs_clarification": true,
+            "quality_reasons": [
+              "low_confidence"
+            ],
+            "clarification": "No pude reconocer la pregunta con suficiente claridad. Repítela completa o escríbela.",
+            "audio_quality": {
+              "rms": 0.1732,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.5325,
+              "silence": false,
+              "tail_rms": 0.032668
+            },
+            "engine": "vosk",
+            "cpu_seconds": 0.766,
+            "peak_working_set_mib": 143.39,
+            "elapsed_ms": 1010,
+            "available_before_bytes": 8468283392,
+            "minimum_available_bytes": 8332021760
+          }
+        ],
+        "whisper": [
+          {
+            "text": "cómo configuró el DNS.",
+            "needs_clarification": false,
+            "quality_reasons": [],
+            "segments": [
+              {
+                "text": " cómo configuró el DNS.",
+                "start": 0.0,
+                "end": 2.0,
+                "avg_logprob": -0.5687219831678603,
+                "no_speech_prob": 0.005430434364825487,
+                "compression_ratio": 0.75
+              }
+            ],
+            "confidence_kind": null,
+            "policy": "experimental decoder diagnostics, NOT calibrated confidence",
+            "audio_quality": {
+              "rms": 0.1732,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.5325,
+              "silence": false,
+              "tail_rms": 0.032668
+            },
+            "load_ms": 860,
+            "decode_ms": 914,
+            "worker_elapsed_ms": 1774,
+            "cpu_seconds": 2.672,
+            "peak_working_set_mib": 314.75,
+            "device": "cpu",
+            "compute_type": "int8_float32",
+            "elapsed_ms": 2022,
+            "available_before_bytes": 8663576576,
+            "minimum_available_bytes": 8320491520
+          },
+          {
+            "text": "cómo configuró el DNS.",
+            "needs_clarification": false,
+            "quality_reasons": [],
+            "segments": [
+              {
+                "text": " cómo configuró el DNS.",
+                "start": 0.0,
+                "end": 2.0,
+                "avg_logprob": -0.5687219831678603,
+                "no_speech_prob": 0.005430434364825487,
+                "compression_ratio": 0.75
+              }
+            ],
+            "confidence_kind": null,
+            "policy": "experimental decoder diagnostics, NOT calibrated confidence",
+            "audio_quality": {
+              "rms": 0.1732,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.5325,
+              "silence": false,
+              "tail_rms": 0.032668
+            },
+            "load_ms": 655,
+            "decode_ms": 953,
+            "worker_elapsed_ms": 1608,
+            "cpu_seconds": 2.75,
+            "peak_working_set_mib": 314.55,
+            "device": "cpu",
+            "compute_type": "int8_float32",
+            "elapsed_ms": 1919,
+            "available_before_bytes": 8777142272,
+            "minimum_available_bytes": 8456876032
+          },
+          {
+            "text": "cómo configuró el DNS.",
+            "needs_clarification": false,
+            "quality_reasons": [],
+            "segments": [
+              {
+                "text": " cómo configuró el DNS.",
+                "start": 0.0,
+                "end": 2.0,
+                "avg_logprob": -0.5687219831678603,
+                "no_speech_prob": 0.005430434364825487,
+                "compression_ratio": 0.75
+              }
+            ],
+            "confidence_kind": null,
+            "policy": "experimental decoder diagnostics, NOT calibrated confidence",
+            "audio_quality": {
+              "rms": 0.1732,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.5325,
+              "silence": false,
+              "tail_rms": 0.032668
+            },
+            "load_ms": 722,
+            "decode_ms": 892,
+            "worker_elapsed_ms": 1614,
+            "cpu_seconds": 2.656,
+            "peak_working_set_mib": 314.67,
+            "device": "cpu",
+            "compute_type": "int8_float32",
+            "elapsed_ms": 1921,
+            "available_before_bytes": 8729034752,
+            "minimum_available_bytes": 8215805952
+          }
+        ]
+      },
+      "vosk": {
+        "text": "como configuró el de en ese",
+        "raw_text": "como configuró el de en ese",
+        "normalized_text": "como configuró el de en ese",
+        "words": [
+          {
+            "conf": 0.720596,
+            "end": 0.24,
+            "start": 0.0,
+            "word": "como"
+          },
+          {
+            "conf": 0.970651,
+            "end": 0.899444,
+            "start": 0.24,
+            "word": "configuró"
+          },
+          {
+            "conf": 0.937348,
+            "end": 0.99,
+            "start": 0.9,
+            "word": "el"
+          },
+          {
+            "conf": 1.0,
+            "end": 1.115434,
+            "start": 0.99,
+            "word": "de"
+          },
+          {
+            "conf": 0.550219,
+            "end": 1.2,
+            "start": 1.115434,
+            "word": "en"
+          },
+          {
+            "conf": 0.550219,
+            "end": 1.53,
+            "start": 1.2,
+            "word": "ese"
+          }
+        ],
+        "confidence_kind": "vosk_word_estimate_uncalibrated",
+        "needs_clarification": true,
+        "quality_reasons": [
+          "low_confidence"
+        ],
+        "clarification": "No pude reconocer la pregunta con suficiente claridad. Repítela completa o escríbela.",
+        "audio_quality": {
+          "rms": 0.1732,
+          "clipped_fraction": 0.0,
+          "duration_seconds": 1.5325,
+          "silence": false,
+          "tail_rms": 0.032668
+        },
+        "engine": "vosk",
+        "cpu_seconds": 0.875,
+        "peak_working_set_mib": 143.96,
+        "elapsed_ms": 1010,
+        "available_before_bytes": 8620974080,
+        "minimum_available_bytes": 8483090432
+      },
+      "whisper": {
+        "text": "cómo configuró el DNS.",
+        "needs_clarification": false,
+        "quality_reasons": [],
+        "segments": [
+          {
+            "text": " cómo configuró el DNS.",
+            "start": 0.0,
+            "end": 2.0,
+            "avg_logprob": -0.5687219831678603,
+            "no_speech_prob": 0.005430434364825487,
+            "compression_ratio": 0.75
+          }
+        ],
+        "confidence_kind": null,
+        "policy": "experimental decoder diagnostics, NOT calibrated confidence",
+        "audio_quality": {
+          "rms": 0.1732,
+          "clipped_fraction": 0.0,
+          "duration_seconds": 1.5325,
+          "silence": false,
+          "tail_rms": 0.032668
+        },
+        "load_ms": 860,
+        "decode_ms": 914,
+        "worker_elapsed_ms": 1774,
+        "cpu_seconds": 2.672,
+        "peak_working_set_mib": 314.75,
+        "device": "cpu",
+        "compute_type": "int8_float32",
+        "elapsed_ms": 2022,
+        "available_before_bytes": 8663576576,
+        "minimum_available_bytes": 8320491520
+      }
+    },
+    {
+      "text": "¿Cómo actualizo la BIOS?",
+      "path": "D:\\ITGlasses\\work\\speech-eval\\synthetic-04.wav",
+      "kind": "synthetic Piper es_ES, NOT human Mexican Spanish",
+      "sha256": "ad66aa0f61c44aff8b72d5468620dc5bbed76c4801819e352e115bda456d0549",
+      "runs": {
+        "vosk": [
+          {
+            "text": "como actualizo labios",
+            "raw_text": "como actualizo labios",
+            "normalized_text": "como actualizo labios",
+            "words": [
+              {
+                "conf": 0.720597,
+                "end": 0.3,
+                "start": 0.0,
+                "word": "como"
+              },
+              {
+                "conf": 0.549939,
+                "end": 0.84,
+                "start": 0.3,
+                "word": "actualizo"
+              },
+              {
+                "conf": 1.0,
+                "end": 1.29,
+                "start": 0.84,
+                "word": "labios"
+              }
+            ],
+            "confidence_kind": "vosk_word_estimate_uncalibrated",
+            "needs_clarification": true,
+            "quality_reasons": [
+              "low_confidence"
+            ],
+            "clarification": "No pude reconocer la pregunta con suficiente claridad. Repítela completa o escríbela.",
+            "audio_quality": {
+              "rms": 0.141019,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.335125,
+              "silence": false,
+              "tail_rms": 0.024129
+            },
+            "engine": "vosk",
+            "cpu_seconds": 0.844,
+            "peak_working_set_mib": 145.72,
+            "elapsed_ms": 1011,
+            "available_before_bytes": 8473698304,
+            "minimum_available_bytes": 8310034432
+          },
+          {
+            "text": "como actualizo labios",
+            "raw_text": "como actualizo labios",
+            "normalized_text": "como actualizo labios",
+            "words": [
+              {
+                "conf": 0.720597,
+                "end": 0.3,
+                "start": 0.0,
+                "word": "como"
+              },
+              {
+                "conf": 0.549939,
+                "end": 0.84,
+                "start": 0.3,
+                "word": "actualizo"
+              },
+              {
+                "conf": 1.0,
+                "end": 1.29,
+                "start": 0.84,
+                "word": "labios"
+              }
+            ],
+            "confidence_kind": "vosk_word_estimate_uncalibrated",
+            "needs_clarification": true,
+            "quality_reasons": [
+              "low_confidence"
+            ],
+            "clarification": "No pude reconocer la pregunta con suficiente claridad. Repítela completa o escríbela.",
+            "audio_quality": {
+              "rms": 0.141019,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.335125,
+              "silence": false,
+              "tail_rms": 0.024129
+            },
+            "engine": "vosk",
+            "cpu_seconds": 0.938,
+            "peak_working_set_mib": 146.29,
+            "elapsed_ms": 1011,
+            "available_before_bytes": 8421228544,
+            "minimum_available_bytes": 8240590848
+          },
+          {
+            "text": "como actualizo labios",
+            "raw_text": "como actualizo labios",
+            "normalized_text": "como actualizo labios",
+            "words": [
+              {
+                "conf": 0.720597,
+                "end": 0.3,
+                "start": 0.0,
+                "word": "como"
+              },
+              {
+                "conf": 0.549939,
+                "end": 0.84,
+                "start": 0.3,
+                "word": "actualizo"
+              },
+              {
+                "conf": 1.0,
+                "end": 1.29,
+                "start": 0.84,
+                "word": "labios"
+              }
+            ],
+            "confidence_kind": "vosk_word_estimate_uncalibrated",
+            "needs_clarification": true,
+            "quality_reasons": [
+              "low_confidence"
+            ],
+            "clarification": "No pude reconocer la pregunta con suficiente claridad. Repítela completa o escríbela.",
+            "audio_quality": {
+              "rms": 0.141019,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.335125,
+              "silence": false,
+              "tail_rms": 0.024129
+            },
+            "engine": "vosk",
+            "cpu_seconds": 0.859,
+            "peak_working_set_mib": 146.05,
+            "elapsed_ms": 1011,
+            "available_before_bytes": 8395251712,
+            "minimum_available_bytes": 8264302592
+          }
+        ],
+        "whisper": [
+          {
+            "text": "¿Cómo actualizó la bios?",
+            "needs_clarification": false,
+            "quality_reasons": [],
+            "segments": [
+              {
+                "text": " ¿Cómo actualizó la bios?",
+                "start": 0.0,
+                "end": 2.0,
+                "avg_logprob": -0.7034556432203813,
+                "no_speech_prob": 0.01266384869813919,
+                "compression_ratio": 0.7714285714285715
+              }
+            ],
+            "confidence_kind": null,
+            "policy": "experimental decoder diagnostics, NOT calibrated confidence",
+            "audio_quality": {
+              "rms": 0.141019,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.335125,
+              "silence": false,
+              "tail_rms": 0.024129
+            },
+            "load_ms": 630,
+            "decode_ms": 944,
+            "worker_elapsed_ms": 1574,
+            "cpu_seconds": 2.781,
+            "peak_working_set_mib": 314.67,
+            "device": "cpu",
+            "compute_type": "int8_float32",
+            "elapsed_ms": 1820,
+            "available_before_bytes": 8429768704,
+            "minimum_available_bytes": 8177299456
+          },
+          {
+            "text": "¿Cómo actualizó la bios?",
+            "needs_clarification": false,
+            "quality_reasons": [],
+            "segments": [
+              {
+                "text": " ¿Cómo actualizó la bios?",
+                "start": 0.0,
+                "end": 2.0,
+                "avg_logprob": -0.7034556432203813,
+                "no_speech_prob": 0.01266384869813919,
+                "compression_ratio": 0.7714285714285715
+              }
+            ],
+            "confidence_kind": null,
+            "policy": "experimental decoder diagnostics, NOT calibrated confidence",
+            "audio_quality": {
+              "rms": 0.141019,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.335125,
+              "silence": false,
+              "tail_rms": 0.024129
+            },
+            "load_ms": 628,
+            "decode_ms": 887,
+            "worker_elapsed_ms": 1515,
+            "cpu_seconds": 2.672,
+            "peak_working_set_mib": 314.6,
+            "device": "cpu",
+            "compute_type": "int8_float32",
+            "elapsed_ms": 1816,
+            "available_before_bytes": 8428412928,
+            "minimum_available_bytes": 8166428672
+          },
+          {
+            "text": "¿Cómo actualizó la bios?",
+            "needs_clarification": false,
+            "quality_reasons": [],
+            "segments": [
+              {
+                "text": " ¿Cómo actualizó la bios?",
+                "start": 0.0,
+                "end": 2.0,
+                "avg_logprob": -0.7034556432203813,
+                "no_speech_prob": 0.01266384869813919,
+                "compression_ratio": 0.7714285714285715
+              }
+            ],
+            "confidence_kind": null,
+            "policy": "experimental decoder diagnostics, NOT calibrated confidence",
+            "audio_quality": {
+              "rms": 0.141019,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.335125,
+              "silence": false,
+              "tail_rms": 0.024129
+            },
+            "load_ms": 704,
+            "decode_ms": 884,
+            "worker_elapsed_ms": 1589,
+            "cpu_seconds": 2.672,
+            "peak_working_set_mib": 314.74,
+            "device": "cpu",
+            "compute_type": "int8_float32",
+            "elapsed_ms": 1818,
+            "available_before_bytes": 8401956864,
+            "minimum_available_bytes": 8313528320
+          }
+        ]
+      },
+      "vosk": {
+        "text": "como actualizo labios",
+        "raw_text": "como actualizo labios",
+        "normalized_text": "como actualizo labios",
+        "words": [
+          {
+            "conf": 0.720597,
+            "end": 0.3,
+            "start": 0.0,
+            "word": "como"
+          },
+          {
+            "conf": 0.549939,
+            "end": 0.84,
+            "start": 0.3,
+            "word": "actualizo"
+          },
+          {
+            "conf": 1.0,
+            "end": 1.29,
+            "start": 0.84,
+            "word": "labios"
+          }
+        ],
+        "confidence_kind": "vosk_word_estimate_uncalibrated",
+        "needs_clarification": true,
+        "quality_reasons": [
+          "low_confidence"
+        ],
+        "clarification": "No pude reconocer la pregunta con suficiente claridad. Repítela completa o escríbela.",
+        "audio_quality": {
+          "rms": 0.141019,
+          "clipped_fraction": 0.0,
+          "duration_seconds": 1.335125,
+          "silence": false,
+          "tail_rms": 0.024129
+        },
+        "engine": "vosk",
+        "cpu_seconds": 0.844,
+        "peak_working_set_mib": 145.72,
+        "elapsed_ms": 1011,
+        "available_before_bytes": 8473698304,
+        "minimum_available_bytes": 8310034432
+      },
+      "whisper": {
+        "text": "¿Cómo actualizó la bios?",
+        "needs_clarification": false,
+        "quality_reasons": [],
+        "segments": [
+          {
+            "text": " ¿Cómo actualizó la bios?",
+            "start": 0.0,
+            "end": 2.0,
+            "avg_logprob": -0.7034556432203813,
+            "no_speech_prob": 0.01266384869813919,
+            "compression_ratio": 0.7714285714285715
+          }
+        ],
+        "confidence_kind": null,
+        "policy": "experimental decoder diagnostics, NOT calibrated confidence",
+        "audio_quality": {
+          "rms": 0.141019,
+          "clipped_fraction": 0.0,
+          "duration_seconds": 1.335125,
+          "silence": false,
+          "tail_rms": 0.024129
+        },
+        "load_ms": 630,
+        "decode_ms": 944,
+        "worker_elapsed_ms": 1574,
+        "cpu_seconds": 2.781,
+        "peak_working_set_mib": 314.67,
+        "device": "cpu",
+        "compute_type": "int8_float32",
+        "elapsed_ms": 1820,
+        "available_before_bytes": 8429768704,
+        "minimum_available_bytes": 8177299456
+      }
+    },
+    {
+      "text": "¿Qué es un SSD NVMe?",
+      "path": "D:\\ITGlasses\\work\\speech-eval\\synthetic-05.wav",
+      "kind": "synthetic Piper es_ES, NOT human Mexican Spanish",
+      "sha256": "def21716f63f0bb3ab6954c029945a362a5c23410c279638e717e9cd59535aa7",
+      "runs": {
+        "vosk": [
+          {
+            "text": "es una serie de noviembre",
+            "raw_text": "es una serie de noviembre",
+            "normalized_text": "es una serie de noviembre",
+            "words": [
+              {
+                "conf": 1.0,
+                "end": 0.27,
+                "start": 0.0,
+                "word": "es"
+              },
+              {
+                "conf": 1.0,
+                "end": 0.48,
+                "start": 0.27,
+                "word": "una"
+              },
+              {
+                "conf": 1.0,
+                "end": 0.81,
+                "start": 0.6,
+                "word": "serie"
+              },
+              {
+                "conf": 1.0,
+                "end": 0.87,
+                "start": 0.81,
+                "word": "de"
+              },
+              {
+                "conf": 0.810347,
+                "end": 1.29,
+                "start": 0.87,
+                "word": "noviembre"
+              }
+            ],
+            "confidence_kind": "vosk_word_estimate_uncalibrated",
+            "needs_clarification": false,
+            "quality_reasons": [],
+            "clarification": null,
+            "audio_quality": {
+              "rms": 0.165438,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.3003125,
+              "silence": false,
+              "tail_rms": 0.107086
+            },
+            "engine": "vosk",
+            "cpu_seconds": 0.875,
+            "peak_working_set_mib": 150.84,
+            "elapsed_ms": 1011,
+            "available_before_bytes": 8891113472,
+            "minimum_available_bytes": 8736473088
+          },
+          {
+            "text": "es una serie de noviembre",
+            "raw_text": "es una serie de noviembre",
+            "normalized_text": "es una serie de noviembre",
+            "words": [
+              {
+                "conf": 1.0,
+                "end": 0.27,
+                "start": 0.0,
+                "word": "es"
+              },
+              {
+                "conf": 1.0,
+                "end": 0.48,
+                "start": 0.27,
+                "word": "una"
+              },
+              {
+                "conf": 1.0,
+                "end": 0.81,
+                "start": 0.6,
+                "word": "serie"
+              },
+              {
+                "conf": 1.0,
+                "end": 0.87,
+                "start": 0.81,
+                "word": "de"
+              },
+              {
+                "conf": 0.810347,
+                "end": 1.29,
+                "start": 0.87,
+                "word": "noviembre"
+              }
+            ],
+            "confidence_kind": "vosk_word_estimate_uncalibrated",
+            "needs_clarification": false,
+            "quality_reasons": [],
+            "clarification": null,
+            "audio_quality": {
+              "rms": 0.165438,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.3003125,
+              "silence": false,
+              "tail_rms": 0.107086
+            },
+            "engine": "vosk",
+            "cpu_seconds": 0.906,
+            "peak_working_set_mib": 150.86,
+            "elapsed_ms": 1111,
+            "available_before_bytes": 8893227008,
+            "minimum_available_bytes": 8698966016
+          },
+          {
+            "text": "es una serie de noviembre",
+            "raw_text": "es una serie de noviembre",
+            "normalized_text": "es una serie de noviembre",
+            "words": [
+              {
+                "conf": 1.0,
+                "end": 0.27,
+                "start": 0.0,
+                "word": "es"
+              },
+              {
+                "conf": 1.0,
+                "end": 0.48,
+                "start": 0.27,
+                "word": "una"
+              },
+              {
+                "conf": 1.0,
+                "end": 0.81,
+                "start": 0.6,
+                "word": "serie"
+              },
+              {
+                "conf": 1.0,
+                "end": 0.87,
+                "start": 0.81,
+                "word": "de"
+              },
+              {
+                "conf": 0.810347,
+                "end": 1.29,
+                "start": 0.87,
+                "word": "noviembre"
+              }
+            ],
+            "confidence_kind": "vosk_word_estimate_uncalibrated",
+            "needs_clarification": false,
+            "quality_reasons": [],
+            "clarification": null,
+            "audio_quality": {
+              "rms": 0.165438,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.3003125,
+              "silence": false,
+              "tail_rms": 0.107086
+            },
+            "engine": "vosk",
+            "cpu_seconds": 1.031,
+            "peak_working_set_mib": 150.56,
+            "elapsed_ms": 1112,
+            "available_before_bytes": 8718106624,
+            "minimum_available_bytes": 8565288960
+          }
+        ],
+        "whisper": [
+          {
+            "text": "¿Qué es una seseda en el vm?",
+            "needs_clarification": true,
+            "quality_reasons": [
+              "decoder_diagnostic"
+            ],
+            "segments": [
+              {
+                "text": " ¿Qué es una seseda en el vm?",
+                "start": 0.0,
+                "end": 1.32,
+                "avg_logprob": -1.096894349370684,
+                "no_speech_prob": 0.022714313119649887,
+                "compression_ratio": 0.7894736842105263
+              }
+            ],
+            "confidence_kind": null,
+            "policy": "experimental decoder diagnostics, NOT calibrated confidence",
+            "audio_quality": {
+              "rms": 0.165438,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.3003125,
+              "silence": false,
+              "tail_rms": 0.107086
+            },
+            "load_ms": 614,
+            "decode_ms": 916,
+            "worker_elapsed_ms": 1530,
+            "cpu_seconds": 2.719,
+            "peak_working_set_mib": 314.89,
+            "device": "cpu",
+            "compute_type": "int8_float32",
+            "elapsed_ms": 1823,
+            "available_before_bytes": 8883949568,
+            "minimum_available_bytes": 8609243136
+          },
+          {
+            "text": "¿Qué es una seseda en el vm?",
+            "needs_clarification": true,
+            "quality_reasons": [
+              "decoder_diagnostic"
+            ],
+            "segments": [
+              {
+                "text": " ¿Qué es una seseda en el vm?",
+                "start": 0.0,
+                "end": 1.32,
+                "avg_logprob": -1.096894349370684,
+                "no_speech_prob": 0.022714313119649887,
+                "compression_ratio": 0.7894736842105263
+              }
+            ],
+            "confidence_kind": null,
+            "policy": "experimental decoder diagnostics, NOT calibrated confidence",
+            "audio_quality": {
+              "rms": 0.165438,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.3003125,
+              "silence": false,
+              "tail_rms": 0.107086
+            },
+            "load_ms": 612,
+            "decode_ms": 1019,
+            "worker_elapsed_ms": 1631,
+            "cpu_seconds": 2.875,
+            "peak_working_set_mib": 314.7,
+            "device": "cpu",
+            "compute_type": "int8_float32",
+            "elapsed_ms": 1919,
+            "available_before_bytes": 8843239424,
+            "minimum_available_bytes": 8455204864
+          },
+          {
+            "text": "¿Qué es una seseda en el vm?",
+            "needs_clarification": true,
+            "quality_reasons": [
+              "decoder_diagnostic"
+            ],
+            "segments": [
+              {
+                "text": " ¿Qué es una seseda en el vm?",
+                "start": 0.0,
+                "end": 1.32,
+                "avg_logprob": -1.096894349370684,
+                "no_speech_prob": 0.022714313119649887,
+                "compression_ratio": 0.7894736842105263
+              }
+            ],
+            "confidence_kind": null,
+            "policy": "experimental decoder diagnostics, NOT calibrated confidence",
+            "audio_quality": {
+              "rms": 0.165438,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.3003125,
+              "silence": false,
+              "tail_rms": 0.107086
+            },
+            "load_ms": 657,
+            "decode_ms": 979,
+            "worker_elapsed_ms": 1636,
+            "cpu_seconds": 2.922,
+            "peak_working_set_mib": 314.68,
+            "device": "cpu",
+            "compute_type": "int8_float32",
+            "elapsed_ms": 1916,
+            "available_before_bytes": 8768520192,
+            "minimum_available_bytes": 8425119744
+          }
+        ]
+      },
+      "vosk": {
+        "text": "es una serie de noviembre",
+        "raw_text": "es una serie de noviembre",
+        "normalized_text": "es una serie de noviembre",
+        "words": [
+          {
+            "conf": 1.0,
+            "end": 0.27,
+            "start": 0.0,
+            "word": "es"
+          },
+          {
+            "conf": 1.0,
+            "end": 0.48,
+            "start": 0.27,
+            "word": "una"
+          },
+          {
+            "conf": 1.0,
+            "end": 0.81,
+            "start": 0.6,
+            "word": "serie"
+          },
+          {
+            "conf": 1.0,
+            "end": 0.87,
+            "start": 0.81,
+            "word": "de"
+          },
+          {
+            "conf": 0.810347,
+            "end": 1.29,
+            "start": 0.87,
+            "word": "noviembre"
+          }
+        ],
+        "confidence_kind": "vosk_word_estimate_uncalibrated",
+        "needs_clarification": false,
+        "quality_reasons": [],
+        "clarification": null,
+        "audio_quality": {
+          "rms": 0.165438,
+          "clipped_fraction": 0.0,
+          "duration_seconds": 1.3003125,
+          "silence": false,
+          "tail_rms": 0.107086
+        },
+        "engine": "vosk",
+        "cpu_seconds": 0.875,
+        "peak_working_set_mib": 150.84,
+        "elapsed_ms": 1011,
+        "available_before_bytes": 8891113472,
+        "minimum_available_bytes": 8736473088
+      },
+      "whisper": {
+        "text": "¿Qué es una seseda en el vm?",
+        "needs_clarification": true,
+        "quality_reasons": [
+          "decoder_diagnostic"
+        ],
+        "segments": [
+          {
+            "text": " ¿Qué es una seseda en el vm?",
+            "start": 0.0,
+            "end": 1.32,
+            "avg_logprob": -1.096894349370684,
+            "no_speech_prob": 0.022714313119649887,
+            "compression_ratio": 0.7894736842105263
+          }
+        ],
+        "confidence_kind": null,
+        "policy": "experimental decoder diagnostics, NOT calibrated confidence",
+        "audio_quality": {
+          "rms": 0.165438,
+          "clipped_fraction": 0.0,
+          "duration_seconds": 1.3003125,
+          "silence": false,
+          "tail_rms": 0.107086
+        },
+        "load_ms": 614,
+        "decode_ms": 916,
+        "worker_elapsed_ms": 1530,
+        "cpu_seconds": 2.719,
+        "peak_working_set_mib": 314.89,
+        "device": "cpu",
+        "compute_type": "int8_float32",
+        "elapsed_ms": 1823,
+        "available_before_bytes": 8883949568,
+        "minimum_available_bytes": 8609243136
+      }
+    },
+    {
+      "text": "¿Cómo reviso la memoria RAM?",
+      "path": "D:\\ITGlasses\\work\\speech-eval\\synthetic-06.wav",
+      "kind": "synthetic Piper es_ES, NOT human Mexican Spanish",
+      "sha256": "54cb3ce34b2a7982822b6900122261fa574dd0e4cb533793ba4048f3321fcf7f",
+      "runs": {
+        "vosk": [
+          {
+            "text": "como revisó la memoria de m",
+            "raw_text": "como revisó la memoria de m",
+            "normalized_text": "como revisó la memoria de m",
+            "words": [
+              {
+                "conf": 0.720596,
+                "end": 0.3,
+                "start": 0.0,
+                "word": "como"
+              },
+              {
+                "conf": 0.584005,
+                "end": 0.75,
+                "start": 0.3,
+                "word": "revisó"
+              },
+              {
+                "conf": 1.0,
+                "end": 0.9,
+                "start": 0.75,
+                "word": "la"
+              },
+              {
+                "conf": 1.0,
+                "end": 1.32,
+                "start": 0.9,
+                "word": "memoria"
+              },
+              {
+                "conf": 1.0,
+                "end": 1.44,
+                "start": 1.32,
+                "word": "de"
+              },
+              {
+                "conf": 0.644647,
+                "end": 1.86,
+                "start": 1.65,
+                "word": "m"
+              }
+            ],
+            "confidence_kind": "vosk_word_estimate_uncalibrated",
+            "needs_clarification": true,
+            "quality_reasons": [
+              "low_confidence"
+            ],
+            "clarification": "No pude reconocer la pregunta con suficiente claridad. Repítela completa o escríbela.",
+            "audio_quality": {
+              "rms": 0.168126,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.892375,
+              "silence": false,
+              "tail_rms": 0.038539
+            },
+            "engine": "vosk",
+            "cpu_seconds": 0.906,
+            "peak_working_set_mib": 144.34,
+            "elapsed_ms": 1012,
+            "available_before_bytes": 8710316032,
+            "minimum_available_bytes": 8656072704
+          },
+          {
+            "text": "como revisó la memoria de m",
+            "raw_text": "como revisó la memoria de m",
+            "normalized_text": "como revisó la memoria de m",
+            "words": [
+              {
+                "conf": 0.720596,
+                "end": 0.3,
+                "start": 0.0,
+                "word": "como"
+              },
+              {
+                "conf": 0.584005,
+                "end": 0.75,
+                "start": 0.3,
+                "word": "revisó"
+              },
+              {
+                "conf": 1.0,
+                "end": 0.9,
+                "start": 0.75,
+                "word": "la"
+              },
+              {
+                "conf": 1.0,
+                "end": 1.32,
+                "start": 0.9,
+                "word": "memoria"
+              },
+              {
+                "conf": 1.0,
+                "end": 1.44,
+                "start": 1.32,
+                "word": "de"
+              },
+              {
+                "conf": 0.644647,
+                "end": 1.86,
+                "start": 1.65,
+                "word": "m"
+              }
+            ],
+            "confidence_kind": "vosk_word_estimate_uncalibrated",
+            "needs_clarification": true,
+            "quality_reasons": [
+              "low_confidence"
+            ],
+            "clarification": "No pude reconocer la pregunta con suficiente claridad. Repítela completa o escríbela.",
+            "audio_quality": {
+              "rms": 0.168126,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.892375,
+              "silence": false,
+              "tail_rms": 0.038539
+            },
+            "engine": "vosk",
+            "cpu_seconds": 1.016,
+            "peak_working_set_mib": 144.3,
+            "elapsed_ms": 1214,
+            "available_before_bytes": 8765325312,
+            "minimum_available_bytes": 8600530944
+          },
+          {
+            "text": "como revisó la memoria de m",
+            "raw_text": "como revisó la memoria de m",
+            "normalized_text": "como revisó la memoria de m",
+            "words": [
+              {
+                "conf": 0.720596,
+                "end": 0.3,
+                "start": 0.0,
+                "word": "como"
+              },
+              {
+                "conf": 0.584005,
+                "end": 0.75,
+                "start": 0.3,
+                "word": "revisó"
+              },
+              {
+                "conf": 1.0,
+                "end": 0.9,
+                "start": 0.75,
+                "word": "la"
+              },
+              {
+                "conf": 1.0,
+                "end": 1.32,
+                "start": 0.9,
+                "word": "memoria"
+              },
+              {
+                "conf": 1.0,
+                "end": 1.44,
+                "start": 1.32,
+                "word": "de"
+              },
+              {
+                "conf": 0.644647,
+                "end": 1.86,
+                "start": 1.65,
+                "word": "m"
+              }
+            ],
+            "confidence_kind": "vosk_word_estimate_uncalibrated",
+            "needs_clarification": true,
+            "quality_reasons": [
+              "low_confidence"
+            ],
+            "clarification": "No pude reconocer la pregunta con suficiente claridad. Repítela completa o escríbela.",
+            "audio_quality": {
+              "rms": 0.168126,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.892375,
+              "silence": false,
+              "tail_rms": 0.038539
+            },
+            "engine": "vosk",
+            "cpu_seconds": 0.891,
+            "peak_working_set_mib": 143.65,
+            "elapsed_ms": 1010,
+            "available_before_bytes": 8672313344,
+            "minimum_available_bytes": 8486375424
+          }
+        ],
+        "whisper": [
+          {
+            "text": "como revisó la memoria de Rm.",
+            "needs_clarification": false,
+            "quality_reasons": [],
+            "segments": [
+              {
+                "text": " como revisó la memoria de Rm.",
+                "start": 0.0,
+                "end": 2.0,
+                "avg_logprob": -0.531942184154804,
+                "no_speech_prob": 0.0038406215608119965,
+                "compression_ratio": 0.7894736842105263
+              }
+            ],
+            "confidence_kind": null,
+            "policy": "experimental decoder diagnostics, NOT calibrated confidence",
+            "audio_quality": {
+              "rms": 0.168126,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.892375,
+              "silence": false,
+              "tail_rms": 0.038539
+            },
+            "load_ms": 639,
+            "decode_ms": 986,
+            "worker_elapsed_ms": 1625,
+            "cpu_seconds": 2.844,
+            "peak_working_set_mib": 314.73,
+            "device": "cpu",
+            "compute_type": "int8_float32",
+            "elapsed_ms": 2001,
+            "available_before_bytes": 8863518720,
+            "minimum_available_bytes": 8569180160
+          },
+          {
+            "text": "como revisó la memoria de Rm.",
+            "needs_clarification": false,
+            "quality_reasons": [],
+            "segments": [
+              {
+                "text": " como revisó la memoria de Rm.",
+                "start": 0.0,
+                "end": 2.0,
+                "avg_logprob": -0.531942184154804,
+                "no_speech_prob": 0.0038406215608119965,
+                "compression_ratio": 0.7894736842105263
+              }
+            ],
+            "confidence_kind": null,
+            "policy": "experimental decoder diagnostics, NOT calibrated confidence",
+            "audio_quality": {
+              "rms": 0.168126,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.892375,
+              "silence": false,
+              "tail_rms": 0.038539
+            },
+            "load_ms": 649,
+            "decode_ms": 956,
+            "worker_elapsed_ms": 1604,
+            "cpu_seconds": 2.812,
+            "peak_working_set_mib": 314.76,
+            "device": "cpu",
+            "compute_type": "int8_float32",
+            "elapsed_ms": 1920,
+            "available_before_bytes": 8831778816,
+            "minimum_available_bytes": 8497827840
+          },
+          {
+            "text": "como revisó la memoria de Rm.",
+            "needs_clarification": false,
+            "quality_reasons": [],
+            "segments": [
+              {
+                "text": " como revisó la memoria de Rm.",
+                "start": 0.0,
+                "end": 2.0,
+                "avg_logprob": -0.531942184154804,
+                "no_speech_prob": 0.0038406215608119965,
+                "compression_ratio": 0.7894736842105263
+              }
+            ],
+            "confidence_kind": null,
+            "policy": "experimental decoder diagnostics, NOT calibrated confidence",
+            "audio_quality": {
+              "rms": 0.168126,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.892375,
+              "silence": false,
+              "tail_rms": 0.038539
+            },
+            "load_ms": 788,
+            "decode_ms": 977,
+            "worker_elapsed_ms": 1765,
+            "cpu_seconds": 2.875,
+            "peak_working_set_mib": 314.6,
+            "device": "cpu",
+            "compute_type": "int8_float32",
+            "elapsed_ms": 2022,
+            "available_before_bytes": 8673087488,
+            "minimum_available_bytes": 8377253888
+          }
+        ]
+      },
+      "vosk": {
+        "text": "como revisó la memoria de m",
+        "raw_text": "como revisó la memoria de m",
+        "normalized_text": "como revisó la memoria de m",
+        "words": [
+          {
+            "conf": 0.720596,
+            "end": 0.3,
+            "start": 0.0,
+            "word": "como"
+          },
+          {
+            "conf": 0.584005,
+            "end": 0.75,
+            "start": 0.3,
+            "word": "revisó"
+          },
+          {
+            "conf": 1.0,
+            "end": 0.9,
+            "start": 0.75,
+            "word": "la"
+          },
+          {
+            "conf": 1.0,
+            "end": 1.32,
+            "start": 0.9,
+            "word": "memoria"
+          },
+          {
+            "conf": 1.0,
+            "end": 1.44,
+            "start": 1.32,
+            "word": "de"
+          },
+          {
+            "conf": 0.644647,
+            "end": 1.86,
+            "start": 1.65,
+            "word": "m"
+          }
+        ],
+        "confidence_kind": "vosk_word_estimate_uncalibrated",
+        "needs_clarification": true,
+        "quality_reasons": [
+          "low_confidence"
+        ],
+        "clarification": "No pude reconocer la pregunta con suficiente claridad. Repítela completa o escríbela.",
+        "audio_quality": {
+          "rms": 0.168126,
+          "clipped_fraction": 0.0,
+          "duration_seconds": 1.892375,
+          "silence": false,
+          "tail_rms": 0.038539
+        },
+        "engine": "vosk",
+        "cpu_seconds": 0.906,
+        "peak_working_set_mib": 144.34,
+        "elapsed_ms": 1012,
+        "available_before_bytes": 8710316032,
+        "minimum_available_bytes": 8656072704
+      },
+      "whisper": {
+        "text": "como revisó la memoria de Rm.",
+        "needs_clarification": false,
+        "quality_reasons": [],
+        "segments": [
+          {
+            "text": " como revisó la memoria de Rm.",
+            "start": 0.0,
+            "end": 2.0,
+            "avg_logprob": -0.531942184154804,
+            "no_speech_prob": 0.0038406215608119965,
+            "compression_ratio": 0.7894736842105263
+          }
+        ],
+        "confidence_kind": null,
+        "policy": "experimental decoder diagnostics, NOT calibrated confidence",
+        "audio_quality": {
+          "rms": 0.168126,
+          "clipped_fraction": 0.0,
+          "duration_seconds": 1.892375,
+          "silence": false,
+          "tail_rms": 0.038539
+        },
+        "load_ms": 639,
+        "decode_ms": 986,
+        "worker_elapsed_ms": 1625,
+        "cpu_seconds": 2.844,
+        "peak_working_set_mib": 314.73,
+        "device": "cpu",
+        "compute_type": "int8_float32",
+        "elapsed_ms": 2001,
+        "available_before_bytes": 8863518720,
+        "minimum_available_bytes": 8569180160
+      }
+    },
+    {
+      "text": "¿Qué hago si Windows no arranca?",
+      "path": "D:\\ITGlasses\\work\\speech-eval\\synthetic-07.wav",
+      "kind": "synthetic Piper es_ES, NOT human Mexican Spanish",
+      "sha256": "d71a979cf9754eea29e04c93aa6d99f299e7600fae114b65571a1edd794160ac",
+      "runs": {
+        "vosk": [
+          {
+            "text": "qué hago si windows no arranca",
+            "raw_text": "qué hago si windows no arranca",
+            "normalized_text": "qué hago si windows no arranca",
+            "words": [
+              {
+                "conf": 1.0,
+                "end": 0.18,
+                "start": 0.0,
+                "word": "qué"
+              },
+              {
+                "conf": 1.0,
+                "end": 0.42,
+                "start": 0.18,
+                "word": "hago"
+              },
+              {
+                "conf": 1.0,
+                "end": 0.6,
+                "start": 0.42,
+                "word": "si"
+              },
+              {
+                "conf": 1.0,
+                "end": 1.02,
+                "start": 0.6,
+                "word": "windows"
+              },
+              {
+                "conf": 1.0,
+                "end": 1.17,
+                "start": 1.02,
+                "word": "no"
+              },
+              {
+                "conf": 1.0,
+                "end": 1.68,
+                "start": 1.17,
+                "word": "arranca"
+              }
+            ],
+            "confidence_kind": "vosk_word_estimate_uncalibrated",
+            "needs_clarification": false,
+            "quality_reasons": [],
+            "clarification": null,
+            "audio_quality": {
+              "rms": 0.169178,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.695,
+              "silence": false,
+              "tail_rms": 0.025083
+            },
+            "engine": "vosk",
+            "cpu_seconds": 1.047,
+            "peak_working_set_mib": 151.93,
+            "elapsed_ms": 1112,
+            "available_before_bytes": 8683560960,
+            "minimum_available_bytes": 8452358144
+          },
+          {
+            "text": "qué hago si windows no arranca",
+            "raw_text": "qué hago si windows no arranca",
+            "normalized_text": "qué hago si windows no arranca",
+            "words": [
+              {
+                "conf": 1.0,
+                "end": 0.18,
+                "start": 0.0,
+                "word": "qué"
+              },
+              {
+                "conf": 1.0,
+                "end": 0.42,
+                "start": 0.18,
+                "word": "hago"
+              },
+              {
+                "conf": 1.0,
+                "end": 0.6,
+                "start": 0.42,
+                "word": "si"
+              },
+              {
+                "conf": 1.0,
+                "end": 1.02,
+                "start": 0.6,
+                "word": "windows"
+              },
+              {
+                "conf": 1.0,
+                "end": 1.17,
+                "start": 1.02,
+                "word": "no"
+              },
+              {
+                "conf": 1.0,
+                "end": 1.68,
+                "start": 1.17,
+                "word": "arranca"
+              }
+            ],
+            "confidence_kind": "vosk_word_estimate_uncalibrated",
+            "needs_clarification": false,
+            "quality_reasons": [],
+            "clarification": null,
+            "audio_quality": {
+              "rms": 0.169178,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.695,
+              "silence": false,
+              "tail_rms": 0.025083
+            },
+            "engine": "vosk",
+            "cpu_seconds": 1.016,
+            "peak_working_set_mib": 151.35,
+            "elapsed_ms": 1113,
+            "available_before_bytes": 8575524864,
+            "minimum_available_bytes": 8296394752
+          },
+          {
+            "text": "qué hago si windows no arranca",
+            "raw_text": "qué hago si windows no arranca",
+            "normalized_text": "qué hago si windows no arranca",
+            "words": [
+              {
+                "conf": 1.0,
+                "end": 0.18,
+                "start": 0.0,
+                "word": "qué"
+              },
+              {
+                "conf": 1.0,
+                "end": 0.42,
+                "start": 0.18,
+                "word": "hago"
+              },
+              {
+                "conf": 1.0,
+                "end": 0.6,
+                "start": 0.42,
+                "word": "si"
+              },
+              {
+                "conf": 1.0,
+                "end": 1.02,
+                "start": 0.6,
+                "word": "windows"
+              },
+              {
+                "conf": 1.0,
+                "end": 1.17,
+                "start": 1.02,
+                "word": "no"
+              },
+              {
+                "conf": 1.0,
+                "end": 1.68,
+                "start": 1.17,
+                "word": "arranca"
+              }
+            ],
+            "confidence_kind": "vosk_word_estimate_uncalibrated",
+            "needs_clarification": false,
+            "quality_reasons": [],
+            "clarification": null,
+            "audio_quality": {
+              "rms": 0.169178,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.695,
+              "silence": false,
+              "tail_rms": 0.025083
+            },
+            "engine": "vosk",
+            "cpu_seconds": 0.969,
+            "peak_working_set_mib": 150.72,
+            "elapsed_ms": 1112,
+            "available_before_bytes": 8122540032,
+            "minimum_available_bytes": 7937277952
+          }
+        ],
+        "whisper": [
+          {
+            "text": "¿Qué hago si vindos no arranca?",
+            "needs_clarification": false,
+            "quality_reasons": [],
+            "segments": [
+              {
+                "text": " ¿Qué hago si vindos no arranca?",
+                "start": 0.0,
+                "end": 1.64,
+                "avg_logprob": -0.43648200801440645,
+                "no_speech_prob": 0.013134720735251904,
+                "compression_ratio": 0.8048780487804879
+              }
+            ],
+            "confidence_kind": null,
+            "policy": "experimental decoder diagnostics, NOT calibrated confidence",
+            "audio_quality": {
+              "rms": 0.169178,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.695,
+              "silence": false,
+              "tail_rms": 0.025083
+            },
+            "load_ms": 725,
+            "decode_ms": 938,
+            "worker_elapsed_ms": 1663,
+            "cpu_seconds": 2.734,
+            "peak_working_set_mib": 314.74,
+            "device": "cpu",
+            "compute_type": "int8_float32",
+            "elapsed_ms": 1924,
+            "available_before_bytes": 8644837376,
+            "minimum_available_bytes": 8440090624
+          },
+          {
+            "text": "¿Qué hago si vindos no arranca?",
+            "needs_clarification": false,
+            "quality_reasons": [],
+            "segments": [
+              {
+                "text": " ¿Qué hago si vindos no arranca?",
+                "start": 0.0,
+                "end": 1.64,
+                "avg_logprob": -0.43648200801440645,
+                "no_speech_prob": 0.013134720735251904,
+                "compression_ratio": 0.8048780487804879
+              }
+            ],
+            "confidence_kind": null,
+            "policy": "experimental decoder diagnostics, NOT calibrated confidence",
+            "audio_quality": {
+              "rms": 0.169178,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.695,
+              "silence": false,
+              "tail_rms": 0.025083
+            },
+            "load_ms": 673,
+            "decode_ms": 931,
+            "worker_elapsed_ms": 1605,
+            "cpu_seconds": 2.781,
+            "peak_working_set_mib": 314.96,
+            "device": "cpu",
+            "compute_type": "int8_float32",
+            "elapsed_ms": 1919,
+            "available_before_bytes": 8488828928,
+            "minimum_available_bytes": 8183816192
+          },
+          {
+            "text": "¿Qué hago si vindos no arranca?",
+            "needs_clarification": false,
+            "quality_reasons": [],
+            "segments": [
+              {
+                "text": " ¿Qué hago si vindos no arranca?",
+                "start": 0.0,
+                "end": 1.64,
+                "avg_logprob": -0.43648200801440645,
+                "no_speech_prob": 0.013134720735251904,
+                "compression_ratio": 0.8048780487804879
+              }
+            ],
+            "confidence_kind": null,
+            "policy": "experimental decoder diagnostics, NOT calibrated confidence",
+            "audio_quality": {
+              "rms": 0.169178,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.695,
+              "silence": false,
+              "tail_rms": 0.025083
+            },
+            "load_ms": 730,
+            "decode_ms": 921,
+            "worker_elapsed_ms": 1650,
+            "cpu_seconds": 2.75,
+            "peak_working_set_mib": 314.74,
+            "device": "cpu",
+            "compute_type": "int8_float32",
+            "elapsed_ms": 1920,
+            "available_before_bytes": 8477659136,
+            "minimum_available_bytes": 7894343680
+          }
+        ]
+      },
+      "vosk": {
+        "text": "qué hago si windows no arranca",
+        "raw_text": "qué hago si windows no arranca",
+        "normalized_text": "qué hago si windows no arranca",
+        "words": [
+          {
+            "conf": 1.0,
+            "end": 0.18,
+            "start": 0.0,
+            "word": "qué"
+          },
+          {
+            "conf": 1.0,
+            "end": 0.42,
+            "start": 0.18,
+            "word": "hago"
+          },
+          {
+            "conf": 1.0,
+            "end": 0.6,
+            "start": 0.42,
+            "word": "si"
+          },
+          {
+            "conf": 1.0,
+            "end": 1.02,
+            "start": 0.6,
+            "word": "windows"
+          },
+          {
+            "conf": 1.0,
+            "end": 1.17,
+            "start": 1.02,
+            "word": "no"
+          },
+          {
+            "conf": 1.0,
+            "end": 1.68,
+            "start": 1.17,
+            "word": "arranca"
+          }
+        ],
+        "confidence_kind": "vosk_word_estimate_uncalibrated",
+        "needs_clarification": false,
+        "quality_reasons": [],
+        "clarification": null,
+        "audio_quality": {
+          "rms": 0.169178,
+          "clipped_fraction": 0.0,
+          "duration_seconds": 1.695,
+          "silence": false,
+          "tail_rms": 0.025083
+        },
+        "engine": "vosk",
+        "cpu_seconds": 1.047,
+        "peak_working_set_mib": 151.93,
+        "elapsed_ms": 1112,
+        "available_before_bytes": 8683560960,
+        "minimum_available_bytes": 8452358144
+      },
+      "whisper": {
+        "text": "¿Qué hago si vindos no arranca?",
+        "needs_clarification": false,
+        "quality_reasons": [],
+        "segments": [
+          {
+            "text": " ¿Qué hago si vindos no arranca?",
+            "start": 0.0,
+            "end": 1.64,
+            "avg_logprob": -0.43648200801440645,
+            "no_speech_prob": 0.013134720735251904,
+            "compression_ratio": 0.8048780487804879
+          }
+        ],
+        "confidence_kind": null,
+        "policy": "experimental decoder diagnostics, NOT calibrated confidence",
+        "audio_quality": {
+          "rms": 0.169178,
+          "clipped_fraction": 0.0,
+          "duration_seconds": 1.695,
+          "silence": false,
+          "tail_rms": 0.025083
+        },
+        "load_ms": 725,
+        "decode_ms": 938,
+        "worker_elapsed_ms": 1663,
+        "cpu_seconds": 2.734,
+        "peak_working_set_mib": 314.74,
+        "device": "cpu",
+        "compute_type": "int8_float32",
+        "elapsed_ms": 1924,
+        "available_before_bytes": 8644837376,
+        "minimum_available_bytes": 8440090624
+      }
+    },
+    {
+      "text": "Explícame el cuarto paso.",
+      "path": "D:\\ITGlasses\\work\\speech-eval\\synthetic-08.wav",
+      "kind": "synthetic Piper es_ES, NOT human Mexican Spanish",
+      "sha256": "c9e7cf9083be95b2c75c63f9de8c5e768f97471a5f6d204c2f51bac1e9d681a5",
+      "runs": {
+        "vosk": [
+          {
+            "text": "explícame el cuarto paso",
+            "raw_text": "explícame el cuarto paso",
+            "normalized_text": "explícame el cuarto paso",
+            "words": [
+              {
+                "conf": 0.732311,
+                "end": 0.687104,
+                "start": 0.0,
+                "word": "explícame"
+              },
+              {
+                "conf": 0.979298,
+                "end": 0.75,
+                "start": 0.687104,
+                "word": "el"
+              },
+              {
+                "conf": 1.0,
+                "end": 1.17,
+                "start": 0.75,
+                "word": "cuarto"
+              },
+              {
+                "conf": 0.594243,
+                "end": 1.53,
+                "start": 1.17,
+                "word": "paso"
+              }
+            ],
+            "confidence_kind": "vosk_word_estimate_uncalibrated",
+            "needs_clarification": true,
+            "quality_reasons": [
+              "low_confidence"
+            ],
+            "clarification": "No pude reconocer la pregunta con suficiente claridad. Repítela completa o escríbela.",
+            "audio_quality": {
+              "rms": 0.133103,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.5673125,
+              "silence": false,
+              "tail_rms": 0.020421
+            },
+            "engine": "vosk",
+            "cpu_seconds": 0.859,
+            "peak_working_set_mib": 142.5,
+            "elapsed_ms": 909,
+            "available_before_bytes": 8091295744,
+            "minimum_available_bytes": 7875768320
+          },
+          {
+            "text": "explícame el cuarto paso",
+            "raw_text": "explícame el cuarto paso",
+            "normalized_text": "explícame el cuarto paso",
+            "words": [
+              {
+                "conf": 0.732311,
+                "end": 0.687104,
+                "start": 0.0,
+                "word": "explícame"
+              },
+              {
+                "conf": 0.979298,
+                "end": 0.75,
+                "start": 0.687104,
+                "word": "el"
+              },
+              {
+                "conf": 1.0,
+                "end": 1.17,
+                "start": 0.75,
+                "word": "cuarto"
+              },
+              {
+                "conf": 0.594243,
+                "end": 1.53,
+                "start": 1.17,
+                "word": "paso"
+              }
+            ],
+            "confidence_kind": "vosk_word_estimate_uncalibrated",
+            "needs_clarification": true,
+            "quality_reasons": [
+              "low_confidence"
+            ],
+            "clarification": "No pude reconocer la pregunta con suficiente claridad. Repítela completa o escríbela.",
+            "audio_quality": {
+              "rms": 0.133103,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.5673125,
+              "silence": false,
+              "tail_rms": 0.020421
+            },
+            "engine": "vosk",
+            "cpu_seconds": 0.859,
+            "peak_working_set_mib": 141.88,
+            "elapsed_ms": 1011,
+            "available_before_bytes": 8018710528,
+            "minimum_available_bytes": 7876034560
+          },
+          {
+            "text": "explícame el cuarto paso",
+            "raw_text": "explícame el cuarto paso",
+            "normalized_text": "explícame el cuarto paso",
+            "words": [
+              {
+                "conf": 0.732311,
+                "end": 0.687104,
+                "start": 0.0,
+                "word": "explícame"
+              },
+              {
+                "conf": 0.979298,
+                "end": 0.75,
+                "start": 0.687104,
+                "word": "el"
+              },
+              {
+                "conf": 1.0,
+                "end": 1.17,
+                "start": 0.75,
+                "word": "cuarto"
+              },
+              {
+                "conf": 0.594243,
+                "end": 1.53,
+                "start": 1.17,
+                "word": "paso"
+              }
+            ],
+            "confidence_kind": "vosk_word_estimate_uncalibrated",
+            "needs_clarification": true,
+            "quality_reasons": [
+              "low_confidence"
+            ],
+            "clarification": "No pude reconocer la pregunta con suficiente claridad. Repítela completa o escríbela.",
+            "audio_quality": {
+              "rms": 0.133103,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.5673125,
+              "silence": false,
+              "tail_rms": 0.020421
+            },
+            "engine": "vosk",
+            "cpu_seconds": 0.828,
+            "peak_working_set_mib": 142.36,
+            "elapsed_ms": 910,
+            "available_before_bytes": 8012247040,
+            "minimum_available_bytes": 7860592640
+          }
+        ],
+        "whisper": [
+          {
+            "text": "Explícame el cuarto paso.",
+            "needs_clarification": false,
+            "quality_reasons": [],
+            "segments": [
+              {
+                "text": " Explícame el cuarto paso.",
+                "start": 0.0,
+                "end": 2.0,
+                "avg_logprob": -0.5192548578435724,
+                "no_speech_prob": 0.02699301950633526,
+                "compression_ratio": 0.7647058823529411
+              }
+            ],
+            "confidence_kind": null,
+            "policy": "experimental decoder diagnostics, NOT calibrated confidence",
+            "audio_quality": {
+              "rms": 0.133103,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.5673125,
+              "silence": false,
+              "tail_rms": 0.020421
+            },
+            "load_ms": 621,
+            "decode_ms": 931,
+            "worker_elapsed_ms": 1552,
+            "cpu_seconds": 2.734,
+            "peak_working_set_mib": 314.78,
+            "device": "cpu",
+            "compute_type": "int8_float32",
+            "elapsed_ms": 1821,
+            "available_before_bytes": 8017457152,
+            "minimum_available_bytes": 7756357632
+          },
+          {
+            "text": "Explícame el cuarto paso.",
+            "needs_clarification": false,
+            "quality_reasons": [],
+            "segments": [
+              {
+                "text": " Explícame el cuarto paso.",
+                "start": 0.0,
+                "end": 2.0,
+                "avg_logprob": -0.5192548578435724,
+                "no_speech_prob": 0.02699301950633526,
+                "compression_ratio": 0.7647058823529411
+              }
+            ],
+            "confidence_kind": null,
+            "policy": "experimental decoder diagnostics, NOT calibrated confidence",
+            "audio_quality": {
+              "rms": 0.133103,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.5673125,
+              "silence": false,
+              "tail_rms": 0.020421
+            },
+            "load_ms": 672,
+            "decode_ms": 905,
+            "worker_elapsed_ms": 1576,
+            "cpu_seconds": 2.703,
+            "peak_working_set_mib": 314.64,
+            "device": "cpu",
+            "compute_type": "int8_float32",
+            "elapsed_ms": 1814,
+            "available_before_bytes": 8023773184,
+            "minimum_available_bytes": 7714697216
+          },
+          {
+            "text": "Explícame el cuarto paso.",
+            "needs_clarification": false,
+            "quality_reasons": [],
+            "segments": [
+              {
+                "text": " Explícame el cuarto paso.",
+                "start": 0.0,
+                "end": 2.0,
+                "avg_logprob": -0.5192548578435724,
+                "no_speech_prob": 0.02699301950633526,
+                "compression_ratio": 0.7647058823529411
+              }
+            ],
+            "confidence_kind": null,
+            "policy": "experimental decoder diagnostics, NOT calibrated confidence",
+            "audio_quality": {
+              "rms": 0.133103,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 1.5673125,
+              "silence": false,
+              "tail_rms": 0.020421
+            },
+            "load_ms": 954,
+            "decode_ms": 921,
+            "worker_elapsed_ms": 1875,
+            "cpu_seconds": 2.688,
+            "peak_working_set_mib": 314.68,
+            "device": "cpu",
+            "compute_type": "int8_float32",
+            "elapsed_ms": 2121,
+            "available_before_bytes": 8001671168,
+            "minimum_available_bytes": 7689035776
+          }
+        ]
+      },
+      "vosk": {
+        "text": "explícame el cuarto paso",
+        "raw_text": "explícame el cuarto paso",
+        "normalized_text": "explícame el cuarto paso",
+        "words": [
+          {
+            "conf": 0.732311,
+            "end": 0.687104,
+            "start": 0.0,
+            "word": "explícame"
+          },
+          {
+            "conf": 0.979298,
+            "end": 0.75,
+            "start": 0.687104,
+            "word": "el"
+          },
+          {
+            "conf": 1.0,
+            "end": 1.17,
+            "start": 0.75,
+            "word": "cuarto"
+          },
+          {
+            "conf": 0.594243,
+            "end": 1.53,
+            "start": 1.17,
+            "word": "paso"
+          }
+        ],
+        "confidence_kind": "vosk_word_estimate_uncalibrated",
+        "needs_clarification": true,
+        "quality_reasons": [
+          "low_confidence"
+        ],
+        "clarification": "No pude reconocer la pregunta con suficiente claridad. Repítela completa o escríbela.",
+        "audio_quality": {
+          "rms": 0.133103,
+          "clipped_fraction": 0.0,
+          "duration_seconds": 1.5673125,
+          "silence": false,
+          "tail_rms": 0.020421
+        },
+        "engine": "vosk",
+        "cpu_seconds": 0.859,
+        "peak_working_set_mib": 142.5,
+        "elapsed_ms": 909,
+        "available_before_bytes": 8091295744,
+        "minimum_available_bytes": 7875768320
+      },
+      "whisper": {
+        "text": "Explícame el cuarto paso.",
+        "needs_clarification": false,
+        "quality_reasons": [],
+        "segments": [
+          {
+            "text": " Explícame el cuarto paso.",
+            "start": 0.0,
+            "end": 2.0,
+            "avg_logprob": -0.5192548578435724,
+            "no_speech_prob": 0.02699301950633526,
+            "compression_ratio": 0.7647058823529411
+          }
+        ],
+        "confidence_kind": null,
+        "policy": "experimental decoder diagnostics, NOT calibrated confidence",
+        "audio_quality": {
+          "rms": 0.133103,
+          "clipped_fraction": 0.0,
+          "duration_seconds": 1.5673125,
+          "silence": false,
+          "tail_rms": 0.020421
+        },
+        "load_ms": 621,
+        "decode_ms": 931,
+        "worker_elapsed_ms": 1552,
+        "cpu_seconds": 2.734,
+        "peak_working_set_mib": 314.78,
+        "device": "cpu",
+        "compute_type": "int8_float32",
+        "elapsed_ms": 1821,
+        "available_before_bytes": 8017457152,
+        "minimum_available_bytes": 7756357632
+      }
+    },
+    {
+      "text": "¿Y qué pasa si eso no funciona?",
+      "path": "D:\\ITGlasses\\work\\speech-eval\\synthetic-09.wav",
+      "kind": "synthetic Piper es_ES, NOT human Mexican Spanish",
+      "sha256": "43c658aca1089706fe27e5b5cf70f2430744de3f36e0cfa2e1598758be2b77ca",
+      "runs": {
+        "vosk": [
+          {
+            "text": "y qué pasa si de eso no funciona",
+            "raw_text": "y qué pasa si de eso no funciona",
+            "normalized_text": "y qué pasa si de eso no funciona",
+            "words": [
+              {
+                "conf": 1.0,
+                "end": 0.12,
+                "start": 0.0,
+                "word": "y"
+              },
+              {
+                "conf": 1.0,
+                "end": 0.3,
+                "start": 0.12,
+                "word": "qué"
+              },
+              {
+                "conf": 1.0,
+                "end": 0.75,
+                "start": 0.3,
+                "word": "pasa"
+              },
+              {
+                "conf": 1.0,
+                "end": 1.08,
+                "start": 0.81,
+                "word": "si"
+              },
+              {
+                "conf": 0.760535,
+                "end": 1.194826,
+                "start": 1.08,
+                "word": "de"
+              },
+              {
+                "conf": 0.837304,
+                "end": 1.378476,
+                "start": 1.194826,
+                "word": "eso"
+              },
+              {
+                "conf": 1.0,
+                "end": 1.5,
+                "start": 1.378476,
+                "word": "no"
+              },
+              {
+                "conf": 1.0,
+                "end": 2.1,
+                "start": 1.5,
+                "word": "funciona"
+              }
+            ],
+            "confidence_kind": "vosk_word_estimate_uncalibrated",
+            "needs_clarification": false,
+            "quality_reasons": [],
+            "clarification": null,
+            "audio_quality": {
+              "rms": 0.114264,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 2.1710625,
+              "silence": false,
+              "tail_rms": 0.019638
+            },
+            "engine": "vosk",
+            "cpu_seconds": 0.844,
+            "peak_working_set_mib": 142.73,
+            "elapsed_ms": 1011,
+            "available_before_bytes": 8748695552,
+            "minimum_available_bytes": 8595644416
+          },
+          {
+            "text": "y qué pasa si de eso no funciona",
+            "raw_text": "y qué pasa si de eso no funciona",
+            "normalized_text": "y qué pasa si de eso no funciona",
+            "words": [
+              {
+                "conf": 1.0,
+                "end": 0.12,
+                "start": 0.0,
+                "word": "y"
+              },
+              {
+                "conf": 1.0,
+                "end": 0.3,
+                "start": 0.12,
+                "word": "qué"
+              },
+              {
+                "conf": 1.0,
+                "end": 0.75,
+                "start": 0.3,
+                "word": "pasa"
+              },
+              {
+                "conf": 1.0,
+                "end": 1.08,
+                "start": 0.81,
+                "word": "si"
+              },
+              {
+                "conf": 0.760535,
+                "end": 1.194826,
+                "start": 1.08,
+                "word": "de"
+              },
+              {
+                "conf": 0.837304,
+                "end": 1.378476,
+                "start": 1.194826,
+                "word": "eso"
+              },
+              {
+                "conf": 1.0,
+                "end": 1.5,
+                "start": 1.378476,
+                "word": "no"
+              },
+              {
+                "conf": 1.0,
+                "end": 2.1,
+                "start": 1.5,
+                "word": "funciona"
+              }
+            ],
+            "confidence_kind": "vosk_word_estimate_uncalibrated",
+            "needs_clarification": false,
+            "quality_reasons": [],
+            "clarification": null,
+            "audio_quality": {
+              "rms": 0.114264,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 2.1710625,
+              "silence": false,
+              "tail_rms": 0.019638
+            },
+            "engine": "vosk",
+            "cpu_seconds": 0.828,
+            "peak_working_set_mib": 141.97,
+            "elapsed_ms": 1011,
+            "available_before_bytes": 8734298112,
+            "minimum_available_bytes": 8593051648
+          },
+          {
+            "text": "y qué pasa si de eso no funciona",
+            "raw_text": "y qué pasa si de eso no funciona",
+            "normalized_text": "y qué pasa si de eso no funciona",
+            "words": [
+              {
+                "conf": 1.0,
+                "end": 0.12,
+                "start": 0.0,
+                "word": "y"
+              },
+              {
+                "conf": 1.0,
+                "end": 0.3,
+                "start": 0.12,
+                "word": "qué"
+              },
+              {
+                "conf": 1.0,
+                "end": 0.75,
+                "start": 0.3,
+                "word": "pasa"
+              },
+              {
+                "conf": 1.0,
+                "end": 1.08,
+                "start": 0.81,
+                "word": "si"
+              },
+              {
+                "conf": 0.760535,
+                "end": 1.194826,
+                "start": 1.08,
+                "word": "de"
+              },
+              {
+                "conf": 0.837304,
+                "end": 1.378476,
+                "start": 1.194826,
+                "word": "eso"
+              },
+              {
+                "conf": 1.0,
+                "end": 1.5,
+                "start": 1.378476,
+                "word": "no"
+              },
+              {
+                "conf": 1.0,
+                "end": 2.1,
+                "start": 1.5,
+                "word": "funciona"
+              }
+            ],
+            "confidence_kind": "vosk_word_estimate_uncalibrated",
+            "needs_clarification": false,
+            "quality_reasons": [],
+            "clarification": null,
+            "audio_quality": {
+              "rms": 0.114264,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 2.1710625,
+              "silence": false,
+              "tail_rms": 0.019638
+            },
+            "engine": "vosk",
+            "cpu_seconds": 0.812,
+            "peak_working_set_mib": 142.35,
+            "elapsed_ms": 1012,
+            "available_before_bytes": 8696532992,
+            "minimum_available_bytes": 8549371904
+          }
+        ],
+        "whisper": [
+          {
+            "text": "¿Y qué pasa si de su no funciona?",
+            "needs_clarification": false,
+            "quality_reasons": [],
+            "segments": [
+              {
+                "text": " ¿Y qué pasa si de su no funciona?",
+                "start": 0.0,
+                "end": 2.0,
+                "avg_logprob": -0.4458093001292302,
+                "no_speech_prob": 0.0001240499987034127,
+                "compression_ratio": 0.813953488372093
+              }
+            ],
+            "confidence_kind": null,
+            "policy": "experimental decoder diagnostics, NOT calibrated confidence",
+            "audio_quality": {
+              "rms": 0.114264,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 2.1710625,
+              "silence": false,
+              "tail_rms": 0.019638
+            },
+            "load_ms": 884,
+            "decode_ms": 953,
+            "worker_elapsed_ms": 1837,
+            "cpu_seconds": 2.797,
+            "peak_working_set_mib": 314.77,
+            "device": "cpu",
+            "compute_type": "int8_float32",
+            "elapsed_ms": 2122,
+            "available_before_bytes": 8004825088,
+            "minimum_available_bytes": 7692795904
+          },
+          {
+            "text": "¿Y qué pasa si de su no funciona?",
+            "needs_clarification": false,
+            "quality_reasons": [],
+            "segments": [
+              {
+                "text": " ¿Y qué pasa si de su no funciona?",
+                "start": 0.0,
+                "end": 2.0,
+                "avg_logprob": -0.4458093001292302,
+                "no_speech_prob": 0.0001240499987034127,
+                "compression_ratio": 0.813953488372093
+              }
+            ],
+            "confidence_kind": null,
+            "policy": "experimental decoder diagnostics, NOT calibrated confidence",
+            "audio_quality": {
+              "rms": 0.114264,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 2.1710625,
+              "silence": false,
+              "tail_rms": 0.019638
+            },
+            "load_ms": 772,
+            "decode_ms": 896,
+            "worker_elapsed_ms": 1667,
+            "cpu_seconds": 2.641,
+            "peak_working_set_mib": 315.0,
+            "device": "cpu",
+            "compute_type": "int8_float32",
+            "elapsed_ms": 1919,
+            "available_before_bytes": 8741023744,
+            "minimum_available_bytes": 8422707200
+          },
+          {
+            "text": "¿Y qué pasa si de su no funciona?",
+            "needs_clarification": false,
+            "quality_reasons": [],
+            "segments": [
+              {
+                "text": " ¿Y qué pasa si de su no funciona?",
+                "start": 0.0,
+                "end": 2.0,
+                "avg_logprob": -0.4458093001292302,
+                "no_speech_prob": 0.0001240499987034127,
+                "compression_ratio": 0.813953488372093
+              }
+            ],
+            "confidence_kind": null,
+            "policy": "experimental decoder diagnostics, NOT calibrated confidence",
+            "audio_quality": {
+              "rms": 0.114264,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 2.1710625,
+              "silence": false,
+              "tail_rms": 0.019638
+            },
+            "load_ms": 823,
+            "decode_ms": 943,
+            "worker_elapsed_ms": 1766,
+            "cpu_seconds": 2.688,
+            "peak_working_set_mib": 314.93,
+            "device": "cpu",
+            "compute_type": "int8_float32",
+            "elapsed_ms": 2020,
+            "available_before_bytes": 8725233664,
+            "minimum_available_bytes": 8445140992
+          }
+        ]
+      },
+      "vosk": {
+        "text": "y qué pasa si de eso no funciona",
+        "raw_text": "y qué pasa si de eso no funciona",
+        "normalized_text": "y qué pasa si de eso no funciona",
+        "words": [
+          {
+            "conf": 1.0,
+            "end": 0.12,
+            "start": 0.0,
+            "word": "y"
+          },
+          {
+            "conf": 1.0,
+            "end": 0.3,
+            "start": 0.12,
+            "word": "qué"
+          },
+          {
+            "conf": 1.0,
+            "end": 0.75,
+            "start": 0.3,
+            "word": "pasa"
+          },
+          {
+            "conf": 1.0,
+            "end": 1.08,
+            "start": 0.81,
+            "word": "si"
+          },
+          {
+            "conf": 0.760535,
+            "end": 1.194826,
+            "start": 1.08,
+            "word": "de"
+          },
+          {
+            "conf": 0.837304,
+            "end": 1.378476,
+            "start": 1.194826,
+            "word": "eso"
+          },
+          {
+            "conf": 1.0,
+            "end": 1.5,
+            "start": 1.378476,
+            "word": "no"
+          },
+          {
+            "conf": 1.0,
+            "end": 2.1,
+            "start": 1.5,
+            "word": "funciona"
+          }
+        ],
+        "confidence_kind": "vosk_word_estimate_uncalibrated",
+        "needs_clarification": false,
+        "quality_reasons": [],
+        "clarification": null,
+        "audio_quality": {
+          "rms": 0.114264,
+          "clipped_fraction": 0.0,
+          "duration_seconds": 2.1710625,
+          "silence": false,
+          "tail_rms": 0.019638
+        },
+        "engine": "vosk",
+        "cpu_seconds": 0.844,
+        "peak_working_set_mib": 142.73,
+        "elapsed_ms": 1011,
+        "available_before_bytes": 8748695552,
+        "minimum_available_bytes": 8595644416
+      },
+      "whisper": {
+        "text": "¿Y qué pasa si de su no funciona?",
+        "needs_clarification": false,
+        "quality_reasons": [],
+        "segments": [
+          {
+            "text": " ¿Y qué pasa si de su no funciona?",
+            "start": 0.0,
+            "end": 2.0,
+            "avg_logprob": -0.4458093001292302,
+            "no_speech_prob": 0.0001240499987034127,
+            "compression_ratio": 0.813953488372093
+          }
+        ],
+        "confidence_kind": null,
+        "policy": "experimental decoder diagnostics, NOT calibrated confidence",
+        "audio_quality": {
+          "rms": 0.114264,
+          "clipped_fraction": 0.0,
+          "duration_seconds": 2.1710625,
+          "silence": false,
+          "tail_rms": 0.019638
+        },
+        "load_ms": 884,
+        "decode_ms": 953,
+        "worker_elapsed_ms": 1837,
+        "cpu_seconds": 2.797,
+        "peak_working_set_mib": 314.77,
+        "device": "cpu",
+        "compute_type": "int8_float32",
+        "elapsed_ms": 2122,
+        "available_before_bytes": 8004825088,
+        "minimum_available_bytes": 7692795904
+      }
+    },
+    {
+      "path": "D:\\ITGlasses\\work\\whisper-eval\\silence.wav",
+      "text": "",
+      "kind": "silence",
+      "sha256": "20eaebffe1816e0ffa6f7f854f5ef4ea80d5349faaf0ce1fec1b713e7fde58fa",
+      "runs": {
+        "vosk": [
+          {
+            "text": "",
+            "raw_text": "",
+            "normalized_text": "",
+            "words": [],
+            "confidence_kind": null,
+            "needs_clarification": true,
+            "quality_reasons": [
+              "no_speech"
+            ],
+            "clarification": "No pude reconocer la pregunta con suficiente claridad. Repítela completa o escríbela.",
+            "audio_quality": {
+              "rms": 0.0,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 2.0,
+              "silence": true,
+              "tail_rms": 0.0
+            },
+            "engine": "vosk",
+            "cpu_seconds": 0.0,
+            "peak_working_set_mib": 14.37,
+            "elapsed_ms": 103,
+            "available_before_bytes": 8692051968,
+            "minimum_available_bytes": 8691712000
+          },
+          {
+            "text": "",
+            "raw_text": "",
+            "normalized_text": "",
+            "words": [],
+            "confidence_kind": null,
+            "needs_clarification": true,
+            "quality_reasons": [
+              "no_speech"
+            ],
+            "clarification": "No pude reconocer la pregunta con suficiente claridad. Repítela completa o escríbela.",
+            "audio_quality": {
+              "rms": 0.0,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 2.0,
+              "silence": true,
+              "tail_rms": 0.0
+            },
+            "engine": "vosk",
+            "cpu_seconds": 0.0,
+            "peak_working_set_mib": 14.29,
+            "elapsed_ms": 103,
+            "available_before_bytes": 8690499584,
+            "minimum_available_bytes": 8690470912
+          },
+          {
+            "text": "",
+            "raw_text": "",
+            "normalized_text": "",
+            "words": [],
+            "confidence_kind": null,
+            "needs_clarification": true,
+            "quality_reasons": [
+              "no_speech"
+            ],
+            "clarification": "No pude reconocer la pregunta con suficiente claridad. Repítela completa o escríbela.",
+            "audio_quality": {
+              "rms": 0.0,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 2.0,
+              "silence": true,
+              "tail_rms": 0.0
+            },
+            "engine": "vosk",
+            "cpu_seconds": 0.016,
+            "peak_working_set_mib": 14.32,
+            "elapsed_ms": 103,
+            "available_before_bytes": 8696393728,
+            "minimum_available_bytes": 8696393728
+          }
+        ],
+        "whisper": [
+          {
+            "text": "",
+            "needs_clarification": true,
+            "quality_reasons": [
+              "no_speech"
+            ],
+            "segments": [],
+            "confidence_kind": null,
+            "policy": "experimental decoder diagnostics, NOT calibrated confidence",
+            "audio_quality": {
+              "rms": 0.0,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 2.0,
+              "silence": true,
+              "tail_rms": 0.0
+            },
+            "load_ms": 0,
+            "decode_ms": 0,
+            "worker_elapsed_ms": 3,
+            "cpu_seconds": 0.0,
+            "peak_working_set_mib": 22.82,
+            "device": "cpu",
+            "compute_type": null,
+            "elapsed_ms": 208,
+            "available_before_bytes": 8684478464,
+            "minimum_available_bytes": 8682397696
+          },
+          {
+            "text": "",
+            "needs_clarification": true,
+            "quality_reasons": [
+              "no_speech"
+            ],
+            "segments": [],
+            "confidence_kind": null,
+            "policy": "experimental decoder diagnostics, NOT calibrated confidence",
+            "audio_quality": {
+              "rms": 0.0,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 2.0,
+              "silence": true,
+              "tail_rms": 0.0
+            },
+            "load_ms": 0,
+            "decode_ms": 0,
+            "worker_elapsed_ms": 3,
+            "cpu_seconds": 0.0,
+            "peak_working_set_mib": 22.6,
+            "device": "cpu",
+            "compute_type": null,
+            "elapsed_ms": 204,
+            "available_before_bytes": 8687702016,
+            "minimum_available_bytes": 8674996224
+          },
+          {
+            "text": "",
+            "needs_clarification": true,
+            "quality_reasons": [
+              "no_speech"
+            ],
+            "segments": [],
+            "confidence_kind": null,
+            "policy": "experimental decoder diagnostics, NOT calibrated confidence",
+            "audio_quality": {
+              "rms": 0.0,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 2.0,
+              "silence": true,
+              "tail_rms": 0.0
+            },
+            "load_ms": 0,
+            "decode_ms": 0,
+            "worker_elapsed_ms": 3,
+            "cpu_seconds": 0.016,
+            "peak_working_set_mib": 22.7,
+            "device": "cpu",
+            "compute_type": null,
+            "elapsed_ms": 204,
+            "available_before_bytes": 8687706112,
+            "minimum_available_bytes": 8678850560
+          }
+        ]
+      },
+      "vosk": {
+        "text": "",
+        "raw_text": "",
+        "normalized_text": "",
+        "words": [],
+        "confidence_kind": null,
+        "needs_clarification": true,
+        "quality_reasons": [
+          "no_speech"
+        ],
+        "clarification": "No pude reconocer la pregunta con suficiente claridad. Repítela completa o escríbela.",
+        "audio_quality": {
+          "rms": 0.0,
+          "clipped_fraction": 0.0,
+          "duration_seconds": 2.0,
+          "silence": true,
+          "tail_rms": 0.0
+        },
+        "engine": "vosk",
+        "cpu_seconds": 0.0,
+        "peak_working_set_mib": 14.37,
+        "elapsed_ms": 103,
+        "available_before_bytes": 8692051968,
+        "minimum_available_bytes": 8691712000
+      },
+      "whisper": {
+        "text": "",
+        "needs_clarification": true,
+        "quality_reasons": [
+          "no_speech"
+        ],
+        "segments": [],
+        "confidence_kind": null,
+        "policy": "experimental decoder diagnostics, NOT calibrated confidence",
+        "audio_quality": {
+          "rms": 0.0,
+          "clipped_fraction": 0.0,
+          "duration_seconds": 2.0,
+          "silence": true,
+          "tail_rms": 0.0
+        },
+        "load_ms": 0,
+        "decode_ms": 0,
+        "worker_elapsed_ms": 3,
+        "cpu_seconds": 0.0,
+        "peak_working_set_mib": 22.82,
+        "device": "cpu",
+        "compute_type": null,
+        "elapsed_ms": 208,
+        "available_before_bytes": 8684478464,
+        "minimum_available_bytes": 8682397696
+      }
+    },
+    {
+      "path": "D:\\ITGlasses\\work\\whisper-eval\\noise.wav",
+      "text": "",
+      "kind": "noise",
+      "sha256": "8c0c8a693b1468d910d116bca43b41cfc5d3830c061a7b675d26ae5ad0320a28",
+      "runs": {
+        "vosk": [
+          {
+            "text": "",
+            "raw_text": "",
+            "normalized_text": "",
+            "words": [],
+            "confidence_kind": null,
+            "needs_clarification": true,
+            "quality_reasons": [
+              "no_speech"
+            ],
+            "clarification": "No pude reconocer la pregunta con suficiente claridad. Repítela completa o escríbela.",
+            "audio_quality": {
+              "rms": 0.002832,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 2.0,
+              "silence": false,
+              "tail_rms": 0.002827
+            },
+            "engine": "vosk",
+            "cpu_seconds": 0.734,
+            "peak_working_set_mib": 133.93,
+            "elapsed_ms": 809,
+            "available_before_bytes": 8693256192,
+            "minimum_available_bytes": 8278102016
+          },
+          {
+            "text": "",
+            "raw_text": "",
+            "normalized_text": "",
+            "words": [],
+            "confidence_kind": null,
+            "needs_clarification": true,
+            "quality_reasons": [
+              "no_speech"
+            ],
+            "clarification": "No pude reconocer la pregunta con suficiente claridad. Repítela completa o escríbela.",
+            "audio_quality": {
+              "rms": 0.002832,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 2.0,
+              "silence": false,
+              "tail_rms": 0.002827
+            },
+            "engine": "vosk",
+            "cpu_seconds": 0.734,
+            "peak_working_set_mib": 133.77,
+            "elapsed_ms": 809,
+            "available_before_bytes": 8471347200,
+            "minimum_available_bytes": 8314023936
+          },
+          {
+            "text": "",
+            "raw_text": "",
+            "normalized_text": "",
+            "words": [],
+            "confidence_kind": null,
+            "needs_clarification": true,
+            "quality_reasons": [
+              "no_speech"
+            ],
+            "clarification": "No pude reconocer la pregunta con suficiente claridad. Repítela completa o escríbela.",
+            "audio_quality": {
+              "rms": 0.002832,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 2.0,
+              "silence": false,
+              "tail_rms": 0.002827
+            },
+            "engine": "vosk",
+            "cpu_seconds": 0.641,
+            "peak_working_set_mib": 134.47,
+            "elapsed_ms": 807,
+            "available_before_bytes": 8451932160,
+            "minimum_available_bytes": 8312483840
+          }
+        ],
+        "whisper": [
+          {
+            "text": "",
+            "needs_clarification": true,
+            "quality_reasons": [
+              "no_speech"
+            ],
+            "segments": [],
+            "confidence_kind": null,
+            "policy": "experimental decoder diagnostics, NOT calibrated confidence",
+            "audio_quality": {
+              "rms": 0.002832,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 2.0,
+              "silence": false,
+              "tail_rms": 0.002827
+            },
+            "load_ms": 706,
+            "decode_ms": 100,
+            "worker_elapsed_ms": 806,
+            "cpu_seconds": 1.062,
+            "peak_working_set_mib": 314.86,
+            "device": "cpu",
+            "compute_type": "int8_float32",
+            "elapsed_ms": 1113,
+            "available_before_bytes": 8690364416,
+            "minimum_available_bytes": 8468537344
+          },
+          {
+            "text": "",
+            "needs_clarification": true,
+            "quality_reasons": [
+              "no_speech"
+            ],
+            "segments": [],
+            "confidence_kind": null,
+            "policy": "experimental decoder diagnostics, NOT calibrated confidence",
+            "audio_quality": {
+              "rms": 0.002832,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 2.0,
+              "silence": false,
+              "tail_rms": 0.002827
+            },
+            "load_ms": 632,
+            "decode_ms": 102,
+            "worker_elapsed_ms": 734,
+            "cpu_seconds": 1.047,
+            "peak_working_set_mib": 314.87,
+            "device": "cpu",
+            "compute_type": "int8_float32",
+            "elapsed_ms": 1012,
+            "available_before_bytes": 8444997632,
+            "minimum_available_bytes": 8269107200
+          },
+          {
+            "text": "",
+            "needs_clarification": true,
+            "quality_reasons": [
+              "no_speech"
+            ],
+            "segments": [],
+            "confidence_kind": null,
+            "policy": "experimental decoder diagnostics, NOT calibrated confidence",
+            "audio_quality": {
+              "rms": 0.002832,
+              "clipped_fraction": 0.0,
+              "duration_seconds": 2.0,
+              "silence": false,
+              "tail_rms": 0.002827
+            },
+            "load_ms": 611,
+            "decode_ms": 102,
+            "worker_elapsed_ms": 713,
+            "cpu_seconds": 1.016,
+            "peak_working_set_mib": 314.68,
+            "device": "cpu",
+            "compute_type": "int8_float32",
+            "elapsed_ms": 1011,
+            "available_before_bytes": 8447889408,
+            "minimum_available_bytes": 8250765312
+          }
+        ]
+      },
+      "vosk": {
+        "text": "",
+        "raw_text": "",
+        "normalized_text": "",
+        "words": [],
+        "confidence_kind": null,
+        "needs_clarification": true,
+        "quality_reasons": [
+          "no_speech"
+        ],
+        "clarification": "No pude reconocer la pregunta con suficiente claridad. Repítela completa o escríbela.",
+        "audio_quality": {
+          "rms": 0.002832,
+          "clipped_fraction": 0.0,
+          "duration_seconds": 2.0,
+          "silence": false,
+          "tail_rms": 0.002827
+        },
+        "engine": "vosk",
+        "cpu_seconds": 0.734,
+        "peak_working_set_mib": 133.93,
+        "elapsed_ms": 809,
+        "available_before_bytes": 8693256192,
+        "minimum_available_bytes": 8278102016
+      },
+      "whisper": {
+        "text": "",
+        "needs_clarification": true,
+        "quality_reasons": [
+          "no_speech"
+        ],
+        "segments": [],
+        "confidence_kind": null,
+        "policy": "experimental decoder diagnostics, NOT calibrated confidence",
+        "audio_quality": {
+          "rms": 0.002832,
+          "clipped_fraction": 0.0,
+          "duration_seconds": 2.0,
+          "silence": false,
+          "tail_rms": 0.002827
+        },
+        "load_ms": 706,
+        "decode_ms": 100,
+        "worker_elapsed_ms": 806,
+        "cpu_seconds": 1.062,
+        "peak_working_set_mib": 314.86,
+        "device": "cpu",
+        "compute_type": "int8_float32",
+        "elapsed_ms": 1113,
+        "available_before_bytes": 8690364416,
+        "minimum_available_bytes": 8468537344
+      }
+    }
+  ],
+  "summary": {
+    "vosk": {
+      "wer": 0.375,
+      "cer": 0.19298245614035087,
+      "acronym_hits": 1,
+      "acronym_count": 8,
+      "acronym_accuracy": 0.125,
+      "exact_correct": 2,
+      "total_spoken": 10,
+      "clarifications": 6,
+      "false_clarifications_exact": 1,
+      "incorrect_accepted_exact": 3,
+      "latency_mean_ms": 1028,
+      "latency_p50_ms": 1011.0,
+      "latency_p95_ms": 1113,
+      "peak_worker_mib": 151.93,
+      "minimum_system_available_gib": 7.2451324462890625,
+      "deterministic_across_repetitions": true
+    },
+    "whisper": {
+      "wer": 0.25,
+      "cer": 0.12280701754385964,
+      "acronym_hits": 3,
+      "acronym_count": 8,
+      "acronym_accuracy": 0.375,
+      "exact_correct": 4,
+      "total_spoken": 10,
+      "clarifications": 1,
+      "false_clarifications_exact": 0,
+      "incorrect_accepted_exact": 5,
+      "latency_mean_ms": 1946,
+      "latency_p50_ms": 1920.5,
+      "latency_p95_ms": 2121,
+      "peak_worker_mib": 315.0,
+      "minimum_system_available_gib": 7.1019744873046875,
+      "deterministic_across_repetitions": true
+    }
+  },
+  "resources_after": {
+    "available_bytes": 8444538880,
+    "gpu_used_mib": "1120",
+    "ollama_models": []
+  },
+  "production_after": {
+    "backend/app/voice/worker.py": "09a9c39e38ed2b3f2a57a072de174027f4f4aa447af89ac7a6d10eb8a0505c3f",
+    "backend/app/voice/service.py": "0faea3cd3ee799003461229f6d548103b9554b38cb8f816b1a1b16a7a5109fc0",
+    "backend/app/voice/routes.py": "28c79165653409ef4a6f52a7371271615de974d72c9ba06557fd7cc59a32bd5b",
+    "config.toml": "e372773a1c9b29a772c269f3c8b5f7156537e219597cf250bf57687aa673fe90",
+    "requirements-voice.txt": "2f23201c5aba9dd8c03adc73854b66ec516a82fa398b067fc388882cc20d480d"
+  },
+  "production_unchanged": true
+}

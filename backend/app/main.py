@@ -1,7 +1,10 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Depends
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException
+import logging
+
+logger = logging.getLogger(__name__)
 
 from backend.app.api.routes import router
 from backend.app.core.config import settings
@@ -17,16 +20,18 @@ def error_response(status: int, code: str, message: str):
 
 
 def create_app(provider: LLMProvider | None = None, knowledge=None, voice=None) -> FastAPI:
+    from backend.app.api.auth import require_auth
     app = FastAPI(title=settings.app_name, version=settings.version)
     app.state.provider = provider if provider is not None else (
         OllamaProvider(settings) if settings.provider == "ollama" else MockLLM()
     )
     app.include_router(router)
     app.state.knowledge = knowledge
-    app.include_router(knowledge_router)
+    app.include_router(knowledge_router, dependencies=[Depends(require_auth)])
+    from backend.app.api.auth import require_auth
     from backend.app.voice.routes import router as voice_router
     app.state.voice = voice
-    app.include_router(voice_router)
+    app.include_router(voice_router, dependencies=[Depends(require_auth)])
 
     @app.middleware("http")
     async def upload_limit(request: Request, call_next):
@@ -77,6 +82,7 @@ def create_app(provider: LLMProvider | None = None, knowledge=None, voice=None) 
 
     @app.exception_handler(Exception)
     async def internal_error(request: Request, exc: Exception):
+        logger.exception("Internal server error: %s", exc)
         return error_response(500, "internal_error", "An internal error occurred.")
 
     from backend.app.frontend import mount_frontend

@@ -1,0 +1,150 @@
+TAP version 13
+# Subtest: general chat never sends invented history or knowledge identifiers
+ok 1 - general chat never sends invented history or knowledge identifiers
+  ---
+  duration_ms: 2.7583
+  ...
+# Subtest: knowledge chat carries the existing conversation and explicit choice
+ok 2 - knowledge chat carries the existing conversation and explicit choice
+  ---
+  duration_ms: 0.1544
+  ...
+# Subtest: new knowledge conversation does not fabricate an identifier
+ok 3 - new knowledge conversation does not fabricate an identifier
+  ---
+  duration_ms: 0.1594
+  ...
+# Subtest: chat validation honors each backend limit
+ok 4 - chat validation honors each backend limit
+  ---
+  duration_ms: 0.3938
+  ...
+# Subtest: file validation rejects unsupported, empty, missing and oversized input
+ok 5 - file validation rejects unsupported, empty, missing and oversized input
+  ---
+  duration_ms: 0.4409
+  ...
+# Subtest: source lookup cannot use server-provided URLs or arbitrary paths
+ok 6 - source lookup cannot use server-provided URLs or arbitrary paths
+  ---
+  duration_ms: 0.3005
+  ...
+# Subtest: withdrawal takes priority over authorization in document status
+ok 7 - withdrawal takes priority over authorization in document status
+  ---
+  duration_ms: 0.1551
+  ...
+# Subtest: request helper returns measured latency and parsed result
+ok 8 - request helper returns measured latency and parsed result
+  ---
+  duration_ms: 49.814
+  ...
+# Subtest: request helper preserves error code for expired conversation handling
+ok 9 - request helper preserves error code for expired conversation handling
+  ---
+  duration_ms: 1.1329
+  ...
+# Subtest: malformed server output and network errors become clear failures
+ok 10 - malformed server output and network errors become clear failures
+  ---
+  duration_ms: 1.0364
+  ...
+# Subtest: timeout does not claim that the backend operation was cancelled
+ok 11 - timeout does not claim that the backend operation was cancelled
+  ---
+  duration_ms: 6.9981
+  ...
+# Subtest: wake prefix matching is explicit, normalized and does not trigger in the middle
+ok 12 - wake prefix matching is explicit, normalized and does not trigger in the middle
+  ---
+  duration_ms: 3.3449
+  ...
+# Subtest: speech preserves ambiguity and labels general knowledge
+ok 13 - speech preserves ambiguity and labels general knowledge
+  ---
+  duration_ms: 0.6978
+  ...
+# Subtest: wake then follow-up uses the same chat adapter and returns to wake on timeout
+ok 14 - wake then follow-up uses the same chat adapter and returns to wake on timeout
+  ---
+  duration_ms: 2.8357
+  ...
+# Subtest: non-wake speech never calls chat when armed
+ok 15 - non-wake speech never calls chat when armed
+  ---
+  duration_ms: 0.3128
+  ...
+# Subtest: manual listening closes the microphone on timeout
+ok 16 - manual listening closes the microphone on timeout
+  ---
+  duration_ms: 0.3047
+  ...
+# Subtest: permission failures are visible and inactive
+ok 17 - permission failures are visible and inactive
+  ---
+  duration_ms: 0.3052
+  ...
+# Subtest: stop while permission is pending releases a late stream
+ok 18 - stop while permission is pending releases a late stream
+  ---
+  duration_ms: 0.229
+  ...
+# Subtest: stop during transcription prevents stale chat and speech
+ok 19 - stop during transcription prevents stale chat and speech
+  ---
+  duration_ms: 0.382
+  ...
+# Subtest: stop during chat prevents stale playback
+ok 20 - stop during chat prevents stale playback
+  ---
+  duration_ms: 7.7443
+  ...
+# Subtest: speech errors release microphone and preserve visible error
+ok 21 - speech errors release microphone and preserve visible error
+  ---
+  duration_ms: 0.6827
+  ...
+# Subtest: PCM conversion is mono 16 kHz with bounded signed samples
+ok 22 - PCM conversion is mono 16 kHz with bounded signed samples
+  ---
+  duration_ms: 1.8057
+  ...
+# Subtest: silence segmentation rejects background silence and emits speech once
+ok 23 - silence segmentation rejects background silence and emits speech once
+  ---
+  duration_ms: 8.3286
+  ...
+# Subtest: speech activity renews the follow-up window instead of expiring mid-sentence
+ok 24 - speech activity renews the follow-up window instead of expiring mid-sentence
+  ---
+  duration_ms: 0.3101
+  ...
+# Subtest: observed synthetic wake alias is explicit and technical identifiers remain intact
+ok 25 - observed synthetic wake alias is explicit and technical identifiers remain intact
+  ---
+  duration_ms: 0.1311
+  ...
+# Subtest: spoken procedure numbers normalize narrowly without inventing large identifiers
+ok 26 - spoken procedure numbers normalize narrowly without inventing large identifiers
+  ---
+  duration_ms: 0.2285
+  ...
+# Subtest: uncertain STT asks for repetition without calling chat or TTS
+ok 27 - uncertain STT asks for repetition without calling chat or TTS
+  ---
+  duration_ms: 0.2379
+  ...
+# Subtest: length-limited capture is never sent to transcription
+ok 28 - length-limited capture is never sent to transcription
+  ---
+  duration_ms: 0.1439
+  ...
+1..28
+# tests 28
+# suites 0
+# pass 28
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 169.8847

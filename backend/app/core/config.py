@@ -13,7 +13,8 @@ class Settings:
     version: str = "0.2.0"
     host: str = "127.0.0.1"
     port: int = 8000
-    provider: str = "mock"
+    allow_lan_binding: bool = False
+    provider: str = "ollama"
     ollama_url: str = "http://127.0.0.1:11434"
     model: str = "qwen3:4b-instruct-2507-q4_K_M"
     context_length: int = 2048
@@ -35,8 +36,8 @@ class Settings:
             raise ValueError("Ollama URL must be an HTTP IPv4 loopback origin with a port")
         if not self.model or "cloud" in self.model.lower():
             raise ValueError("A local model name is required")
-        if self.host != "127.0.0.1":
-            raise ValueError("Only IPv4 loopback binding is supported")
+        if self.host != "127.0.0.1" and not self.allow_lan_binding:
+            raise ValueError("Non-loopback binding requires ITGLASSES_ALLOW_LAN_BINDING=true")
         if not 512 <= self.context_length <= 4096:
             raise ValueError("Context must be between 512 and 4096 tokens")
         if not 1 <= self.max_output_tokens <= 1024:
@@ -47,8 +48,16 @@ class Settings:
 
 def load_settings(path: Path = PROJECT_ROOT / "config.toml") -> Settings:
     data = tomllib.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    if "ITGLASSES_HOST" in os.environ:
+        data["host"] = os.environ["ITGLASSES_HOST"]
+    if "ITGLASSES_PORT" in os.environ:
+        data["port"] = int(os.environ["ITGLASSES_PORT"])
     if "ITGLASSES_PROVIDER" in os.environ:
         data["provider"] = os.environ["ITGLASSES_PROVIDER"]
+    if "OLLAMA_BASE_URL" in os.environ:
+        data["ollama_url"] = os.environ["OLLAMA_BASE_URL"]
+    if "ITGLASSES_ALLOW_LAN_BINDING" in os.environ:
+        data["allow_lan_binding"] = os.environ["ITGLASSES_ALLOW_LAN_BINDING"].lower() in {"1", "true", "yes"}
     return Settings(**data)
 
 

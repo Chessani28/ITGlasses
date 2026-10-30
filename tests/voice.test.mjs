@@ -97,3 +97,16 @@ test('spoken procedure numbers normalize narrowly without inventing large identi
   assert.equal(normalizeProcedureNumbers('procedimiento veinticuatro mil'), 'procedimiento veinticuatro mil');
   assert.equal(normalizeProcedureNumbers('hay veinticuatro computadoras'), 'hay veinticuatro computadoras');
 });
+
+test('uncertain STT asks for repetition without calling chat or TTS',async()=>{
+  const {controller,calls,events}=setup({transcribe:async()=>({text:'otra cosa',needs_clarification:true,clarification:'Repite la pregunta'})});
+  await controller.start({...preferences,wake:false}); await controller.utterance('audio');
+  assert.equal(calls.some(x=>Array.isArray(x)),false);
+  assert.ok(!calls.includes('speak')); assert.equal(events.at(-1)[1],'Repite la pregunta');
+});
+test('length-limited capture is never sent to transcription',async()=>{
+  let sent=false;
+  const {controller}=setup({transcribe:async()=>{sent=true; return {text:'incompleta'};}});
+  await controller.start({...preferences,wake:false}); await controller.utterance({possiblyIncomplete:true});
+  assert.equal(sent,false);
+});
