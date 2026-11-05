@@ -4,8 +4,15 @@ import {captureMicrophone} from "./microphone.mjs";
 
 export function initVoice(chat) {
   const $ = id => document.getElementById(id.replace(/^#+/, "")), audio = $("voice-audio");
-  let playback, audioUrl;
+  const recordedAudio = $("voice-playback-audio");
+  let playback, audioUrl, recordingUrl, captureSettings = {};
+  function clearRecording() {
+    recordedAudio.pause(); recordedAudio.removeAttribute("src"); recordedAudio.load();
+    if (recordingUrl) URL.revokeObjectURL(recordingUrl);
+    recordingUrl = null;
+  }
   function stopAudio() {
+    recordedAudio.pause();
     audio.pause(); audio.removeAttribute("src"); audio.load();
     if (audioUrl) URL.revokeObjectURL(audioUrl); audioUrl = null;
     playback?.(); playback = null;
@@ -33,23 +40,25 @@ export function initVoice(chat) {
     stopAudio();
   }
   const controller = new VoiceController({
-    capture: (emit, enabled, activity, failed) => captureMicrophone(emit, enabled, Number($("voice-threshold").value), activity, failed),
+    capture: (emit, enabled, activity, failed) => captureMicrophone(emit, enabled, captureSettings.threshold ?? Number($("voice-threshold").value), activity, failed, $("voice-diagnostic-toggle").checked, captureSettings),
     stopAudio,
     state(phase, detail, active) {
       const labels = {idle: "En espera", listening: "Escuchando", transcribing: "Transcribiendo", thinking: "Pensando", speaking: "Hablando", error: "Error"};
       $("voice-state").textContent = labels[phase]; $("voice-state").dataset.state = phase;
       $("voice-detail").textContent = detail;
       $("voice-mic").textContent = active ? "â— MICRÃ“FONO ACTIVO" : "â—‹ MICRÃ“FONO APAGADO";
+      $("voice-playback-btn").disabled = active || !recordingUrl;
       $("voice-start").disabled = active; $("voice-stop").disabled = !active;
       $("voice-preferences").disabled = active; $("voice-diagnostic-toggle").disabled = active;
       chat.lock(active);
     },
     transcript(text, ms) { $("voice-transcript").textContent = text || "No se reconociÃ³ voz."; $("voice-timing").textContent = `TranscripciÃ³n: ${elapsed(ms)}`; },
     async transcribe(blob, signal) {
-      const settings = {maxDurationMs: 28000, silenceTimeoutMs: 1100};
       const resp = await api("/api/v1/voice/transcribe", {method: "POST", headers: {"Content-Type": "audio/wav"}, body: blob, signal}, 95000);
       const data = resp.data;
-      const {recordingDurationMs, stopReason, speechDurationMs, energyRms, confidence, clarificationReasons, raw_text, normalized_text} = data;
+      const {recordingDurationMs, stopReason, speechDurationMs, energyRms} = blob.voiceDiagnostics || {};
+      const {raw_text, normalized_text, quality_reasons: clarificationReasons} = data;
+      const confidence = null; // No invented aggregate confidence score.
       $("#voice-recording-status").textContent = "Grabacion terminada";
       $("#voice-recording-duration").textContent = recordingDurationMs ? `${(recordingDurationMs/1000).toFixed(2)} s` : "â€”";
       $("#voice-record-stop-reason").textContent = stopReason || "(sin resultado)";
@@ -59,14 +68,14 @@ export function initVoice(chat) {
       $("#voice-transcript-normalized").textContent = normalized_text || "â€”";
       $("#voice-confidence").textContent = confidence != null ? `${confidence.toFixed(2)}` : "â€”";
       $("#voice-clarification-reasons").textContent = clarificationReasons && clarificationReasons.length ? clarificationReasons.join(", ") : "â€”";
-      $("#voice-playback-btn").disabled = false;
-      const url = URL.createObjectURL(blob);
-      audio.src = url; audio.load();
-      stopAudio(); playback = () => audio.play().catch(() => { $("#voice-detail").textContent = "El navegador bloqueo la reproduccion."; }); audio.onended = playback;
+      clearRecording();
+      recordingUrl = URL.createObjectURL(blob); recordedAudio.src = recordingUrl; recordedAudio.load();
+      $("voice-playback-btn").disabled = controller.active;
       return data;
     },
     chat: (text, signal) => chat.send(text, signal), speak
   });
+  $("voice-playback-btn").addEventListener("click", () => { if (!controller.active && recordingUrl) { recordedAudio.currentTime = 0; return recordedAudio.play().catch(() => {}); } });
   $("voice-start").addEventListener("click", async () => {
     $("voice-start").disabled = true;
     try {
@@ -80,6 +89,7 @@ export function initVoice(chat) {
   });
   $("voice-stop").addEventListener("click", () => controller.stop());
   $("voice-diagnostic-toggle").addEventListener("change", async (event) => {
+    $("voice-diagnostic-section").hidden = !event.target.checked;
     if (event.target.checked) {
       const {data} = await api("/api/v1/voice/diagnostic/settings", {}, 10000);
       $("#voice-diag-threshold").value = data.energy_threshold;
@@ -89,6 +99,7 @@ export function initVoice(chat) {
       $("#voice-diag-settings-form").hidden = false;
       $("#voice-diag-toggle-row").classList.replace("open", "collapsed");
     } else {
+      captureSettings = {};
       $("#voice-diag-settings-form").hidden = true;
       $("#voice-diag-toggle-row").classList.replace("collapsed", "open");
     }
@@ -101,10 +112,12 @@ export function initVoice(chat) {
       max_duration_ms: Number($("voice-diag-max-duration").value) * 1000
     };
     const {data} = await api("/api/v1/voice/diagnostic/settings", {method: "PUT", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload)}, 10000);
+    captureSettings = {threshold: data.energy_threshold, maxDurationMs: data.max_duration_ms,
+      silenceTimeoutMs: data.silence_timeout * 1000, preSpeechMs: data.pre_speech_buffer * 1000};
     $("voice-diag-feedback").textContent = "Ajustes guardados Â· reserva de desarrollo";
   });
   document.addEventListener("visibilitychange", () => { if (document.hidden) controller.stop(); });
-  window.addEventListener("pagehide", () => controller.stop());
+  window.addEventListener("pagehide", () => { controller.stop(); clearRecording(); });
   return controller;
 }
 

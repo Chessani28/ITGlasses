@@ -77,7 +77,7 @@ test('silence segmentation rejects background silence and emits speech once',()=
   const clips=[], segment=new Segmenter(16000,x=>clips.push(x));
   for(let i=0;i<30;i++) segment.push(new Float32Array(1600)); assert.equal(clips.length,0);
   for(let i=0;i<5;i++) segment.push(new Float32Array(1600).fill(.1));
-  for(let i=0;i<12;i++) segment.push(new Float32Array(1600)); assert.equal(clips.length,1);
+  for(let i=0;i<26;i++) segment.push(new Float32Array(1600)); assert.equal(clips.length,1);
 });
 test('speech activity renews the follow-up window instead of expiring mid-sentence',async()=>{
   let renewals=0;
@@ -109,4 +109,28 @@ test('length-limited capture is never sent to transcription',async()=>{
   const {controller}=setup({transcribe:async()=>{sent=true; return {text:'incompleta'};}});
   await controller.start({...preferences,wake:false}); await controller.utterance({possiblyIncomplete:true});
   assert.equal(sent,false);
+});
+
+test('pauses separated by speech do not accumulate into a premature stop',()=>{
+  const clips=[], s=new Segmenter(16000,x=>clips.push(x));
+  for(let turn=0;turn<3;turn++) {
+    for(let i=0;i<5;i++) s.push(new Float32Array(1600).fill(.1));
+    for(let i=0;i<10;i++) s.push(new Float32Array(1600));
+  }
+  assert.equal(clips.length,0);
+  for(let i=0;i<16;i++) s.push(new Float32Array(1600));
+  assert.equal(clips.length,1);
+  assert.equal(clips[0].voiceDiagnostics.stopReason,'silence_timeout');
+  assert.ok(clips[0].voiceDiagnostics.recordingDurationMs < 10000);
+});
+test('custom duration setting stops with incomplete flag and truthful diagnostics',()=>{
+  const clips=[], s=new Segmenter(16000,x=>clips.push(x),.012,()=>{},10000,1500);
+  for(let i=0;i<100;i++) s.push(new Float32Array(1600).fill(.1));
+  assert.equal(clips.length,1); assert.equal(clips[0].possiblyIncomplete,true);
+  assert.equal(clips[0].voiceDiagnostics.stopReason,'duration_limit');
+  assert.equal(clips[0].voiceDiagnostics.recordingDurationMs,10000);
+});
+test('short PCM padding meets 100ms output minimum at 48kHz',async()=>{
+  const view=new DataView(await pcmWav([new Float32Array(480)],48000).arrayBuffer());
+  assert.equal(view.getUint32(40,true),3200);
 });

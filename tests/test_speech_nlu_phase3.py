@@ -63,13 +63,18 @@ def test_silence_low_confidence_and_clipping():
     quality=audio_quality(bytes(32000))
     assert transcription_result("",[],quality)["needs_clarification"]
     result=transcription_result("vpn",[{"word":"vpn","conf":0.3}], {"silence":False})
-    assert result["needs_clarification"] and result["raw_text"] == "vpn" and result["text"] == "VPN"
+    # Severe confidence now requests clarification; mild warnings remain informational.
+    assert result["needs_clarification"]
+    assert result["raw_text"] == "vpn" and result["text"] == "VPN"
+    assert "low_confidence" in result["quality_reasons"]
     assert transcription_result("vpn",[],{})["confidence_kind"] is None
     assert "clipped_audio" in transcription_result("vpn",[{"conf":1}],{"clipped_fraction":0.1})["quality_reasons"]
 
 def test_confident_transcript_and_incomplete_clip():
     assert not transcription_result("dns",[{"conf":0.99}],{})["needs_clarification"]
+    # Incomplete speech must not silently reach the assistant.
     assert transcription_result("dns",[{"conf":0.99}],{"duration_seconds":28,"tail_rms":0.1})["needs_clarification"]
+    assert "possibly_incomplete" in transcription_result("dns",[{"conf":0.99}],{"duration_seconds":28,"tail_rms":0.1})["quality_reasons"]
 
 
 def test_general_followup_survives_social_turn():

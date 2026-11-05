@@ -26,7 +26,7 @@ async def status(provider: LLMProvider = Depends(get_provider)):
     )
 
 
-@router.post("/api/v1/chat", response_model=ChatResponse)
+@router.post("/api/v1/chat", response_model=ChatResponse, dependencies=[Depends(require_auth)])
 async def chat(payload: ChatRequest, provider: LLMProvider = Depends(get_provider)):
     await provider.ensure_available()
     answer = await provider.generate(payload.message)

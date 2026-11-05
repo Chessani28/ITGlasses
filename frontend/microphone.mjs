@@ -3,7 +3,9 @@ export function pcmWav(chunks, sampleRate) {
   const length = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
   const samples = new Float32Array(length); let offset = 0;
   for (const chunk of chunks) { samples.set(chunk, offset); offset += chunk.length; }
-  const count = Math.floor(length * 16000 / sampleRate);
+  // Ensure at least 0.1 seconds of audio (1600 frames at 16 kHz) even for very short recordings
+  const minCount = 1600;
+  const count = Math.max(minCount, Math.floor(length * 16000 / sampleRate));
   const buffer = new ArrayBuffer(44 + count * 2), view = new DataView(buffer);
   const text = (index, value) => [...value].forEach((char, i) => view.setUint8(index + i, char.charCodeAt(0)));
   text(0, "RIFF"); view.setUint32(4, 36 + count * 2, true); text(8, "WAVEfmt ");
@@ -20,30 +22,37 @@ export function pcmWav(chunks, sampleRate) {
   return new Blob([buffer], {type: "audio/wav"});
 }
 export class Segmenter {
-  constructor(rate, emit, threshold = 0.012, activity = () => {}) { this.rate = rate; this.emit = emit; this.threshold = threshold; this.activity = activity; this.reset(); }
-  reset() { this.chunks = []; this.pre = []; this.length = 0; this.silence = 0; this.voiced = 0; this.speechStart = 0; this.speechEnd = 0; this.speechMs = 0; }
+  constructor(rate, emit, threshold = 0.012, activity = () => {}, maxDurationMs = 28000, silenceTimeoutMs = 2500, preSpeechMs = 200) {
+    this.rate = rate; this.emit = emit; this.threshold = threshold; this.activity = activity;
+    this.maxDurationMs = Math.max(10000, Math.min(30000, maxDurationMs));
+    this.silenceTimeoutMs = Math.max(1100, Math.min(2500, silenceTimeoutMs));
+    this.preSpeechMs = Math.max(200, Math.min(300, preSpeechMs)); this.reset();
+  }
+  reset() { this.chunks = []; this.pre = []; this.length = 0; this.silence = 0; this.voiced = 0; this.speechStart = null; this.speechEnd = 0; this.speechMs = 0; }
   push(samples) {
     const power = Math.sqrt(samples.reduce((sum, n) => sum + n * n, 0) / samples.length);
     const voiced = power >= this.threshold;
     if (voiced) this.activity();
     if (!this.chunks.length && !voiced) {
-      this.pre.push(samples); while (this.pre.reduce((s, x) => s + x.length, 0) > this.rate * 0.2) this.pre.shift(); return;
+      this.pre.push(samples); while (this.pre.reduce((s, x) => s + x.length, 0) > this.rate * this.preSpeechMs / 1000) this.pre.shift(); return;
     }
     if (!this.chunks.length) { this.chunks = this.pre; this.length = this.pre.reduce((s, x) => s + x.length, 0); this.pre = []; }
     this.chunks.push(samples); this.length += samples.length;
     if (voiced) {
       this.voiced += samples.length;
-      if (this.speechStart === 0) this.speechStart = this.length - samples.length;
+      this.silence = 0;
+      if (this.speechStart === null) this.speechStart = this.length - samples.length;
       this.speechEnd = this.length;
       this.speechMs = this.speechEnd - this.speechStart;
     } else {
       this.silence = this.silence + samples.length;
     }
-    if (this.length >= this.rate * 28 || this.silence >= this.rate * 1.1) {
+    if (this.length >= this.rate * this.maxDurationMs / 1000 || this.silence >= this.rate * this.silenceTimeoutMs / 1000) {
       if (this.voiced >= this.rate * 0.25) {
         const blob = pcmWav(this.chunks, this.rate);
-        blob.possiblyIncomplete = this.length >= this.rate * 28 && this.silence < this.rate * 1.1;
-        blob.voiceDiagnostics = { recordingDurationMs: this.length, stopReason: "silence_timeout", speechDurationMs: this.speechMs, energyRms: power, confidence: null, clarificationReasons: [] };
+        const atLimit = this.length >= this.rate * this.maxDurationMs / 1000;
+        blob.possiblyIncomplete = atLimit && this.silence < this.rate * this.silenceTimeoutMs / 1000;
+        blob.voiceDiagnostics = { recordingDurationMs: this.length * 1000 / this.rate, stopReason: atLimit ? "duration_limit" : "silence_timeout", speechDurationMs: this.speechMs * 1000 / this.rate, energyRms: power, confidence: null, clarificationReasons: [] };
         this.emit(blob);
       }
       this.reset();
@@ -59,7 +68,7 @@ export async function captureMicrophone(emit, enabled, threshold, activity, fail
     context = new AudioContext(); await context.audioWorklet.addModule("/ui/voice-worklet.js");
     source = context.createMediaStreamSource(stream);
     processor = new AudioWorkletNode(context, "voice-capture");
-    const segmenter = new Segmenter(context.sampleRate, emit, threshold, activity, settings.maxDurationMs, settings.silenceTimeoutMs);
+    const segmenter = new Segmenter(context.sampleRate, emit, threshold, activity, settings.maxDurationMs, settings.silenceTimeoutMs, settings.preSpeechMs);
     processor.port.onmessage = event => { if (enabled()) segmenter.push(event.data); else segmenter.reset(); };
     source.connect(processor); processor.connect(context.destination); await context.resume();
     stream.getAudioTracks()[0].addEventListener("ended", () => { stop(); failed?.("El micrófono se desconectó o perdió el permiso."); });

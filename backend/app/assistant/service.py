@@ -163,6 +163,17 @@ def match_procedures(procedures, message):
     return matches
 
 
+def _problem_subject(message):
+    """Extract an explicit subject/correction, never an object after 'a mi'."""
+    text = _fold(message).strip("¿?¡!. ")
+    devices = r"(impresora|computadora|equipo|laptop|router|monitor|teclado|mouse|windows|servidor)"
+    correction = re.match(r"(?:no[, ]+)?me referia (?:al |a la |a mi )" + devices + r"\b", text)
+    if correction:
+        return correction.group(1)
+    problem = re.match(r"(?:ahora )?(?:mi |el |la )?" + devices + r"\s+(?:no\b|falla\b|tiene (?:un )?(?:error|problema)\b|esta lent[oa]\b)", text)
+    return problem.group(1) if problem else None
+
+
 class UnifiedAssistantService:
     def __init__(self, knowledge_service, provider, web_search=None):
         self.knowledge = knowledge_service
@@ -697,6 +708,8 @@ class UnifiedAssistantService:
         """
         text = _fold(message or "")
         company_scope = re.search(r"\b(?:empresa|interno|interna|autorizad[oa]s?|oficial|politica|manual|documento|segun)\b", text)
+        if not company_scope and _problem_subject(text):
+            return True
         if not company_scope and re.search(r"^(?:¿)?(?:como (?:configuro|actualizo|reviso|instalo)|que hago si)\b", text):
             return True
         if DOCUMENTED_TOPIC.search(text):
@@ -747,6 +760,16 @@ class UnifiedAssistantService:
                 return "Resultados recuperados de internet en esta consulta (extractos de las fuentes):\n\n" + refs
             return "No se pudo realizar la búsqueda pública en este momento. No tengo resultados actuales verificados para responder."
 
+        subject = _problem_subject(message)
+        if subject:
+            state["active_subject"] = subject
+        else:
+            # A self-contained conceptual topic supersedes the prior fault.
+            # Anaphoric questions ("¿cómo funciona eso?") still use history.
+            conceptual = CONCEPTUAL_QUESTION.search(_fold(message))
+            topic = _fold(message)[conceptual.end():].strip(" ¿?¡!.,:;") if conceptual else ""
+            if topic and not re.search(r"\b(?:eso|esto|ello|ese|esa|este|esta|anterior|mismo|misma|su|sus)\b", topic):
+                state.pop("active_subject", None)
         history = state.get("history") or []
         context = ""
         if history:
@@ -755,10 +778,12 @@ class UnifiedAssistantService:
                 "\n\nConversación previa:\n" + recent +
                 "\n\nResponde de forma coherente con la conversación previa."
             )
+        if state.get("active_subject"):
+            context += "\nTema explícito de soporte activo: " + state["active_subject"] + ". Mantén ese sujeto en seguimientos sin sujeto explícito; no conviertas el objeto de una conexión en el dispositivo averiado. Si hay ambigüedad, pregunta."
         prompt = (
             "Eres un asistente de soporte técnico. Responde en español, de forma "
             "breve y clara, a la siguiente pregunta del usuario.\n"
-            "conocimientos. Si no sabes la respuesta, dilo claramente." + (message or "") +
+            "Si no sabes la respuesta, dilo claramente.\n\n" + "Mensaje del usuario: " + message +
             context + web_block
         )
         try:
@@ -774,8 +799,11 @@ class UnifiedAssistantService:
         session_id, state = self.sessions.get(session_id)
         message = (message or "").strip()
 
-        if not state.get("history") and re.search(r"\b(?:eso|lo anterior|no funciona)\b", message, re.I) and not re.search(r"\b(?:windows|vpn|dns|bios|ssd|ram|cpu|gpu)\b", message, re.I):
+        if not state.get("history") and re.search(r"\b(?:eso|lo anterior)\b", message, re.I) and not re.search(r"\b(?:windows|vpn|dns|bios|ssd|ram|cpu|gpu)\b", message, re.I):
             return {"answer": "¿A qué problema o procedimiento te refieres?", "session_id": session_id, "route": "general", "sources": []}
+
+        if not state.get("history") and re.fullmatch(r"(?:no se conecta|no funciona|no arranca)[.!?]*", message, re.I):
+            return {"answer": "¿Qué dispositivo no funciona y qué sucede al intentarlo?", "session_id": session_id, "route": "general", "sources": []}
 
         # Social messages never disturb the procedure continuity of the session.
         social = detect_social_intent(message)

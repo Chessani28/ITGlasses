@@ -3,15 +3,20 @@ import asyncio
 import importlib.util
 import io
 import json
+import logging
 import os
 from pathlib import Path
 import sys
+import subprocess
+import re
 import tempfile
 import time
 import wave
 
 from backend.app.core.config import PROJECT_ROOT
 from backend.app.knowledge.models import KnowledgeError
+
+logger = logging.getLogger(__name__)
 
 MAX_AUDIO = 960044
 VOICE_NAME = "es_ES-sharvard-medium"
@@ -29,6 +34,44 @@ def validate_audio(raw):
                 raise ValueError()
     except (wave.Error, EOFError, ValueError):
         raise KnowledgeError("audio_format", "Use complete mono 16-bit PCM WAV at 16 kHz, 0.1–30 seconds.", 422) from None
+
+
+class _ThreadProcess:
+    """Subprocess pipes for Windows SelectorEventLoop (Uvicorn reload).
+
+    Only pipe I/O waits run in threads. The request loop retains timeout,
+    disconnect detection and ownership of kill/wait. No global loop changes.
+    """
+    def __init__(self, process):
+        self.process = process
+
+    @property
+    def returncode(self):
+        return self.process.poll()
+
+    async def communicate(self, data):
+        return await asyncio.to_thread(self.process.communicate, data)
+
+    def kill(self):
+        self.process.kill()
+
+    async def wait(self):
+        return await asyncio.to_thread(self.process.wait)
+
+
+async def _spawn_worker(*args, **kwargs):
+    try:
+        return await asyncio.create_subprocess_exec(*args, **kwargs)
+    except NotImplementedError:
+        if sys.platform != "win32":
+            raise
+        # Popen only starts the child here; communicate/wait never block the loop.
+        process = subprocess.Popen(args, **kwargs, creationflags=subprocess.CREATE_NO_WINDOW)
+        return _ThreadProcess(process)
+
+
+def _safe_label(value):
+    return re.sub(r"[^a-zA-Z0-9_]", "", str(value or "unknown"))[:64]
 
 
 class VoiceService:
@@ -67,9 +110,9 @@ class VoiceService:
                     task.update(payload)
                 environment = {**os.environ, "TEMP": str(self.temporary), "TMP": str(self.temporary),
                                "OMP_NUM_THREADS": "2", "OPENBLAS_NUM_THREADS": "2", "PYTHONDONTWRITEBYTECODE": "1"}
-                process = await asyncio.create_subprocess_exec(sys.executable, "-B", "-m", "backend.app.voice.worker",
+                process = await _spawn_worker(sys.executable, "-B", "-m", "backend.app.voice.worker",
                     cwd=PROJECT_ROOT, env=environment, stdin=asyncio.subprocess.PIPE,
-                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
+                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
                 communication = asyncio.create_task(process.communicate(json.dumps(task).encode()))
                 try:
                     async with asyncio.timeout(90):
@@ -77,10 +120,21 @@ class VoiceService:
                             if request is not None and await request.is_disconnected():
                                 raise KnowledgeError("voice_cancelled", "Speech request cancelled.", 499)
                             await asyncio.sleep(0.05)
-                        stdout, _ = await communication
-                    if process.returncode:
-                        raise KnowledgeError("voice_inference_failed", "The local speech engine failed. Check model files and compatibility.", 502)
-                    result = json.loads(stdout)
+                        stdout, stderr = await communication
+                    try:
+                        result = json.loads(stdout)
+                    except (json.JSONDecodeError, UnicodeDecodeError):
+                        result = None
+                    if process.returncode or (isinstance(result, dict) and result.get("error")):
+                        error = result if isinstance(result, dict) else {}
+                        logger.error("Voice worker failed kind=%s rc=%s stage=%s error_type=%s stderr_bytes=%d",
+                                     kind, process.returncode, _safe_label(error.get("stage")),
+                                     _safe_label(error.get("error_type")), len(stderr or b""))
+                        raise KnowledgeError("voice_inference_failed",
+                                             "The local speech worker failed. Check the server log for its stage and error type.", 502)
+                    if not isinstance(result, dict) or (kind == "stt" and not isinstance(result.get("text"), str)):
+                        logger.error("Voice worker invalid response kind=%s rc=%s", kind, process.returncode)
+                        raise KnowledgeError("voice_inference_failed", "The local speech worker returned an invalid response.", 502)
                     result["elapsed_ms"] = round((time.perf_counter() - started) * 1000)
                     if kind == "tts":
                         result["audio"] = Path(task["output"]).read_bytes()
@@ -92,5 +146,10 @@ class VoiceService:
                     await communication
         except TimeoutError:
             raise KnowledgeError("voice_timeout", "Local speech processing exceeded 90 seconds.", 504) from None
+        except KnowledgeError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - catch subprocess/IO failures that would otherwise become HTTP 500
+            logger.error("Voice service failure kind=%s error_type=%s loop=%s", kind, type(exc).__name__, type(asyncio.get_running_loop()).__name__)
+            raise KnowledgeError("voice_inference_failed", "The local speech engine encountered an unexpected error.", 502) from None
         finally:
             self.busy = False
