@@ -1,0 +1,152 @@
+[
+  {
+    "phrase_id": "1",
+    "reference": "¿Qué es una VPN?",
+    "path": "recordings/speaker-01-quiet-p1-r1.wav",
+    "speaker_id": "speaker-01",
+    "locale": "es-MX",
+    "provenance": "pending_human_recording",
+    "condition": "quiet",
+    "repeat": 1
+  },
+  {
+    "phrase_id": "1",
+    "reference": "¿Qué es una VPN?",
+    "path": "recordings/speaker-01-quiet-p1-r2.wav",
+    "speaker_id": "speaker-01",
+    "locale": "es-MX",
+    "provenance": "pending_human_recording",
+    "condition": "quiet",
+    "repeat": 2
+  },
+  {
+    "phrase_id": "1",
+    "reference": "¿Qué es una VPN?",
+    "path": "recordings/speaker-01-quiet-p1-r3.wav",
+    "speaker_id": "speaker-01",
+    "locale": "es-MX",
+    "provenance": "pending_human_recording",
+    "condition": "quiet",
+    "repeat": 3
+  },
+  {
+    "phrase_id": "2",
+    "reference": "¿Qué es Active Directory?",
+    "path": "recordings/speaker-01-quiet-p2-r1.wav",
+    "speaker_id": "speaker-01",
+    "locale": "es-MX",
+    "provenance": "pending_human_recording",
+    "condition": "quiet",
+    "repeat": 1
+  },
+  {
+    "phrase_id": "2",
+    "reference": "¿Qué es Active Directory?",
+    "path": "recordings/speaker-01-quiet-p2-r2.wav",
+    "speaker_id": "speaker-01",
+    "locale": "es-MX",
+    "provenance": "pending_human_recording",
+    "condition": "quiet",
+    "repeat": 2
+  },
+  {
+    "phrase_id": "2",
+    "reference": "¿Qué es Active Directory?",
+    "path": "recordings/speaker-01-quiet-p2-r3.wav",
+    "speaker_id": "speaker-01",
+    "locale": "es-MX",
+    "provenance": "pending_human_recording",
+    "condition": "quiet",
+    "repeat": 3
+  },
+  {
+    "phrase_id": "3",
+    "reference": "¿Cuál es la versión más reciente de Windows 11?",
+    "path": "recordings/speaker-01-quiet-p3-r1.wav",
+    "speaker_id": "speaker-01",
+    "locale": "es-MX",
+    "provenance": "pending_human_recording",
+    "condition": "quiet",
+    "repeat": 1
+  },
+  {
+    "phrase_id": "3",
+    "reference": "¿Cuál es la versión más reciente de Windows 11?",
+    "path": "recordings/speaker-01-quiet-p3-r2.wav",
+    "speaker_id": "speaker-01",
+    "locale": "es-MX",
+    "provenance": "pending_human_recording",
+    "condition": "quiet",
+    "repeat": 2
+  },
+  {
+    "phrase_id": "3",
+    "reference": "¿Cuál es la versión más reciente de Windows 11?",
+    "path": "recordings/speaker-01-quiet-p3-r3.wav",
+    "speaker_id": "speaker-01",
+    "locale": "es-MX",
+    "provenance": "pending_human_recording",
+    "condition": "quiet",
+    "repeat": 3
+  },
+  {
+    "phrase_id": "4",
+    "reference": "Según este manual, ¿cuál es el mantenimiento de las computadoras?",
+    "path": "recordings/speaker-01-quiet-p4-r1.wav",
+    "speaker_id": "speaker-01",
+    "locale": "es-MX",
+    "provenance": "pending_human_recording",
+    "condition": "quiet",
+    "repeat": 1
+  },
+  {
+    "phrase_id": "4",
+    "reference": "Según este manual, ¿cuál es el mantenimiento de las computadoras?",
+    "path": "recordings/speaker-01-quiet-p4-r2.wav",
+    "speaker_id": "speaker-01",
+    "locale": "es-MX",
+    "provenance": "pending_human_recording",
+    "condition": "quiet",
+    "repeat": 2
+  },
+  {
+    "phrase_id": "4",
+    "reference": "Según este manual, ¿cuál es el mantenimiento de las computadoras?",
+    "path": "recordings/speaker-01-quiet-p4-r3.wav",
+    "speaker_id": "speaker-01",
+    "locale": "es-MX",
+    "provenance": "pending_human_recording",
+    "condition": "quiet",
+    "repeat": 3
+  },
+  {
+    "phrase_id": "5",
+    "reference": "¿Y cuál es el segundo paso?",
+    "path": "recordings/speaker-01-quiet-p5-r1.wav",
+    "speaker_id": "speaker-01",
+    "locale": "es-MX",
+    "provenance": "pending_human_recording",
+    "condition": "quiet",
+    "repeat": 1
+  },
+  {
+    "phrase_id": "5",
+    "reference": "¿Y cuál es el segundo paso?",
+    "path": "recordings/speaker-01-quiet-p5-r2.wav",
+    "speaker_id": "speaker-01",
+    "locale": "es-MX",
+    "provenance": "pending_human_recording",
+    "condition": "quiet",
+    "repeat": 2
+  },
+  {
+    "phrase_id": "5",
+    "reference": "¿Y cuál es el segundo paso?",
+    "path": "recordings/speaker-01-quiet-p5-r3.wav",
+    "speaker_id": "speaker-01",
+    "locale": "es-MX",
+    "provenance": "pending_human_recording",
+    "condition": "quiet",
+    "repeat": 3
+  }
+]

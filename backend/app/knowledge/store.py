@@ -114,7 +114,13 @@ class Store:
                 ORDER BY COALESCE(c.page,0), COALESCE(c.paragraph,0), c.offset''', (document_id,))]
 
     def evidence(self, identifier):
-        return next((c for c in self.eligible_chunks() if c["id"] == identifier), None)
+        with self.connect() as db:
+            row = db.execute("""SELECT c.*,d.title,d.scope,d.procedure_id,d.procedure_key,
+                r.version,r.sha256,r.filename,r.embedding_model,r.embedding_digest
+                FROM chunks c JOIN documents d ON c.document_id=d.id AND c.revision=d.current_revision
+                JOIN revisions r ON r.document_id=d.id AND r.revision=c.revision
+                WHERE c.id=? AND d.authorized=1 AND d.withdrawn=0""", (identifier,)).fetchone()
+            return dict(row) if row else None
 
     def lexical(self, tokens):
         expression = " OR ".join('"' + token.replace('"', '""') + '"' for token in tokens[:80])

@@ -47,9 +47,11 @@ def parse_document(chunks) -> list:
     procedures = []
     current = None
     section = ""
+    standalone_bullets = False
 
     def new_procedure(number, title):
-        nonlocal current, section
+        nonlocal current, section, standalone_bullets
+        standalone_bullets = False
         current = {"number": number, "title": title, "steps": [], "notes": []}
         section = ""
         procedures.append(current)
@@ -84,7 +86,7 @@ def parse_document(chunks) -> list:
             step = _STEP.match(line)
             if step:
                 if current is None:
-                    new_procedure("", "")
+                    new_procedure("", chunk.get("title") or "Procedimiento")
                 entry = {"number": int(step.group(1)), "text": step.group(2).strip(),
                          "substeps": [], "section": section, "source": dict(citation)}
                 existing = next(
@@ -125,8 +127,14 @@ def parse_document(chunks) -> list:
                 continue
             bullet = _BULLET.match(line)
             if bullet:
+                if current is None:
+                    new_procedure("", chunk.get("title") or "Procedimiento")
+                    standalone_bullets = True
                 text = bullet.group(1).strip()
-                if current["steps"]:
+                if standalone_bullets:
+                    current["steps"].append({"number": len(current["steps"]) + 1, "text": text,
+                                             "substeps": [], "section": section, "source": dict(citation)})
+                elif current["steps"]:
                     current["steps"][-1]["substeps"].append(text)
                 elif current["notes"]:
                     # First bullet without prior steps: create step 1 from first note
@@ -140,8 +148,9 @@ def parse_document(chunks) -> list:
                     })
                     # Add this bullet as the first substep of step 1
                     current["steps"][-1]["substeps"].append(text)
-                elif current is not None:
-                    current["notes"].append(text)
+                else:
+                    current["steps"].append({"number": 1, "text": text, "substeps": [],
+                                             "section": section, "source": dict(citation)})
                 continue
             if current and current["steps"]:
                 last = current["steps"][-1]

@@ -1,4 +1,4 @@
-import {api, chatPayload, documentState, elapsed, jsonOptions, limits, sourcePath, validateFile} from "./core.mjs";
+import {api, setApiToken, chatPayload, documentState, elapsed, jsonOptions, limits, sourcePath, validateFile} from "./core.mjs";
 
 import {initVoice} from "./voice-ui.mjs";
 let voiceActive = false;
@@ -330,6 +330,17 @@ $("message").addEventListener("keydown", event => {
 });
 $("new-chat").addEventListener("click", () => {
   state.chats[state.mode] = {messages: [], conversation: null}; renderChat(); $("message").focus();
+});
+$("api-token-form").addEventListener("submit", event => {
+  event.preventDefault();
+  setApiToken($("api-token").value);
+  $("api-token").value = "";
+  $("api-token-feedback").textContent = "Token aplicado a esta página. Actualizando estado…";
+  refreshStatus();
+});
+$("clear-api-token").addEventListener("click", () => {
+  setApiToken(""); $("api-token").value = "";
+  $("api-token-feedback").textContent = "Token borrado de esta página.";
 });
 $("refresh-status").addEventListener("click", refreshStatus);
 $("refresh-documents").addEventListener("click", refreshDocuments);

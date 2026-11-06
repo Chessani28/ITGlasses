@@ -126,6 +126,14 @@
     </section>
     <section id="system-page" class="page content-page" hidden aria-label="Estado del sistema">
       <div class="section-heading"><div><span class="eyebrow">SERVICIOS LOCALES</span><h1>Estado del sistema</h1><p>Disponibilidad reportada por el backend. Sin métricas de hardware estimadas.</p></div></div>
+      <form id="api-token-form" class="panel">
+        <h2>Token de acceso a la API</h2>
+        <p>Si el servidor exige un token, introduce el bearer proporcionado por el administrador. Se conserva solo hasta recargar esta página.</p>
+        <label for="api-token">Token<input id="api-token" type="password" autocomplete="off" maxlength="4096"></label>
+        <button type="submit" class="secondary-button">Aplicar token</button>
+        <button type="button" id="clear-api-token" class="text-button">Borrar token</button>
+        <p id="api-token-feedback" role="status"></p>
+      </form>
       <div class="status-grid">
         <article class="panel status-card"><span class="eyebrow">API</span><h2>Backend FastAPI</h2><p id="backend-status">Comprobando…</p><small>Servidor de esta interfaz</small></article>
         <article class="panel status-card"><span class="eyebrow">CHAT GENERAL</span><h2>Proveedor LLM</h2><p id="provider-status">Comprobando…</p><small id="provider-model">—</small></article>

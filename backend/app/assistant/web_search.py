@@ -9,13 +9,13 @@ public web: it never touches internal documents, credentials or internal URLs.
 from __future__ import annotations
 
 import html
-from datetime import date
+from datetime import datetime, timezone
 import asyncio
 import logging
 from urllib.parse import urlsplit
 import os
 import re
-import requests
+import httpx
 from dataclasses import dataclass, field
 from typing import Protocol
 
@@ -32,9 +32,7 @@ class WebSearchResult:
     url: str
     snippet: str
     retrieved_at: str = field(
-        default_factory=lambda: __import__("datetime").datetime.now(
-            __import__("datetime").timezone.utc
-        ).astimezone().isoformat()
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
 
 
@@ -46,7 +44,7 @@ class SearchBackend(Protocol):
 
 
 class DuckDuckGoSearch:
-    """Free public provider (DuckDuckGo JSON endpoint). No API key required.
+    """Optional DuckDuckGo search adapter via ddgs. No API key required.
 
     This provider is used by default. It is not a paid API and it never receives
     internal documents, internal URLs, credentials or sensitive conversation
@@ -76,7 +74,7 @@ class DuckDuckGoSearch:
         try:
             def lookup():
                 with DDGS(timeout=self.timeout_seconds) as ddgs:
-                    return list(ddgs.text(query.strip(), max_results=max_results))
+                    return list(ddgs.text(query.strip(), max_results=max_results, backend="duckduckgo"))
             raw = await asyncio.to_thread(lookup)
         except Exception as exc:
             raise WebSearchError(f"search request failed: {exc}") from exc
@@ -109,8 +107,12 @@ class WebSearchService:
     sensitive conversation context: only the user's message text.
     """
 
-    def __init__(self, backend=None, enabled: bool = True):
+    WINDOWS_RELEASE_URL = "https://learn.microsoft.com/en-us/windows/release-health/windows11-release-information"
+    MAX_PAGE_BYTES = 3_000_000
+
+    def __init__(self, backend=None, enabled: bool = True, transport=None):
         self.enabled = enabled
+        self.transport = transport
         if backend is None:
             backend = self._default_backend()
         self.backend = backend
@@ -129,91 +131,93 @@ class WebSearchService:
         return OfflineSearch()
 
     async def search(self, query: str, max_results: int = 5) -> list[WebSearchResult]:
-        if not self.enabled:
-            return []
         self.last_error = None
-        official_microsoft = bool(re.search(r"windows|microsoft", query, re.I) and re.search(r"oficial|official", query, re.I))
-        windows = re.search(r"windows\s+(\d+)", query, re.I)
-        if official_microsoft:
-            # Search terms, not a canned answer: release values are fetched below.
-            if windows:
-                query = f"Windows {windows.group(1)} latest version release information"
-            query += " site:learn.microsoft.com"
-        try:
-            results = await self.backend.search(query, max_results)
-            if official_microsoft:
-                results = [r for r in results if (urlsplit(r.url).hostname or "").endswith(".microsoft.com")]
-            if official_microsoft and windows:
-                for index, result in enumerate(results):
-                    parsed = urlsplit(result.url)
-                    if parsed.hostname == "learn.microsoft.com" and parsed.path.endswith(f"/windows{windows.group(1)}-release-information"):
-                        # Read the live official table rather than trusting a stale snippet.
-                        enriched = await asyncio.to_thread(self._windows_release, result)
-                        results[index] = enriched
-                        results.insert(0, results.pop(index))
-                        break
-            logging.getLogger("uvicorn.error").info("Public search backend=%s results=%d", type(self.backend).__name__, len(results))
-        except WebSearchError as exc:
-            self.last_error = exc
-            logging.getLogger("uvicorn.error").warning("Public search failed: %s", exc)
+        if not self.enabled or isinstance(self.backend, OfflineSearch):
             return []
-        if not results:
-            self.last_error = WebSearchError("provider returned no public sources")
-        return results
-
-    @staticmethod
-    def _windows_release(result):
+        max_results = max(1, min(20, max_results))
         try:
-            with requests.get(result.url, timeout=15, allow_redirects=False, stream=True) as response:
-                response.raise_for_status()
-                if response.status_code != 200:
-                    raise ValueError("unexpected redirect")
-                data = bytearray()
-                for part in response.iter_content(65536):
-                    data.extend(part)
-                    if len(data) > 3_000_000:
-                        raise ValueError("page too large")
-            rows = []
-            for row in re.findall(r"<tr\b[^>]*>(.*?)</tr>", data.decode("utf-8"), re.S | re.I):
-                cells = [html.unescape(re.sub(r"<[^>]+>", "", cell)).strip()
-                         for cell in re.findall(r"<td\b[^>]*>(.*?)</td>", row, re.S | re.I)]
-                if (len(cells) == 8 and re.fullmatch(r"\d{2}H[12]", cells[0])
-                        and re.fullmatch(r"\d{4}-\d{2}-\d{2}", cells[2])
-                        and cells[2] <= date.today().isoformat()
-                        and ("General Availability" in cells[1] or "disponibilidad general" in cells[1].lower())):
-                    rows.append(cells)
-            if not rows:
-                raise ValueError("official version table not recognized")
-            latest = max(rows, key=lambda cells: cells[2])
-            excerpt = (f"La versión con fecha de disponibilidad general más reciente en la tabla oficial es {latest[0]} "
-                       f"({latest[2]}). Compilación publicada: {latest[7]}; fecha de revisión: {latest[6]}. "
-                       "La disponibilidad para cada equipo depende del canal y la compatibilidad.")
-            logging.getLogger("uvicorn.error").info("Official release page fetched HTTP 200; version=%s", latest[0])
-            return WebSearchResult(result.title, result.url, excerpt)
-        except (requests.RequestException, ValueError, UnicodeError) as exc:
-            logging.getLogger("uvicorn.error").warning("Official release verification failed: %s", exc)
-            return WebSearchResult(result.title, result.url,
-                                   "No pude verificar la tabla actual de versiones. Consulta esta fuente oficial; no confirmo una versión más reciente.")
+            async with asyncio.timeout(20):
+                if (re.search(r"\bwindows\s+11\b", query, re.I)
+                        and re.search(r"versi[oó]n|compilaci[oó]n|build|release", query, re.I)
+                        and re.search(r"reciente|[uú]ltim|latest|current|actual", query, re.I)):
+                    # Fixed official URL: no user query, history, or internal text is sent.
+                    page = await self._read_official(self.WINDOWS_RELEASE_URL)
+                    return [self._windows_release(page)]
+                official = bool(re.search(r"microsoft|windows", query, re.I)
+                                and re.search(r"oficial|official", query, re.I))
+                results = await self.backend.search(query + (" site:learn.microsoft.com" if official else ""), max_results)
+                if official:
+                    results = [r for r in results if (urlsplit(r.url).hostname or "").endswith(".microsoft.com")]
+                if not results:
+                    raise WebSearchError("provider returned no public sources")
+                return results[:max_results]
+        except (WebSearchError, TimeoutError) as exc:
+            self.last_error = exc
+            # Do not log query text or provider exceptions that may echo it.
+            logging.getLogger(__name__).warning("Public retrieval failed error_type=%s", type(exc).__name__)
+            return []
+
+    async def _read_official(self, url):
+        # Exact allowlist prevents arbitrary URL fetches, credentials, ports, queries,
+        # private IPs and redirect-based SSRF. Environment proxies are not used.
+        if url != self.WINDOWS_RELEASE_URL:
+            raise WebSearchError("destination not allowed")
+        try:
+            async with httpx.AsyncClient(trust_env=False, follow_redirects=False,
+                    transport=self.transport, timeout=httpx.Timeout(15, connect=3)) as client:
+                async with client.stream("GET", url, headers={"User-Agent":"ITGlasses/1.0", "Accept":"text/html"}) as response:
+                    if response.status_code != 200:
+                        raise WebSearchError("official source unavailable")
+                    data = bytearray()
+                    async for part in response.aiter_bytes(65536):
+                        if len(data) + len(part) > self.MAX_PAGE_BYTES:
+                            raise WebSearchError("official page too large")
+                        data.extend(part)
+            return data.decode("utf-8")
+        except (httpx.HTTPError, UnicodeError) as exc:
+            raise WebSearchError("official source request failed") from exc
+
+    @classmethod
+    def _windows_release(cls, page):
+        rows = []
+        today = datetime.now(timezone.utc).date().isoformat()
+        for row in re.findall(r"<tr\b[^>]*>(.*?)</tr>", page, re.S | re.I):
+            cells = [html.unescape(re.sub(r"<[^>]+>", "", cell)).strip()
+                     for cell in re.findall(r"<td\b[^>]*>(.*?)</td>", row, re.S | re.I)]
+            if (len(cells) == 8 and re.fullmatch(r"\d{2}H[12]", cells[0])
+                    and re.fullmatch(r"\d{4}-\d{2}-\d{2}", cells[2])
+                    and cells[2] <= today
+                    and "General Availability" in cells[1]
+                    and re.fullmatch(r"\d{4}-\d{2}-\d{2}", cells[6])
+                    and re.fullmatch(r"\d+\.\d+", cells[7])):
+                rows.append(cells)
+        if not rows:
+            raise WebSearchError("official version table not recognized")
+        latest = max(rows, key=lambda cells: cells[2])
+        excerpt = (f"La versión de características con fecha de disponibilidad general más reciente "
+                   f"en la tabla oficial es {latest[0]} ({latest[2]}). "
+                   f"Compilación publicada: {latest[7]}; fecha de revisión: {latest[6]}. "
+                   "Versión de características y compilación son datos distintos. "
+                   "La disponibilidad en dispositivos existentes depende del canal y la compatibilidad; "
+                   "una versión para dispositivos nuevos no implica una actualización para todos los equipos.")
+        return WebSearchResult("Windows 11 — información de versiones (Microsoft)", cls.WINDOWS_RELEASE_URL, excerpt)
 
     async def fetch_url(self, url: str, timeout: float = 12.0) -> dict:
-        """Best-effort fetch of a public document for citation enrichment."""
+        """Compatibility adapter restricted to the fixed official source."""
         try:
-            response = requests.get(
-                url, timeout=timeout, headers={"User-Agent": "ITGlasses-web-assistant/1.0"}
-            )
-            response.raise_for_status()
-            return {
-                "title": response.text.split("<title>")[-1].split("</title>")[0].strip() if "<title>" in response.text else url,
-                "url": url,
-                "status": response.status_code,
-            }
-        except Exception as exc:  # noqa: BLE001
-            return {"url": url, "status": "unavailable", "error": str(exc)}
+            if not self.enabled or isinstance(self.backend, OfflineSearch):
+                raise WebSearchError("web retrieval disabled")
+            async with asyncio.timeout(min(20, max(1, timeout))):
+                page = await self._read_official(url)
+            result = self._windows_release(page)
+            return {"title":result.title, "url":url, "status":200}
+        except (WebSearchError, TimeoutError):
+            return {"url":url, "status":"unavailable", "error":"Source unavailable or destination not allowed."}
 
 
 
 _WEB_NEED_QUERY = re.compile(
-    r"busca.*(?:internet|web)|b[uú]squeda.*(?:internet|web)|search.*(?:internet|web)|versi[oó]n\s+(m[áa]s|more\s+recent)|reciente|últim|última|last\s+version|latest|what\s+is\s+the\s+current",
+    r"seg[uú]n\s+(?:internet|la web)|busca.*(?:internet|web)|b[uú]squeda.*(?:internet|web)|search.*(?:internet|web)|versi[oó]n\s+(m[áa]s|more\s+recent)|reciente|últim|última|last\s+version|latest|what\s+is\s+the\s+current",
     re.IGNORECASE,
 )
 

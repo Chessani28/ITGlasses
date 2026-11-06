@@ -53,6 +53,10 @@ class SessionStore:
         return session_id, state
 
     def remember(self, state, message, answer):
+        # Company excerpts and untrusted public snippets never enter general prompts.
+        if state.get("active_route") == "general" and not state.get("web_sources"):
+            state["general_history"] = (state.get("general_history") or []) + [(message, answer)]
+            state["general_history"] = state["general_history"][-MAX_HISTORY:]
         state["history"] = (state.get("history") or []) + [(message, answer)]
         state["history"] = state["history"][-MAX_HISTORY:]
 

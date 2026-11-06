@@ -750,11 +750,11 @@ class UnifiedAssistantService:
                 web = []
             if web:
                 state["web_sources"] = [
-                    {"title": s2.title, "url": s2.url, "snippet": s2.snippet}
+                    {"title": s2.title, "url": s2.url, "snippet": s2.snippet, "retrieved_at": s2.retrieved_at}
                     for s2 in web
                 ]
                 refs = "\n".join(
-                    f"- [{w['title']}]({w['url']}): {w['snippet']}"
+                    f"- [{w['title']}]({w['url']}): {w['snippet']} (Consulta: {w['retrieved_at']})"
                     for w in state["web_sources"][:5]
                 )
                 return "Resultados recuperados de internet en esta consulta (extractos de las fuentes):\n\n" + refs
@@ -770,7 +770,7 @@ class UnifiedAssistantService:
             topic = _fold(message)[conceptual.end():].strip(" ¿?¡!.,:;") if conceptual else ""
             if topic and not re.search(r"\b(?:eso|esto|ello|ese|esa|este|esta|anterior|mismo|misma|su|sus)\b", topic):
                 state.pop("active_subject", None)
-        history = state.get("history") or []
+        history = state.get("general_history") or []
         context = ""
         if history:
             recent = "\n".join(f"Usuario: {q}\nAsistente: {a}" for q, a in history[-4:])
@@ -818,6 +818,12 @@ class UnifiedAssistantService:
             if hasattr(self.knowledge, "store"):
                 state["active_sources"] = [s for s in state.get("active_sources", [])
                                            if self.knowledge.store.evidence(s.get("citation_id"))]
+                if not state["active_sources"]:
+                    self.sessions.clear_procedure(state)
+                    state["active_document_id"] = None
+                    state["active_document"] = None
+                    state.pop("translations", None)
+                    state["history"] = []
 
 
         reference = detect_reference(message)
@@ -864,10 +870,11 @@ class UnifiedAssistantService:
         # Ordinary conceptual questions are answered by the general provider.
         # They do not ask for company documentation, so the grounded pipeline
         # is not used and no citation is invented.
-        if self._needs_web(message):
+        explicit_document = bool(re.search(r"\b(?:manual(?:es)?|documentos?|guidelines?|empresa|intern[oa]s?|pol[ií]ticas?)\b", message, re.I))
+        if self._needs_web(message) and not explicit_document:
             # Never export a document turn or its conversation history to public search.
-            private = re.search(r"manual|guideline|documento|credencial|contrase|intern[oa]|empresa|seg[uú]n|https?://|token|password", message, re.I)
-            if self.knowledge:
+            private = re.search(r"manual|guideline|documento|credencial|contrase|intern[oa]|empresa|https?://|token|password", message, re.I)
+            if self.knowledge and hasattr(self.knowledge, "store"):
                 private = private or any(_contains_phrase(_fold(message), _fold(d["title"]))
                                          for d in self.knowledge.store.documents())
             if private:
@@ -879,7 +886,10 @@ class UnifiedAssistantService:
             return {"answer": answer, "session_id": session_id, "route": "general",
                     "sources": state.get("web_sources") or []}
 
-        if self._is_conceptual(message) or self._continues_general(state, message):
+        document_followup = (state.get("active_route") == "knowledge"
+                             and bool(state.get("active_sources"))
+                             and bool(re.search(r"\b(?:eso|esto|ese|esa|lo anterior)\b", _fold(message))))
+        if not document_followup and (self._is_conceptual(message) or self._continues_general(state, message)):
             answer = await self._general_answer(state, message)
             state["active_route"] = "general"
             self.sessions.remember(state, message, answer)

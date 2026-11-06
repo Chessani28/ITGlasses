@@ -64,3 +64,20 @@ test("timeout does not claim that the backend operation was cancelled", async ()
   try{await assert.rejects(api("/test",{},5), /servidor podría seguir procesando/);}
   finally{globalThis.fetch=original;}
 });
+
+test('existing bearer is sent to local API only and can be cleared', async()=>{
+  const {setApiToken,apiFetch}=await import('../frontend/core.mjs');
+  const previous=globalThis.fetch; const calls=[];
+  globalThis.fetch=async(path,options)=>{calls.push([path,new Headers(options.headers)]); return new Response('{}');};
+  try {
+    setApiToken('test-token-only');
+    await api('/api/v1/assistant/chat');
+    await apiFetch('/api/v1/voice/synthesize',{method:'POST'});
+    await api('https://example.com/api/v1/chat');
+    setApiToken(''); await api('/api/v1/documents');
+    assert.equal(calls[0][1].get('Authorization'),'Bearer test-token-only');
+    assert.equal(calls[1][1].get('Authorization'),'Bearer test-token-only');
+    assert.equal(calls[2][1].get('Authorization'),null);
+    assert.equal(calls[3][1].get('Authorization'),null);
+  } finally { if(setApiToken) setApiToken(''); globalThis.fetch=previous; }
+});

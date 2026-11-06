@@ -91,9 +91,9 @@ class VoiceService:
 
     async def run(self, kind, payload, request=None):
         if not self.status()["stt_available" if kind == "stt" else "tts_available"]:
-            raise KnowledgeError("voice_unavailable", "Install the approved local speech dependencies and models. No cloud fallback is used.", 503)
+            raise KnowledgeError("voice_unavailable", "Faltan dependencias o modelos de voz locales. Consulta docs/voice-assistant.md para instalarlos.", 503)
         if self.busy:
-            raise KnowledgeError("voice_busy", "A local speech operation is already running. Try again after it finishes.", 409)
+            raise KnowledgeError("voice_busy", "Hay una operación de voz en curso. Espera a que termine e inténtalo de nuevo.", 409)
         self.busy = True
         process = None
         started = time.perf_counter()
@@ -118,7 +118,7 @@ class VoiceService:
                     async with asyncio.timeout(90):
                         while not communication.done():
                             if request is not None and await request.is_disconnected():
-                                raise KnowledgeError("voice_cancelled", "Speech request cancelled.", 499)
+                                raise KnowledgeError("voice_cancelled", "Se canceló la solicitud de voz.", 499)
                             await asyncio.sleep(0.05)
                         stdout, stderr = await communication
                     try:
@@ -131,10 +131,10 @@ class VoiceService:
                                      kind, process.returncode, _safe_label(error.get("stage")),
                                      _safe_label(error.get("error_type")), len(stderr or b""))
                         raise KnowledgeError("voice_inference_failed",
-                                             "The local speech worker failed. Check the server log for its stage and error type.", 502)
+                                             "El proceso de voz local falló. Inténtalo de nuevo; si persiste, revisa la etapa y el tipo de error en el registro del servidor.", 502)
                     if not isinstance(result, dict) or (kind == "stt" and not isinstance(result.get("text"), str)):
                         logger.error("Voice worker invalid response kind=%s rc=%s", kind, process.returncode)
-                        raise KnowledgeError("voice_inference_failed", "The local speech worker returned an invalid response.", 502)
+                        raise KnowledgeError("voice_inference_failed", "El proceso de voz local devolvió una respuesta inválida. Inténtalo de nuevo.", 502)
                     result["elapsed_ms"] = round((time.perf_counter() - started) * 1000)
                     if kind == "tts":
                         result["audio"] = Path(task["output"]).read_bytes()
@@ -145,11 +145,11 @@ class VoiceService:
                     await process.wait()
                     await communication
         except TimeoutError:
-            raise KnowledgeError("voice_timeout", "Local speech processing exceeded 90 seconds.", 504) from None
+            raise KnowledgeError("voice_timeout", "El procesamiento de voz superó 90 segundos. Intenta una pregunta más corta.", 504) from None
         except KnowledgeError:
             raise
         except Exception as exc:  # noqa: BLE001 - catch subprocess/IO failures that would otherwise become HTTP 500
             logger.error("Voice service failure kind=%s error_type=%s loop=%s", kind, type(exc).__name__, type(asyncio.get_running_loop()).__name__)
-            raise KnowledgeError("voice_inference_failed", "The local speech engine encountered an unexpected error.", 502) from None
+            raise KnowledgeError("voice_inference_failed", "El motor de voz local encontró un error inesperado. Inténtalo de nuevo.", 502) from None
         finally:
             self.busy = False

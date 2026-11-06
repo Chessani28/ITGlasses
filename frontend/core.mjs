@@ -1,3 +1,14 @@
+// The existing bearer is held only in this page's memory, never in browser storage.
+let apiToken = "";
+export function setApiToken(value) { apiToken = String(value || "").trim(); }
+export function apiFetch(path, options = {}) {
+  const headers = new Headers(options.headers);
+  if (apiToken && typeof path === "string" && path.startsWith("/api/v1/")) {
+    headers.set("Authorization", `Bearer ${apiToken}`);
+  }
+  return fetch(path, {...options, headers});
+}
+
 /** Shared request contracts. No browser state or model behavior is simulated. */
 export const MAX_FILE_BYTES = 10 * 1024 * 1024;
 export const limits = {assistant: 4000, general: 4000, knowledge: 16000};
@@ -38,7 +49,7 @@ export async function api(path, options = {}, timeout = 150000) {
   if (options.signal?.aborted) cancel();
   const timer = setTimeout(() => controller.abort(), timeout);
   try {
-    const response = await fetch(path, {...options, signal: controller.signal, cache: "no-store"});
+    const response = await apiFetch(path, {...options, signal: controller.signal, cache: "no-store"});
     let data;
     try { data = await response.json(); }
     catch { throw new Error("El servidor devolvió una respuesta no válida."); }

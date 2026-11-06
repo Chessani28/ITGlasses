@@ -1,3 +1,19 @@
+# Estado de auditoría — 2026-11-05
+
+Se aplicaron correcciones controladas de RAG, voz, contexto, bearer del navegador y recuperación oficial de Windows 11. **162 pruebas Python y 36 JavaScript pasan. La aceptación completa de la demo está pendiente**: faltan Ollama operativo, manuales corporativos y pruebas de voz reales en el entorno inspeccionado.
+
+Informe y limitaciones: [Auditoría técnica](docs/technical-audit-2026-11-05.md).
+
+- Iniciar desde la raíz con `.\.venv\Scripts\python.exe -m backend.run`.
+- Para consultas con contexto usar el asistente unificado (`/api/v1/assistant/chat`).
+- Si el servidor exige el bearer existente, introducirlo en **Estado del sistema → Token de acceso a la API**. Solo se conserva en memoria hasta recargar la página; no se crea otro login.
+- La consulta de versión actual de Windows 11 recupera la tabla oficial Microsoft mediante HTTPX. Búsqueda genérica opcional: `uv pip install --python .venv\Scripts\python.exe -r requirements-web.txt`. No se instala DDGS ni modelos automáticamente.
+- `ITGLASSES_WEB_PROVIDER=offline` desactiva consultas públicas.
+
+Las secciones siguientes conservan el historial de fases; sus recuentos y afirmaciones corresponden a esas verificaciones anteriores.
+
+---
+
 # Phase 5 voice implementation — acceptance pending
 
 Local CPU speech adapters and a web voice panel have been added. Speech model

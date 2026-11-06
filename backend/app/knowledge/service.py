@@ -146,7 +146,7 @@ class KnowledgeService:
             # Contextual follow-up: if message starts with "y si/eso/eso no funciona" etc.
             # and we have a previous topic, try to use session context
             followup_patterns = re.compile(
-                r"^(?:y\s+(?:si|eso|qué|que)|¿?y\s+(?:si|eso)|eso\s+no\s+funciona|si\s+no\s+funciona|y\s+si\s+no|pasame|pásame|dame|mu[eé]strame|muestrame|los pasos|las instrucciones)",
+                r"^(?:¿?(?:qu[eé] significa|expl[ií]came)\s+(?:eso|esto)|y\s+(?:si|eso|qué|que)|¿?y\s+(?:si|eso)|eso\s+no\s+funciona|si\s+no\s+funciona|y\s+si\s+no|pasame|pásame|dame|mu[eé]strame|muestrame|los pasos|las instrucciones)",
                 re.IGNORECASE,
             )
             if request.conversation_id and session.get("last_topic") and followup_patterns.match(request.message.strip()):
@@ -190,6 +190,8 @@ class KnowledgeService:
                         "Puedes consultar el Chat general para obtener una explicación más amplia.")
 
             documents = self.store.documents(eligible_only=True)
+            if not documents:
+                return missing()
             available = {d["id"]: d for d in documents}
             ids = exact_ids(request.message)
             exact = bool(ids)
@@ -288,12 +290,8 @@ class KnowledgeService:
             else:
                 if mode == "steps" and not any(re.search(r"(?:^|\n)\s*(?:\d+[.)]|[-*])\s|paso\s+\d", row["text"], re.I) for row in evidence):
                     return missing()
-                # Try grounded generation with Ollama first
-                try:
-                    if hasattr(self.selector, "generate_grounded_answer"):
-                        answer = await self.selector.generate_grounded_answer(request.message, evidence)
-                    else:
-                        answer = "Según la documentación autorizada:\n\n" + "\n\n".join(row["text"] for row in evidence)
-                except Exception:
-                    answer = "Según la documentación autorizada:\n\n" + "\n\n".join(row["text"] for row in evidence)
+                # Return only reauthorized excerpts; generated prose is not evidence.
+                answer = "Según la documentación autorizada:\n\n" + "\n\n".join(
+                    f'{row["text"]}\n[Fuente: {row["title"]}, versión {row["version"]}; {row["id"]}]'
+                    for row in evidence)
             return respond("answered", answer, [selected_document], sources, stats)

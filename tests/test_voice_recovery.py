@@ -6,7 +6,18 @@ import sys
 import pytest
 from backend.app.voice.service import VoiceService
 from backend.app.knowledge.models import KnowledgeError
-from test_voice import wav
+import io
+import wave
+
+
+def wav():
+    output = io.BytesIO()
+    with wave.open(output, "wb") as audio:
+        audio.setnchannels(1)
+        audio.setsampwidth(2)
+        audio.setframerate(16000)
+        audio.writeframes(bytes(32000))
+    return output.getvalue()
 from test_assistant_service import build, ask
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows reload regression")

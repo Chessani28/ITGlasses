@@ -1,0 +1,2 @@
+# Optional generic public search; official Windows 11 retrieval uses core HTTPX only.
+ddgs>=9,<10

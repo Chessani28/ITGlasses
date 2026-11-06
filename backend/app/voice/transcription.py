@@ -60,9 +60,11 @@ def _normalize_it_terms(text):
     """Normalize existing terms and explicit letter names; never guess homophones."""
     for spoken, acronym in sorted(SPELLED_ACRONYMS.items(), key=lambda pair: len(pair[0]), reverse=True):
         text = re.sub(r"\b" + re.escape(spoken).replace(r"\ ", r"\s+") + r"\b", acronym, text, flags=re.I)
-    tokens = text.split()
-    corrected = [VOSK_IT_TERMS.get(t.lower(), t) for t in tokens]
-    return " ".join(corrected)
+    text = re.sub(r"\bwindows\s+(?:once|11)\b", "Windows 11", text, flags=re.I)
+    text = re.sub(r"\bactive\s+directory\b", "Active Directory", text, flags=re.I)
+    return re.sub(r"\b(?:" + "|".join(VOSK_IT_TERMS) + r")\b",
+                  lambda match: VOSK_IT_TERMS[match.group().lower()], text, flags=re.I)
+
 
 def audio_quality(pcm):
     samples = array.array("h", pcm)
@@ -84,7 +86,10 @@ def transcription_result(raw, words, quality):
     # Segmenter caps at 28s: a voiced tail at that limit may be cut off.
     if quality.get("duration_seconds", 0) >= 27.9 and quality.get("tail_rms", 0) > 0.01:
         reasons.append("possibly_incomplete")
-    scores = [w["conf"] for w in words if isinstance(w.get("conf"), (int, float))]
+    scores = [w["conf"] for w in words if type(w.get("conf")) in (int, float)
+              and math.isfinite(w["conf"]) and 0 <= w["conf"] <= 1]
+    if len(scores) != len(words):
+        reasons.append("confidence_unavailable")
     if raw.strip() and (not scores or min(scores) < 0.65):
         reasons.append("low_confidence" if scores else "confidence_unavailable")
     if scores and min(scores) < 0.55:

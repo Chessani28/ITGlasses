@@ -27,3 +27,26 @@ test('captured audio remains replayable after stopping microphone and uses separ
     assert.equal(element('voice-playback-audio').src,'');
   } finally {Object.assign(globalThis,previous);}
 });
+
+test('public source links do not become null document IDs in speech requests',async()=>{
+  const previous={document:globalThis.document,window:globalThis.window,fetch:globalThis.fetch};
+  const nodes=new Map();
+  const element=id=>{
+    if(!nodes.has(id)) nodes.set(id,{id,src:'',handlers:{},dataset:{},classList:{replace(){}},
+      addEventListener(event,fn){this.handlers[event]=fn;},pause(){},load(){},removeAttribute(){}});
+    return nodes.get(id);
+  };
+  globalThis.document={getElementById:element,addEventListener(){}};
+  globalThis.window={addEventListener(){}};
+  const abort=new AbortController(); let payload;
+  globalThis.fetch=async(path,options)=>{
+    assert.equal(path,'/api/v1/voice/synthesize');
+    payload=JSON.parse(options.body); abort.abort();
+    return new Response(new Blob(['wav']),{status:200});
+  };
+  try {
+    const controller=initVoice({lock(){},send(){}});
+    await controller.io.speak({answer:'Fuente pública',route:'general',sources:[{title:'Microsoft',url:'https://learn.microsoft.com/'}]}, {speaker:0,speed:1},abort.signal);
+    assert.deepEqual(payload.citation_ids,[]);
+  } finally {Object.assign(globalThis,previous);}
+});
