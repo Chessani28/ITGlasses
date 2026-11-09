@@ -30,6 +30,10 @@ no frontend build or additional dependencies are required.
 Start Ollama if needed with `scripts/start-ollama.ps1`, then the backend with
 `scripts/start-backend.ps1 -Provider ollama`, from `D:\ITGlasses` in separate
 PowerShell terminals. Open the URL above. Avoid starting duplicate services.
+For Copilot terminal tasks, use `scripts/ensure-backend.ps1 -Provider ollama`
+instead: it reuses a healthy backend or starts one independently and returns
+after a bounded health check. Any configured `ITGLASSES_WHISPER_PYTHON` and
+`ITGLASSES_WHISPER_MODEL` values are inherited by the backend process.
 Full startup, usage, verification and limitations: [Web interface guide](docs/interface.md).
 
 Verification: 92 Python tests and 11 JavaScript tests passed. Browser checks used
@@ -156,6 +160,16 @@ Terminal 2 — backend using Ollama:
 Set-Location D:\ITGlasses
 .\scripts\start-backend.ps1 -Provider ollama
 ```
+
+For a non-blocking startup from a Copilot terminal task, use:
+
+```powershell
+.\scripts\ensure-backend.ps1 -Provider ollama
+```
+
+The helper returns once the backend is healthy, and writes detached-process
+startup logs under `%LOCALAPPDATA%\ITGlasses\logs`. It inherits the current
+PowerShell environment, including optional Whisper Small settings.
 
 For development without a model, select mock explicitly instead:
 
