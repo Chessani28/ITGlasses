@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Depends
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
@@ -21,7 +22,22 @@ def error_response(status: int, code: str, message: str):
 
 def create_app(provider: LLMProvider | None = None, knowledge=None, voice=None) -> FastAPI:
     from backend.app.api.auth import require_auth
-    app = FastAPI(title=settings.app_name, version=settings.version)
+
+    @asynccontextmanager
+    async def lifespan(app):
+        try:
+            yield
+        finally:
+            voice_service = getattr(app.state, "voice", None)
+            shutdown = getattr(voice_service, "shutdown", None)
+            if shutdown:
+                try:
+                    await shutdown()
+                except Exception:
+                    logger.exception("Voice worker shutdown failed")
+                    raise
+
+    app = FastAPI(title=settings.app_name, version=settings.version, lifespan=lifespan)
     app.state.provider = provider if provider is not None else (
         OllamaProvider(settings) if settings.provider == "ollama" else MockLLM()
     )

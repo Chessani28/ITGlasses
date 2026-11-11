@@ -26,7 +26,10 @@ def test_reference(text, kind, number):
 
 @pytest.mark.parametrize("text", ["¿Qué es una VPN?", "¿Cómo funciona una VPN?", "¿Qué es una dirección IP?", "¿Cómo configuro el DNS?", "¿Cómo actualizo la BIOS?", "¿Qué es un SSD NVMe?", "¿Cómo reviso la memoria RAM?", "¿Qué hago si Windows no arranca?"])
 def test_general_it(text):
-    assert ask(build(), text)["route"] == "general"
+    knowledge = StubKnowledge(answer="Sin evidencia documental.", status="insufficient_evidence")
+    service = build(knowledge=knowledge)
+    assert ask(service, text)["route"] == "general"
+    assert knowledge.queries
 
 def test_step_corrections_and_relative_sequence():
     svc=build(); sid="phase3"
@@ -78,11 +81,13 @@ def test_confident_transcript_and_incomplete_clip():
 
 
 def test_general_followup_survives_social_turn():
-    svc=build()
-    ask(svc,"¿Qué es una VPN?","general-social")
+    knowledge=StubKnowledge(answer="Sin evidencia documental.",status="insufficient_evidence")
+    svc=build(knowledge=knowledge)
+    assert ask(svc,"¿Qué es una VPN?","general-social")["route"] == "general"
     ask(svc,"gracias","general-social")
     result=ask(svc,"¿Y qué pasa si eso no funciona?","general-social")
-    assert result["route"] == "general" and not svc.knowledge.queries
+    assert result["route"] == "general"
+    assert len(knowledge.queries) == 2
 
 def test_lan_auth_still_blocks_voice_and_assistant(monkeypatch):
     from fastapi.testclient import TestClient

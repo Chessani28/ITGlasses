@@ -2,11 +2,11 @@
 
 ## Scope and current acceptance status
 
-The Windows voice pipeline uses browser PCM capture, CPU-only Vosk recognition,
-the existing chat endpoints, and CPU-only Piper synthesis. It has no cloud speech
-fallback and does not use browser SpeechRecognition or speechSynthesis services.
-Model installation and real-model acceptance are pending explicit approval of the
-proposed downloads. Deterministic tests are not evidence of real recognition quality.
+The Windows voice pipeline uses browser PCM capture, CPU-only Vosk recognition by
+default, an optional explicitly selected Whisper Small pilot, the existing chat
+endpoints, and CPU-only Piper synthesis. It has no cloud speech fallback and does
+not use browser SpeechRecognition or speechSynthesis services. Vosk remains the
+default and Whisper errors never trigger a silent engine fallback.
 
 ## Architecture
 
@@ -14,11 +14,14 @@ proposed downloads. Deterministic tests are not evidence of real recognition qua
 2. An AudioWorklet captures mono audio. Energy detection retains speech and closes
    a turn after 1.1 seconds of silence, with a maximum 28-second recording.
 3. The browser converts PCM to mono 16-bit, 16 kHz WAV and calls `/api/v1/voice/transcribe`.
-4. Vosk runs in an isolated CPU process. That process exits before chat begins.
-5. The shared web chat function calls `/api/v1/chat` or `/api/v1/knowledge/chat`.
-6. The unchanged chat UI displays the full response, clarification choices and sources.
-7. `/api/v1/voice/synthesize` generates WAV using Piper in a separate CPU process.
-8. The browser plays the response, then opens a configurable 15/30/60-second window.
+4. The selected STT engine runs in an isolated CPU process. Whisper Small uses the
+   configured local Python environment, CPU INT8 and local-only model loading.
+5. The transcript is displayed in an editable review box. Chat is not called until
+   the user confirms the text; discarding or stopping does not submit it.
+6. The shared web chat function calls `/api/v1/chat` or `/api/v1/knowledge/chat`.
+7. The unchanged chat UI displays the full response, clarification choices and sources.
+8. `/api/v1/voice/synthesize` generates WAV using Piper in a separate CPU process.
+9. The browser plays the response, then opens a configurable 15/30/60-second window.
 
 General chat remains stateless: subsequent utterances are accepted but earlier
 messages are not injected into the LLM. Knowledge chat reuses the existing bounded,
@@ -36,7 +39,8 @@ on the server. No other application or Ollama process is terminated.
 
 | Component | Selected option | Rationale and license |
 | --- | --- | --- |
-| STT | `vosk-model-small-es-0.42` | About 39 MB download; Apache 2.0; lightweight CPU Spanish recognition. Vosk documents about 300 MB runtime memory for small models. Actual measurements are still required. |
+| STT default | `vosk-model-small-es-0.42` | About 39 MB download; Apache 2.0; unchanged lightweight CPU Spanish recognition. |
+| STT experimental | `Systran/faster-whisper-small`, CPU INT8 | Separate local environment/model; on one 20-utterance, one-speaker provisional set, WER was 24.60%, mean inference about 2.01 seconds, and peak private process memory about 2.76 GiB. Not evidence of broad accuracy or accent robustness. |
 | TTS | Piper 1.8.0, `es_ES-sharvard-medium` | About 64 MB voice; two Spain-Spanish speakers. Piper engine is GPL-3.0. The voice card declares CC BY 3.0 for its dataset and notes fine-tuning from Lessac. Preserve attribution and review the complete model provenance before redistribution. |
 | Wake phrase | Explicit transcription-prefix matcher | Uses the existing Vosk transcript; no additional model. Experimental, vulnerable to misses and false activations. |
 
@@ -44,11 +48,10 @@ Vosk 0.3.45 offers a `py3-none-win_amd64` wheel and Piper 1.8.0 a
 `cp39-abi3-win_amd64` wheel. Availability was checked against PyPI; actual Python
 3.13 operation still requires installation and real inference tests.
 
-Faster-whisper was considered for stronger multilingual transcription, but its
-CTranslate2 runtime and Whisper weights introduce a larger initial footprint.
-Vosk is the conservative first CPU implementation for this 16 GB machine. Technical
-names, acronyms and informal Mexican Spanish need a representative human speech
-evaluation; do not assume the small model meets production accuracy requirements.
+Whisper is never installed into the production Python environment by this pilot.
+Technical names, acronyms, negations and Spanish speech from additional speakers
+need representative human evaluation; do not assume either model is reliable for
+meaning-critical requests based on the provisional sample.
 
 Dedicated offline wake engines such as openWakeWord require a suitable trained
 Spanish/custom model; their pretrained model licenses differ from the code license.
@@ -85,6 +88,106 @@ never cleaned up. Audio playback uses memory-backed blob URLs, revoked on stop o
 completion. Speech/transcript contents are not logged. There is no public audio
 directory or replay endpoint. Offline operation requires models to be installed
 before disconnecting the machine from the internet. Missing models return 503.
+
+### Optional Whisper Small pilot
+
+The production dependency manifests are unchanged. Whisper remains optional;
+without its two paths Vosk continues to work as before. To make the pilot
+reproducible across PowerShell sessions, copy `scripts\runtime-config.example.psd1`
+to `runtime-config.psd1` in the project root if the local file does not already
+exist. This file is ignored by Git and must never contain credentials:
+
+```powershell
+Set-Location D:\ITGlasses
+if (-not (Test-Path .\runtime-config.psd1)) {
+    Copy-Item .\scripts\runtime-config.example.psd1 .\runtime-config.psd1
+}
+notepad .\runtime-config.psd1
+```
+
+Set `WhisperPython` and `WhisperModel` to the operator-verified absolute paths,
+or leave both blank to use Vosk only. Startup verifies the executable, model
+directory, and required model files before launching. Environment variables
+already set in the launching PowerShell session take precedence over this file.
+Do not assume paths from an example or an older backend process are correct.
+
+The environment must contain compatible `faster-whisper` and PyAV packages. The
+model directory must contain `model.bin`, `config.json`, `tokenizer.json` and
+`vocabulary.txt`. The application checks these paths and probes the configured
+interpreter without loading the model. Inference uses `local_files_only=True` and
+`HF_HUB_OFFLINE=1`; it does not download packages or model files.
+
+Vosk remains selected unless the user explicitly chooses **Whisper Small ·
+experimental** in Voice Preferences. The selector sends `X-ITGlasses-STT-Engine`;
+clients that omit this header continue to use Vosk. The transcript must be reviewed
+and confirmed or edited before it is submitted to chat. Whisper requires at least
+3 GiB of available system RAM before startup. It checks system RAM and the actual
+inference process, and forcibly shuts down its owned process tree if available RAM
+drops below 1.5 GiB. Each request retains the 90-second deadline; disconnect and
+timeout terminate the owned worker. The worker uses bounded JSON-lines over private
+stdin/stdout pipes, with no network listener, audio/transcript files, automatic
+downloads, or inference concurrency. It is shut down after 60 seconds idle, on
+backend shutdown, and before Vosk/Piper or chat/knowledge inference. Chat requests
+arriving during an active Whisper transcription receive 409 rather than competing
+for memory with it. Whisper failures never retry through Vosk.
+
+The isolated prototype benchmark completed ten sequential requests at a 1.95-second
+mean, compared with 4.39 seconds for one-process-per-request (55.5% lower in that
+test); all ten persistent outputs matched their per-request counterparts. Peak
+private worker memory was about 2.44 GiB. This is not a measurement of the
+production-integrated API path or a representative accuracy evaluation. The earlier
+20-recording, one-speaker provisional result was 24.60% WER; it must not be
+generalized to other speakers, accents, or meaning-critical terms. Ollama was not
+tested under concurrent inference. The experimental selector remains opt-in.
+
+To return to Vosk, select **Vosk · predeterminado**. To disable the pilot entirely,
+leave both Whisper paths blank in the local runtime config (or remove both
+environment overrides) and restart the backend. No production model or package
+needs to be removed.
+
+### Safe runtime configuration and restart
+
+`runtime-config.psd1` stores only non-secret local settings:
+
+- `WhisperPython` and `WhisperModel`: both absolute local paths, or both blank.
+- `RequireAuth`: set to `$true` when bearer authentication is required.
+- `AllowLanBinding`: keep `$false` for loopback-only use. LAN binding requires a
+  bearer token and an explicit application LAN configuration.
+
+Inherited process environment variables override the local runtime file.
+`config.toml` supplies application defaults, with its supported environment
+overrides taking precedence. The launcher’s explicit `-Provider` argument
+continues to select the Ollama or mock provider.
+
+When authentication is required, provide `ITGLASSES_API_TOKENS` through the
+operator-controlled launching environment, or provision one token for the
+current Windows user using `.\scripts\set-api-token.ps1`. The script reads it
+without echoing it and stores only Windows DPAPI-protected data in the ignored
+`.runtime` directory. The protected token cannot be reused under another Windows
+user. Existing stored tokens are never replaced unless `-Replace` is supplied
+explicitly. Never put tokens in `runtime-config.psd1`, command-line arguments,
+source code, or logs.
+
+For a restart after reviewing the current process and choosing to stop only the
+ITGlasses backend:
+
+1. Confirm the local runtime file has the intended Whisper paths and auth mode.
+   If auth is required, confirm the operator token is available in the launching
+   environment or in the current user's protected token store.
+2. From `D:\ITGlasses`, run `.\scripts\stop-backend.ps1`. This targets project
+   backend Python processes; it does not stop Ollama.
+3. Run `.\scripts\ensure-backend.ps1 -Provider ollama`. It loads and validates
+   the local configuration before spawning the backend, then returns after
+   `/health` is ready.
+4. Verify `/health`, `/api/v1/status`, and `/api/v1/voice/status`. Supply bearer
+   authentication to protected routes through a secure client mechanism; do not
+   put tokens in shell history. Confirm `whisper-small.available` matches the
+   configured paths and Ollama reports the intended local model.
+
+If configuration is incomplete or invalid, startup stops with a sanitized
+message and does not disable required authentication. A healthy existing
+backend is reused by `ensure-backend.ps1`; stop it explicitly before using that
+script to load changed startup settings.
 
 After the specific speech downloads have been approved, install only the optional
 CPU inference requirements (no training extras):
@@ -135,14 +238,14 @@ claimed successful merely because synthesis completed.
 
 | Endpoint | Contract |
 | --- | --- |
-| `GET /api/v1/voice/status` | Installed model/dependency presence, engine names, CPU device, supported voice/speakers and limits. Presence is not an inference health check. |
-| `POST /api/v1/voice/transcribe` | Raw `audio/wav`: mono PCM16, 16 kHz, 0.1–30 seconds. Returns text, elapsed milliseconds and worker resource measurements when available. |
+| `GET /api/v1/voice/status` | Installed model/dependency presence, per-engine availability, default engine (Vosk), CPU device, supported voice/speakers and limits. Presence is not an inference health check. |
+| `POST /api/v1/voice/transcribe` | Raw `audio/wav`: mono PCM16, 16 kHz, 0.1–30 seconds. Optional `X-ITGlasses-STT-Engine: whisper-small`; omitted or `vosk` selects Vosk. Returns raw/normalized text, actual engine, elapsed milliseconds and Whisper resource measurements when available. |
 | `POST /api/v1/voice/synthesize` | JSON `text` (1–6000 characters), optional `voice`, `speaker` (0/1), `speed` (0.75–1.5), `citation_ids` (up to 20 UUIDs). Returns WAV with no-store and timing/resource headers. |
 
-Only one speech worker may run at a time; concurrent speech gets 409. Each worker
-has a 90-second deadline. No arbitrary filesystem paths, commands or URLs are
-accepted. Errors are sanitized. Browser cross-origin speech requests are rejected.
-The existing backend binds exclusively to 127.0.0.1.
+Only one speech operation may run at a time; concurrent speech gets 409. Each
+worker has a 90-second deadline. No arbitrary filesystem paths, commands or URLs
+are accepted. Errors are sanitized. Browser cross-origin speech requests are
+rejected. The existing backend binds exclusively to 127.0.0.1.
 
 Speech synthesis is a rendering API, not a second knowledge engine: caller-supplied
 text is not certified as company policy. The official UI submits the actual backend
@@ -172,20 +275,29 @@ node --test tests/frontend.test.mjs tests/voice.test.mjs
 
 Tests cover WAV validation, speech errors, citation revocation before/during TTS,
 shared chat contracts, wake prefixes, follow-up windows, permission failures, stale
-asynchronous results after Stop, audio conversion and silence segmentation.
-Real STT accuracy, TTS audio quality, CPU/RAM peaks, model latency and physical
-microphone playback remain acceptance checks, not mocked results.
+asynchronous results after Stop, audio conversion and silence segmentation. The
+persistent-worker tests additionally cover model reuse, serialized requests, idle
+and backend shutdown, worker failure/recovery, cancellation, timeout, memory gates,
+engine identity, and Vosk/Piper compatibility.
 
-Current verification: 114 Python tests passed in 29.13 seconds, including all 92
-preexisting tests; 24 JavaScript tests passed. `pip check` reported no broken
-requirements. The existing non-failing Starlette/httpx deprecation warning remains.
-The actual localhost page was opened and its missing-model error was verified;
-the microphone was not activated and no real speech inference was performed.
-The optional `tests/smoke_voice.py` script is prepared for a real Piper → Vosk →
-FastAPI → Ollama → Piper probe after approved installation. It checks model presence
-and a 6 GiB RAM margin, uses synthetic generated speech, and records process CPU
-seconds/peak working set plus system RAM/GPU snapshots under `storage/voice/acceptance`.
-That probe has not yet been run; it does not replace a human microphone test.
+Current verification: 260 backend tests and 34 JavaScript tests passed. One existing
+Starlette/httpx deprecation warning remains. Ten recorded WAV requests completed
+through the local FastAPI endpoint in one persistent process: first-request wall
+latency 4.05 s, warm API mean 2.22 s (max 2.59 s), and mean Whisper inference 2.03 s.
+The model loaded in 1.61 s. Outputs matched the archived persistent-worker outputs
+10/10 and matched the saved baseline at the archived normalized-token criterion
+9/10. Peak private memory was 2,499 MiB; minimum free system RAM was 3.14 GiB and
+returned to 3.97 GiB after shutdown. The final idle snapshot was 2,358 MiB private
+and 372 MiB working set. The owned launcher and actual inference PIDs were both
+absent after graceful shutdown. A separate forced-termination/restart check
+succeeded and left no old or replacement PIDs.
+
+These are local single-machine measurements, not multi-speaker accuracy evidence.
+Browser-to-API latency was not measured. An Ollama process was observed using about
+94 MiB private memory; its loaded-model state was not inspected and no Ollama
+inference request was sent. Concurrent Ollama/Whisper inference remains unvalidated.
+`pip check` and the optional
+Piper/Vosk/Ollama smoke probe were not run in this integration task.
 
 ## Future Android and Ray-Ban Meta boundary
 

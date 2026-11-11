@@ -61,6 +61,31 @@ The general-chat and knowledge panels are separate. Identification requests do
 not expose execution steps merely because the user clicks an ambiguity option.
 See `knowledge.md` for metadata semantics and the unchanged backend limitations.
 
+### Unified assistant routing
+
+The **Asistente ITGlasses** mode uses `/api/v1/assistant/chat`. Greetings and
+short social exchanges are answered without a document search. IT questions first
+query current authorized document evidence; relevant, sufficient evidence is
+returned with its citations. If evidence is insufficient, ordinary IT questions
+may use the local general model, while explicit requests according to manuals
+remain documentation-only. When an explicit manual request lacks sufficient
+evidence, the assistant offers a general explanation or a public search; it does
+not start the search until the user selects it. Public queries are built from
+allowlisted technical topics and known operating systems rather than copying the
+manual request or conversation history. General guidance is labelled as
+non-company procedure. After consent, only relevant public evidence is sent to
+the local model for a concise synthesis. If synthesis fails or adds unsupported
+details, the assistant uses relevant source excerpts or reports that evidence is
+insufficient; citations identify the sources used. Public search distinguishes
+provider failure, timeout, rate limiting, no results and irrelevant results.
+After a failed or irrelevant consented search, the assistant offers a local
+general explanation without retrying automatically. If document retrieval itself
+fails, the assistant reports that failure instead of treating it as missing
+evidence. Time-sensitive questions query documents first and then require public
+search results; if public verification fails, the assistant does not substitute
+an unverified local answer. Public source metadata includes its retrieval time.
+The separate general and knowledge modes retain their existing endpoint behavior.
+
 ## Safety and limits
 
 Only the frontend directory is mounted publicly. Project documents, indexes,

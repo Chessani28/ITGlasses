@@ -43,6 +43,13 @@ test('manual listening closes the microphone on timeout',async()=>{
   const {controller,calls,expire}=setup(); await controller.start({...preferences,wake:false}); expire();
   assert.equal(controller.active,false); assert.ok(calls.includes('stop'));
 });
+test('selected STT engine is captured at microphone start and sent to transcription',async()=>{
+  let selectedEngine;
+  const {controller}=setup({transcribe:async(_audio,_signal,engine)=>{selectedEngine=engine;return {text:'test'};}});
+  await controller.start({...preferences,engine:'whisper-small'});
+  await controller.utterance('audio');
+  assert.equal(selectedEngine,'whisper-small');
+});
 test('permission failures are visible and inactive',async()=>{
   const {controller,events}=setup({capture:async()=>{throw {name:'NotAllowedError'};}});
   await controller.start(preferences); assert.equal(controller.active,false);
@@ -103,6 +110,31 @@ test('uncertain STT asks for repetition without calling chat or TTS',async()=>{
   await controller.start({...preferences,wake:false}); await controller.utterance('audio');
   assert.equal(calls.some(x=>Array.isArray(x)),false);
   assert.ok(!calls.includes('speak')); assert.equal(events.at(-1)[1],'Repite la pregunta');
+});
+test('voice transcript must be reviewed before chat and the edited text is submitted',async()=>{
+  let release, reviewed;
+  const {controller,calls}=setup({
+    transcribe:async()=>({text:'No se conecta',raw_text:'No se conecta',engine:'whisper-small'}),
+    confirmTranscript:(value)=>{reviewed=value;return new Promise(resolve=>release=resolve);}
+  });
+  await controller.start({...preferences,wake:false});
+  const pending=controller.utterance('audio');
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(reviewed.engine,'whisper-small');
+  assert.equal(reviewed.raw_text,'No se conecta');
+  assert.equal(calls.some(value=>Array.isArray(value)),false);
+  release('No se conecta a DNS');
+  await pending;
+  assert.deepEqual(calls.find(value=>Array.isArray(value)),['chat','No se conecta a DNS']);
+});
+test('discarded voice transcript is not submitted to chat',async()=>{
+  const {controller,calls}=setup({
+    transcribe:async()=>({text:'No puedo abrir Outlook'}),
+    confirmTranscript:async()=>null
+  });
+  await controller.start({...preferences,wake:false}); await controller.utterance('audio');
+  assert.equal(calls.some(value=>Array.isArray(value)),false);
+  assert.equal(controller.phase,'listening');
 });
 test('length-limited capture is never sent to transcription',async()=>{
   let sent=false;

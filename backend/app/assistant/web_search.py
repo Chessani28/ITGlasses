@@ -20,8 +20,48 @@ from dataclasses import dataclass, field
 from typing import Protocol
 
 
+_SAFE_ERROR_CATEGORIES = frozenset({
+    "provider_unavailable", "timeout", "rate_limited", "no_results", "irrelevant",
+})
+
+
+def search_query_category(query: str) -> str:
+    """Return a low-sensitivity topic label suitable for operational logs."""
+    for category, pattern in (
+        ("vpn", r"\bvpn\b"),
+        ("windows", r"\bwindows\b"),
+        ("dns", r"\bdns\b"),
+        ("dhcp", r"\bdhcp\b"),
+        ("network", r"\b(?:red|network|wifi|wi-fi|router)\b"),
+    ):
+        if re.search(pattern, query or "", re.IGNORECASE):
+            return category
+    return "other"
+
+
+def _safe_error_category(error) -> str | None:
+    category = getattr(error, "category", None)
+    return category if isinstance(category, str) and category in _SAFE_ERROR_CATEGORIES else None
+
+
 class WebSearchError(Exception):
-    """Raised when a public search provider cannot return results."""
+    """A safe, classifiable public search failure."""
+
+    MESSAGES = {
+        "provider_unavailable": "No pude consultar fuentes públicas en este momento.",
+        "timeout": "La búsqueda pública tardó demasiado y no se completó.",
+        "rate_limited": "El buscador público limitó temporalmente las consultas.",
+        "no_results": "El buscador público no encontró resultados para esa consulta.",
+        "irrelevant": "Los resultados públicos no contienen información suficiente sobre ese tema.",
+    }
+
+    def __init__(self, message: str, category: str = "provider_unavailable"):
+        super().__init__(message)
+        self.category = category
+
+    @property
+    def public_message(self):
+        return self.MESSAGES.get(self.category, self.MESSAGES["provider_unavailable"])
 
 
 @dataclass(frozen=True)
@@ -36,6 +76,7 @@ class WebSearchResult:
             __import__("datetime").timezone.utc
         ).astimezone().isoformat()
     )
+    verified: bool = False
 
 
 class SearchBackend(Protocol):
@@ -62,37 +103,85 @@ class DuckDuckGoSearch:
         self.user_agent = user_agent or os.environ.get(
             "ITGLASSES_WEB_USER_AGENT", "ITGlasses-web-assistant/1.0"
         )
+        self.last_diagnostics = {}
 
     async def search(self, query: str, max_results: int = 5) -> list[WebSearchResult]:
+        self.last_diagnostics = {
+            "provider_result_count": 0,
+            "basic_validated_count": 0,
+            "provider_discard_reasons": {},
+        }
         if not query or not query.strip():
             raise WebSearchError("empty query")
 
         # Use ddgs for real web search (DuckDuckGo HTML search backend).
         try:
             from ddgs import DDGS
-        except ImportError:
-            raise WebSearchError("ddgs package not installed")
+            from ddgs.exceptions import DDGSException, RatelimitException, TimeoutException
+        except ImportError as exc:
+            raise WebSearchError(
+                "search dependency is unavailable", "provider_unavailable"
+            ) from exc
 
         try:
             def lookup():
                 with DDGS(timeout=self.timeout_seconds) as ddgs:
                     return list(ddgs.text(query.strip(), max_results=max_results))
             raw = await asyncio.to_thread(lookup)
+        except TimeoutException as exc:
+            raise WebSearchError("public search timed out", "timeout") from exc
+        except RatelimitException as exc:
+            raise WebSearchError("public search was rate limited", "rate_limited") from exc
+        except DDGSException as exc:
+            if "no results found" in str(exc).casefold():
+                raise WebSearchError("provider returned no results", "no_results") from exc
+            raise WebSearchError("public search provider failed", "provider_unavailable") from exc
+        except (TimeoutError, asyncio.TimeoutError, requests.Timeout) as exc:
+            raise WebSearchError("public search timed out", "timeout") from exc
         except Exception as exc:
-            raise WebSearchError(f"search request failed: {exc}") from exc
+            raise WebSearchError("public search provider failed", "provider_unavailable") from exc
 
         results: list[WebSearchResult] = []
+        discard_reasons = {}
         for item in raw:
-            title = (item.get("title") or "").strip()
-            link = (item.get("href") or item.get("link") or "").strip()
-            snippet = (item.get("body") or item.get("snippet") or "").strip()
-            parsed = urlsplit(link)
-            if title and parsed.scheme in {"http", "https"} and parsed.hostname and not parsed.username:
-                title = re.sub(r"[\[\]\r\n]", " ", title)
-                link = link.replace("(", "%28").replace(")", "%29").replace(" ", "%20")
-                results.append(WebSearchResult(title=title, url=link, snippet=snippet))
+            self.last_diagnostics["provider_result_count"] += 1
+            if not isinstance(item, dict):
+                discard_reasons["invalid_result"] = discard_reasons.get("invalid_result", 0) + 1
+                continue
+            title_value = item.get("title") or ""
+            link_value = item.get("href") or item.get("link") or ""
+            snippet_value = item.get("body") or item.get("snippet") or ""
+            if not all(isinstance(value, str) for value in (title_value, link_value, snippet_value)):
+                discard_reasons["invalid_result"] = discard_reasons.get("invalid_result", 0) + 1
+                continue
+            title = title_value.strip()
+            link = link_value.strip()
+            snippet = snippet_value.strip()
+            if not title:
+                discard_reasons["missing_title"] = discard_reasons.get("missing_title", 0) + 1
+                continue
+            try:
+                parsed = urlsplit(link)
+                valid_url = (
+                    parsed.scheme in {"http", "https"}
+                    and parsed.hostname
+                    and not parsed.username
+                )
+            except ValueError:
+                valid_url = False
+                parsed = None
+            if not valid_url:
+                reason = "url_credentials" if parsed and parsed.username else "invalid_url"
+                discard_reasons[reason] = discard_reasons.get(reason, 0) + 1
+                continue
+            title = re.sub(r"[\[\]\r\n]", " ", title)
+            link = link.replace("(", "%28").replace(")", "%29").replace(" ", "%20")
+            results.append(WebSearchResult(title=title, url=link, snippet=snippet))
 
-        return results[: max_results or 0]
+        results = results[: max_results or 0]
+        self.last_diagnostics["basic_validated_count"] = len(results)
+        self.last_diagnostics["provider_discard_reasons"] = discard_reasons
+        return results
 
 
 class OfflineSearch:
@@ -118,22 +207,43 @@ class WebSearchService:
 
     @staticmethod
     def _default_backend():
-        provider = (os.environ.get("ITGLASSES_WEB_PROVIDER") or "duckduckgo").lower()
+        provider = (os.environ.get("ITGLASSES_WEB_PROVIDER") or "duckduckgo").strip().lower()
         if provider in {"offline", "none", "mock"}:
             return OfflineSearch()
         if provider in {"duckduckgo", "ddg", "free"}:
-            try:
-                return DuckDuckGoSearch()
-            except Exception:  # noqa: BLE001 - the provider stays disabled below
-                pass
-        return OfflineSearch()
+            return DuckDuckGoSearch()
+        raise ValueError("Unsupported ITGLASSES_WEB_PROVIDER configuration")
 
     async def search(self, query: str, max_results: int = 5) -> list[WebSearchResult]:
+        backend_name = (
+            "duckduckgo" if isinstance(self.backend, DuckDuckGoSearch)
+            else "offline" if isinstance(self.backend, OfflineSearch)
+            else "custom"
+        )
+        self.last_diagnostics = {
+            "query_category": search_query_category(query),
+            "provider": backend_name,
+            "provider_result_count": 0,
+            "basic_validated_count": 0,
+            "provider_discard_reasons": {},
+            "error_category": None,
+        }
         if not self.enabled:
+            self.last_error = WebSearchError(
+                "public search is disabled", "provider_unavailable"
+            )
+            self.last_diagnostics["error_category"] = "provider_unavailable"
             return []
         self.last_error = None
-        official_microsoft = bool(re.search(r"windows|microsoft", query, re.I) and re.search(r"oficial|official", query, re.I))
         windows = re.search(r"windows\s+(\d+)", query, re.I)
+        windows_release_query = bool(
+            windows
+            and re.search(r"versi[oó]n|version|latest|current|newest|reciente|actual|[uú]ltim", query, re.I)
+        )
+        official_microsoft = windows_release_query or bool(
+            re.search(r"windows|microsoft", query, re.I)
+            and re.search(r"oficial|official", query, re.I)
+        )
         if official_microsoft:
             # Search terms, not a canned answer: release values are fetched below.
             if windows:
@@ -141,24 +251,59 @@ class WebSearchService:
             query += " site:learn.microsoft.com"
         try:
             results = await self.backend.search(query, max_results)
+            backend_diagnostics = getattr(self.backend, "last_diagnostics", {})
+            self.last_diagnostics["provider_result_count"] = backend_diagnostics.get(
+                "provider_result_count", len(results)
+            )
+            self.last_diagnostics["basic_validated_count"] = backend_diagnostics.get(
+                "basic_validated_count", len(results)
+            )
+            self.last_diagnostics["provider_discard_reasons"] = dict(
+                backend_diagnostics.get("provider_discard_reasons", {})
+            )
             if official_microsoft:
+                original_count = len(results)
                 results = [r for r in results if (urlsplit(r.url).hostname or "").endswith(".microsoft.com")]
-            if official_microsoft and windows:
+                excluded = original_count - len(results)
+                if excluded:
+                    reasons = self.last_diagnostics["provider_discard_reasons"]
+                    reasons["not_official_domain"] = reasons.get("not_official_domain", 0) + excluded
+            if windows_release_query and windows:
                 for index, result in enumerate(results):
                     parsed = urlsplit(result.url)
-                    if parsed.hostname == "learn.microsoft.com" and parsed.path.endswith(f"/windows{windows.group(1)}-release-information"):
+                    if (parsed.hostname == "learn.microsoft.com"
+                            and parsed.path.rstrip("/").endswith(f"/windows{windows.group(1)}-release-information")):
                         # Read the live official table rather than trusting a stale snippet.
                         enriched = await asyncio.to_thread(self._windows_release, result)
                         results[index] = enriched
                         results.insert(0, results.pop(index))
                         break
-            logging.getLogger("uvicorn.error").info("Public search backend=%s results=%d", type(self.backend).__name__, len(results))
         except WebSearchError as exc:
             self.last_error = exc
-            logging.getLogger("uvicorn.error").warning("Public search failed: %s", exc)
+            backend_diagnostics = getattr(self.backend, "last_diagnostics", {})
+            self.last_diagnostics["provider_result_count"] = backend_diagnostics.get(
+                "provider_result_count", 0
+            )
+            self.last_diagnostics["basic_validated_count"] = backend_diagnostics.get(
+                "basic_validated_count", 0
+            )
+            self.last_diagnostics["provider_discard_reasons"] = dict(
+                backend_diagnostics.get("provider_discard_reasons", {})
+            )
+            self.last_diagnostics["error_category"] = _safe_error_category(exc) or "provider_unavailable"
             return []
+        except Exception:
+            self.last_diagnostics["error_category"] = "provider_unavailable"
+            raise
         if not results:
-            self.last_error = WebSearchError("provider returned no public sources")
+            category = (
+                "provider_unavailable" if isinstance(self.backend, OfflineSearch)
+                else "no_results"
+            )
+            self.last_error = WebSearchError("provider returned no public sources", category)
+            self.last_diagnostics["error_category"] = category
+        else:
+            self.last_diagnostics["error_category"] = _safe_error_category(self.last_error)
         return results
 
     @staticmethod
@@ -189,7 +334,7 @@ class WebSearchService:
                        f"({latest[2]}). Compilación publicada: {latest[7]}; fecha de revisión: {latest[6]}. "
                        "La disponibilidad para cada equipo depende del canal y la compatibilidad.")
             logging.getLogger("uvicorn.error").info("Official release page fetched HTTP 200; version=%s", latest[0])
-            return WebSearchResult(result.title, result.url, excerpt)
+            return WebSearchResult(result.title, result.url, excerpt, verified=True)
         except (requests.RequestException, ValueError, UnicodeError) as exc:
             logging.getLogger("uvicorn.error").warning("Official release verification failed: %s", exc)
             return WebSearchResult(result.title, result.url,
@@ -219,6 +364,3 @@ _WEB_NEED_QUERY = re.compile(
 
 # Labels shown in the chat UI, on the same status map used for knowledge and social.
 WEB_ROUTE_LABEL = "Búsqueda pública"
-
-
-

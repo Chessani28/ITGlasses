@@ -11,8 +11,23 @@ _THANKS = re.compile(
     re.IGNORECASE,
 )
 
+_THANKS_WITH_BYE = re.compile(
+    r"^(?:gracias|muchas?\s*gracias|te\s*agradezco|thanks|thank\s*you)"
+    r"(?:\s*[,;]\s*|\s+y\s+)"
+    r"(?:adi[oó]s|hasta\s*luego|nos\s*vemos|bye|chao|hasta\s*pronto)\s*[!.?]*$",
+    re.IGNORECASE,
+)
+
 _HOW_ARE_YOU = re.compile(
     r"^(?:c[oó]mo\s*est[aá]s?|qu[eé]\s*tal|how\s*are\s*you|c[oó]mo\s*te\s*va)\s*[!.?]*$",
+    re.IGNORECASE,
+)
+
+_GREETING_WITH_HOW_ARE_YOU = re.compile(
+    r"^(?:hola+|buenos?\s*d[ií]as?|buenas?\s*tardes?|buenas?\s*noches?|"
+    r"hey+|hi+|hello+|saludos)\s*[,;]\s*(?:¿\s*)?"
+    r"(?:c[oó]mo\s*est[aá]s?|qu[eé]\s*tal|how\s*are\s*you|c[oó]mo\s*te\s*va)"
+    r"\s*\??\s*$",
     re.IGNORECASE,
 )
 
@@ -37,8 +52,12 @@ def detect_social_intent(text: str) -> str | None:
     # Must be short to avoid overriding real questions
     if len(text) > 60:
         return None
+    if _GREETING_WITH_HOW_ARE_YOU.match(text):
+        return "how_are_you"
     if _GREETINGS.match(text):
         return "greeting"
+    if _THANKS_WITH_BYE.match(text):
+        return "thanks"
     if _THANKS.match(text):
         return "thanks"
     if _HOW_ARE_YOU.match(text):

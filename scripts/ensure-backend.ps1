@@ -7,6 +7,7 @@ $startupTimeoutSeconds = 45
 $healthTimeoutSeconds = 2
 $pollIntervalSeconds = 1
 $script:LastHealthError = $null
+. "$PSScriptRoot\runtime-config.ps1"
 
 function Test-BackendHealth {
     try {
@@ -135,25 +136,32 @@ if (-not $powerShellPath) {
 }
 $arguments = '-NoProfile -ExecutionPolicy Bypass -File "{0}" -Provider {1}' -f $startScript, $Provider
 $startedAt = Get-Date
+$previousRuntimeEnvironment = Set-ITGlassesRuntimeConfiguration -ProjectRoot $projectRoot
+$whisperConfigured = (
+    -not [string]::IsNullOrWhiteSpace($env:ITGLASSES_WHISPER_PYTHON) -and
+    -not [string]::IsNullOrWhiteSpace($env:ITGLASSES_WHISPER_MODEL)
+)
 
 try {
-    $launcher = Start-Process -FilePath $powerShellPath `
-        -ArgumentList $arguments `
-        -WorkingDirectory $projectRoot `
-        -WindowStyle Hidden `
-        -RedirectStandardOutput $stdoutPath `
-        -RedirectStandardError $stderrPath `
-        -PassThru
+    try {
+        $launcher = Start-Process -FilePath $powerShellPath `
+            -ArgumentList $arguments `
+            -WorkingDirectory $projectRoot `
+            -WindowStyle Hidden `
+            -RedirectStandardOutput $stdoutPath `
+            -RedirectStandardError $stderrPath `
+            -PassThru
+    } finally {
+        Restore-ITGlassesRuntimeEnvironment -Previous $previousRuntimeEnvironment
+    }
 } catch {
     Write-Error "Could not launch the independent backend process: $($_.Exception.Message)"
     exit 1
 }
 $launcherStartTime = $launcher.StartTime
 
-if ($env:ITGLASSES_WHISPER_PYTHON -and $env:ITGLASSES_WHISPER_MODEL) {
-    Write-Output 'Whisper Small environment settings will be inherited by the backend process.'
-} elseif ($env:ITGLASSES_WHISPER_PYTHON -or $env:ITGLASSES_WHISPER_MODEL) {
-    Write-Warning 'Only one Whisper Small environment setting is present; the backend will inherit the incomplete configuration.'
+if ($whisperConfigured) {
+    Write-Output 'Validated Whisper Small settings will be inherited by the backend process.'
 }
 
 $startupTimer = [System.Diagnostics.Stopwatch]::StartNew()

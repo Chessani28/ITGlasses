@@ -32,8 +32,9 @@ Start Ollama if needed with `scripts/start-ollama.ps1`, then the backend with
 PowerShell terminals. Open the URL above. Avoid starting duplicate services.
 For Copilot terminal tasks, use `scripts/ensure-backend.ps1 -Provider ollama`
 instead: it reuses a healthy backend or starts one independently and returns
-after a bounded health check. Any configured `ITGLASSES_WHISPER_PYTHON` and
-`ITGLASSES_WHISPER_MODEL` values are inherited by the backend process.
+after a bounded health check. Both launchers load the optional, ignored
+`runtime-config.psd1` and validate Whisper and required authentication settings.
+See [safe runtime configuration and restart](docs/voice-assistant.md#safe-runtime-configuration-and-restart).
 Full startup, usage, verification and limitations: [Web interface guide](docs/interface.md).
 
 Verification: 92 Python tests and 11 JavaScript tests passed. Browser checks used

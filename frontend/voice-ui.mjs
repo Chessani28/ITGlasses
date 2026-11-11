@@ -6,6 +6,41 @@ export function initVoice(chat) {
   const $ = id => document.getElementById(id.replace(/^#+/, "")), audio = $("voice-audio");
   const recordedAudio = $("voice-playback-audio");
   let playback, audioUrl, recordingUrl, captureSettings = {};
+  let transcriptConfirmation = null;
+  const engineName = engine => engine === "whisper-small" ? "Whisper Small · experimental" : "Vosk";
+  function updateEngineAvailability(data) {
+    const engines = data.stt_engines || {};
+    $("#voice-engine-vosk").disabled = !engines.vosk?.available;
+    $("#voice-engine-whisper").disabled = !engines["whisper-small"]?.available;
+    const reason = engines["whisper-small"]?.reason;
+    $("#voice-engine-status").textContent = engines["whisper-small"]?.available
+      ? "Whisper Small disponible · uso experimental local."
+      : reason || "Whisper Small no está configurado; Vosk permanece disponible.";
+  }
+  function resolveTranscriptConfirmation(value) {
+    if (!transcriptConfirmation) return;
+    const {resolve, signal, abort} = transcriptConfirmation;
+    transcriptConfirmation = null;
+    $("#voice-transcript-confirmation").hidden = true;
+    $("#voice-transcript-confirm").removeEventListener("click", confirm);
+    $("#voice-transcript-discard").removeEventListener("click", discard);
+    signal.removeEventListener("abort", abort);
+    resolve(value);
+  }
+  function confirm() { resolveTranscriptConfirmation($("#voice-transcript-editor").value); }
+  function discard() { resolveTranscriptConfirmation(null); }
+  function confirmTranscript(transcript, signal) {
+    $("#voice-transcript-editor").value = transcript.text;
+    $("#voice-transcript-confirmation").hidden = false;
+    $("#voice-transcript-editor").focus();
+    return new Promise(resolve => {
+      const abort = () => resolveTranscriptConfirmation(null);
+      transcriptConfirmation = {resolve, signal, abort};
+      $("#voice-transcript-confirm").addEventListener("click", confirm, {once: true});
+      $("#voice-transcript-discard").addEventListener("click", discard, {once: true});
+      signal.addEventListener("abort", abort, {once: true});
+    });
+  }
   function clearRecording() {
     recordedAudio.pause(); recordedAudio.removeAttribute("src"); recordedAudio.load();
     if (recordingUrl) URL.revokeObjectURL(recordingUrl);
@@ -50,12 +85,25 @@ export function initVoice(chat) {
       $("voice-playback-btn").disabled = active || !recordingUrl;
       $("voice-start").disabled = active; $("voice-stop").disabled = !active;
       $("voice-preferences").disabled = active; $("voice-diagnostic-toggle").disabled = active;
+      $("voice-engine").disabled = active;
       chat.lock(active);
     },
-    transcript(text, ms) { $("voice-transcript").textContent = text || "No se reconociÃ³ voz."; $("voice-timing").textContent = `TranscripciÃ³n: ${elapsed(ms)}`; },
-    async transcribe(blob, signal) {
-      const resp = await api("/api/v1/voice/transcribe", {method: "POST", headers: {"Content-Type": "audio/wav"}, body: blob, signal}, 95000);
+    transcript(text, ms, engine) {
+      $("voice-transcript").textContent = text || "No se reconoció voz.";
+      $("#voice-engine-active").textContent = engineName(engine);
+      $("voice-timing").textContent = `Transcripción: ${elapsed(ms)}`;
+    },
+    async transcribe(blob, signal, engine) {
+      if (!["vosk", "whisper-small"].includes(engine)) {
+        throw new Error("Selecciona un motor de reconocimiento de voz válido.");
+      }
+      const resp = await api("/api/v1/voice/transcribe", {method: "POST",
+        headers: {"Content-Type": "audio/wav", "X-ITGlasses-STT-Engine": engine},
+        body: blob, signal}, 95000);
       const data = resp.data;
+      if (data.engine !== engine) {
+        throw new Error(`El backend devolvió ${engineName(data.engine)} en lugar de ${engineName(engine)}. No se usará esa transcripción.`);
+      }
       const {recordingDurationMs, stopReason, speechDurationMs, energyRms} = blob.voiceDiagnostics || {};
       const {raw_text, normalized_text, quality_reasons: clarificationReasons} = data;
       const confidence = null; // No invented aggregate confidence score.
@@ -66,13 +114,16 @@ export function initVoice(chat) {
       $("#voice-audio-energy").textContent = energyRms != null ? energyRms.toFixed(6) : "â€”";
       $("#voice-transcript-raw").textContent = raw_text || "â€”";
       $("#voice-transcript-normalized").textContent = normalized_text || "â€”";
+      $("#voice-engine-active").textContent = engineName(data.engine);
       $("#voice-confidence").textContent = confidence != null ? `${confidence.toFixed(2)}` : "â€”";
       $("#voice-clarification-reasons").textContent = clarificationReasons && clarificationReasons.length ? clarificationReasons.join(", ") : "â€”";
+      $("voice-timing").textContent = `Transcripción · ${engineName(data.engine)}: ${elapsed(data.elapsed_ms)}`;
       clearRecording();
       recordingUrl = URL.createObjectURL(blob); recordedAudio.src = recordingUrl; recordedAudio.load();
       $("voice-playback-btn").disabled = controller.active;
       return data;
     },
+    confirmTranscript,
     chat: (text, signal) => chat.send(text, signal), speak
   });
   $("voice-playback-btn").addEventListener("click", () => { if (!controller.active && recordingUrl) { recordedAudio.currentTime = 0; return recordedAudio.play().catch(() => {}); } });
@@ -80,14 +131,23 @@ export function initVoice(chat) {
     $("voice-start").disabled = true;
     try {
       const {data} = await api("/api/v1/voice/status", {}, 10000);
+      updateEngineAvailability(data);
       if (!data.stt_available || ($("voice-speak").checked && !data.tts_available)) throw new Error("Faltan dependencias o modelos locales de voz. Consulta docs/voice-assistant.md.");
+      const engine = $("voice-engine").value;
+      if (!data.stt_engines?.[engine]?.available) {
+        throw new Error(data.stt_engines?.[engine]?.reason || "El motor de voz seleccionado no está disponible.");
+      }
       await controller.start({wake: $("voice-wake").checked, speak: $("voice-speak").checked,
+        engine,
         aliases: $("voice-aliases").value.split(","), windowSeconds: Number($("voice-window").value),
         speaker: Number($("voice-speaker").value), speed: Number($("voice-speed").value)});
     } catch (error) { controller.fail(error.message); }
     finally { $("voice-start").disabled = controller.active; }
   });
   $("voice-stop").addEventListener("click", () => controller.stop());
+  api("/api/v1/voice/status", {}, 10000).then(({data}) => updateEngineAvailability(data)).catch(() => {
+    $("#voice-engine-status").textContent = "No se pudo consultar la disponibilidad de los motores locales.";
+  });
   $("voice-diagnostic-toggle").addEventListener("change", async (event) => {
     $("voice-diagnostic-section").hidden = !event.target.checked;
     if (event.target.checked) {
@@ -120,4 +180,3 @@ export function initVoice(chat) {
   window.addEventListener("pagehide", () => { controller.stop(); clearRecording(); });
   return controller;
 }
-

@@ -7,12 +7,12 @@ import pytest
 from backend.app.voice.service import VoiceService
 from backend.app.knowledge.models import KnowledgeError
 from test_voice import wav
-from test_assistant_service import build, ask
+from test_assistant_service import StubKnowledge, build, ask
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows reload regression")
 def test_selector_loop_transcribes_real_silence_worker(tmp_path, monkeypatch):
     svc=VoiceService(tmp_path)
-    monkeypatch.setattr(svc,'status',lambda:{'stt_available':True})
+    monkeypatch.setattr(svc,'_vosk_available',lambda:True)
     with asyncio.Runner(loop_factory=asyncio.SelectorEventLoop) as runner:
         result=runner.run(svc.run('stt',wav()))
     assert result['text']=='' and result['needs_clarification']
@@ -36,7 +36,7 @@ class Process:
 
 @pytest.mark.parametrize('stdout,rc',[(b'not json',0),(b'[]',0),(b'{}',0),(b'{"error":"worker_error","stage":"model_init","error_type":"RuntimeError","message":"PRIVATE_TRANSCRIPT"}',1)])
 def test_worker_failures_return_502_and_release_service(tmp_path,monkeypatch,caplog,stdout,rc):
-    svc=VoiceService(tmp_path); monkeypatch.setattr(svc,'status',lambda:{'stt_available':True})
+    svc=VoiceService(tmp_path); monkeypatch.setattr(svc,'_vosk_available',lambda:True)
     process=Process(stdout,rc)
     async def spawn(*a,**k): return process
     monkeypatch.setattr(asyncio,'create_subprocess_exec',spawn)
@@ -47,7 +47,7 @@ def test_worker_failures_return_502_and_release_service(tmp_path,monkeypatch,cap
     assert not svc.busy and not list(svc.temporary.iterdir())
 
 def test_timeout_kills_worker_and_releases_lock(tmp_path,monkeypatch):
-    svc=VoiceService(tmp_path); monkeypatch.setattr(svc,'status',lambda:{'stt_available':True})
+    svc=VoiceService(tmp_path); monkeypatch.setattr(svc,'_vosk_available',lambda:True)
     process=Process(rc=None)
     async def spawn(*a,**k): return process
     original_timeout=asyncio.timeout
@@ -58,7 +58,8 @@ def test_timeout_kills_worker_and_releases_lock(tmp_path,monkeypatch):
     assert not svc.busy and not list(svc.temporary.iterdir())
 
 def test_printer_followup_keeps_subject_and_explicit_subject_switches():
-    svc=build()
+    knowledge=StubKnowledge(answer="Sin evidencia documental.",status="insufficient_evidence")
+    svc=build(knowledge=knowledge)
     assert ask(svc,'Mi impresora no funciona.','printer')['route']=='general'
     assert ask(svc,'No se conecta a mi computadora.','printer')['route']=='general'
     assert svc.sessions.get('printer')[1]['active_subject']=='impresora'
@@ -69,13 +70,15 @@ def test_printer_followup_keeps_subject_and_explicit_subject_switches():
     assert svc.sessions.get('printer')[1]['active_subject']=='router'
 
 def test_manual_request_overrides_general_context():
-    svc=build(); ask(svc,'Mi impresora no funciona.','manual')
+    knowledge=StubKnowledge(answer="Sin evidencia documental.",status="insufficient_evidence")
+    svc=build(knowledge=knowledge); ask(svc,'Mi impresora no funciona.','manual')
     result=ask(svc,'Según el manual, ¿qué mantenimiento necesitan las computadoras?','manual')
     assert result['route']=='knowledge'
     assert svc.knowledge.queries[-1].message.startswith('Según el manual')
 
 def test_unrelated_session_does_not_inherit_printer():
-    svc=build(); ask(svc,'Mi impresora no funciona.','printer')
+    knowledge=StubKnowledge(answer="Sin evidencia documental.",status="insufficient_evidence")
+    svc=build(knowledge=knowledge); ask(svc,'Mi impresora no funciona.','printer')
     result=ask(svc,'No se conecta.','new')
     assert '¿' in result['answer'] and not svc.provider.calls[-1].endswith('No se conecta.')
 
@@ -108,7 +111,8 @@ def test_severe_uncertainty_clarifies_but_mild_warning_does_not():
 
 
 def test_explicit_conceptual_topic_change_clears_old_problem_subject():
-    svc=build(); ask(svc,'Mi impresora no funciona.','change')
+    knowledge=StubKnowledge(answer="Sin evidencia documental.",status="insufficient_evidence")
+    svc=build(knowledge=knowledge); ask(svc,'Mi impresora no funciona.','change')
     ask(svc,'¿Qué es una VPN?','change')
     assert not svc.sessions.get('change')[1].get('active_subject')
     ask(svc,'¿Y cómo funciona?','change')

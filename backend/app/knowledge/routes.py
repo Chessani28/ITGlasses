@@ -69,7 +69,9 @@ async def reindex_document(document_id: str, svc=Depends(service)):
 
 
 @router.post("/knowledge/chat")
-async def knowledge_chat(payload: KnowledgeRequest, svc=Depends(service)):
+async def knowledge_chat(payload: KnowledgeRequest, request: Request, svc=Depends(service)):
+    from backend.app.voice.service import release_whisper_for_chat
+    await release_whisper_for_chat(request)
     return await svc.query(payload)
 
 

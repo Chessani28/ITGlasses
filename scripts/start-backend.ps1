@@ -2,6 +2,7 @@ param([ValidateSet('mock','ollama')][string]$Provider = 'ollama')
 $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path $PSScriptRoot -Parent
 $baseUrl = "http://127.0.0.1:8000"
+. "$PSScriptRoot\runtime-config.ps1"
 
 function Test-BackendHealth {
     try {
@@ -26,10 +27,14 @@ if ($listeners) {
     exit 1
 }
 
+$previousRuntimeEnvironment = Set-ITGlassesRuntimeConfiguration -ProjectRoot $projectRoot
 $previousProvider = $env:ITGLASSES_PROVIDER
 try {
     $env:ITGLASSES_PROVIDER = $Provider
     Push-Location $projectRoot
     try { & "$projectRoot\.venv\Scripts\python.exe" -m backend.run }
     finally { Pop-Location }
-} finally { $env:ITGLASSES_PROVIDER = $previousProvider }
+} finally {
+    $env:ITGLASSES_PROVIDER = $previousProvider
+    Restore-ITGlassesRuntimeEnvironment -Previous $previousRuntimeEnvironment
+}

@@ -79,15 +79,21 @@ export class VoiceController {
     this.clock.clearTimeout(this.timer); this.abort = new AbortController();
     this.state("transcribing", "Reconocimiento local en CPU…");
     try {
-      const transcript = await this.io.transcribe(audio, this.abort.signal);
+      const transcript = await this.io.transcribe(audio, this.abort.signal, this.preferences.engine);
       if (epoch !== this.epoch) return;
-      this.io.transcript(transcript.text, transcript.elapsed_ms);
+      this.io.transcript(transcript.text, transcript.elapsed_ms, transcript.engine);
       if (transcript.needs_clarification) {
         this.arm(waitingWake);
         this.state(this.phase, transcript.clarification || "No entendí con claridad. Repite la pregunta.");
         return;
       }
       let question = transcript.text.trim();
+      if (this.io.confirmTranscript) {
+        const confirmed = await this.io.confirmTranscript(transcript, this.abort.signal);
+        if (epoch !== this.epoch) return;
+        if (confirmed === null) { this.arm(waitingWake); return; }
+        question = confirmed.trim();
+      }
       if (waitingWake) question = wakeQuestion(question, this.preferences.aliases);
       if (question === null) { this.arm(true); return; }
       if (!question) { this.arm(waitingWake ? false : this.preferences.wake); return; }

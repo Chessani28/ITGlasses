@@ -47,6 +47,7 @@ class SessionStore:
                 "current_step_index": 0,
                 "knowledge_conversation_id": None,
                 "active_sources": [],
+                "pending_alternative": None,
             }
             self._sessions[session_id] = state
         state["time"] = now

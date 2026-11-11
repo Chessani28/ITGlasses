@@ -64,6 +64,9 @@ async def update_diagnostic_settings(payload: DiagnosticSettings, request: Reque
 @router.post("/transcribe")
 async def transcribe(request: Request):
     svc = speech_service(request)
+    engine = request.headers.get("x-itglasses-stt-engine", "vosk").strip().lower()
+    if engine not in {"vosk", "whisper-small"}:
+        raise KnowledgeError("voice_engine_invalid", "Select a supported local speech engine.", 422)
     if request.headers.get("content-type", "").split(";")[0] != "audio/wav":
         raise KnowledgeError("audio_format", "Send audio/wav, not browser-compressed audio.", 415)
     raw = bytearray()
@@ -72,7 +75,7 @@ async def transcribe(request: Request):
         if len(raw) > MAX_AUDIO:
             raise KnowledgeError("audio_size", "Audio exceeds the 30-second limit.", 413)
     validate_audio(raw)
-    return await svc.run("stt", bytes(raw), request)
+    return await svc.run("stt", bytes(raw), request, engine=engine)
 
 
 @router.post("/synthesize")

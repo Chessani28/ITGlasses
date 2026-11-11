@@ -35,6 +35,15 @@
   <label class="diagnostic-toggle"><input type="checkbox" id="voice-diagnostic-toggle"> Modo diagnóstico · desarrollo</label></div>
         <p id="voice-detail" role="status">Pulsa Activar para conceder permiso. El audio se procesa en este equipo.</p>
         <p class="voice-transcription" id="voice-transcript" aria-live="polite">Tu transcripción aparecerá aquí. Las respuestas y citas aparecerán en el chat.</p>
+        <p class="voice-engine-label">Motor utilizado: <strong id="voice-engine-active">Vosk</strong></p>
+        <div id="voice-transcript-confirmation" class="voice-transcript-confirmation" hidden>
+          <label for="voice-transcript-editor">Revisa y corrige la transcripción antes de enviarla al chat.</label>
+          <textarea id="voice-transcript-editor" rows="3" maxlength="2000"></textarea>
+          <div class="voice-buttons">
+            <button id="voice-transcript-confirm" class="primary-button" type="button">Confirmar y enviar</button>
+            <button id="voice-transcript-discard" class="secondary-button" type="button">Descartar</button>
+          </div>
+        </div>
         <div id="voice-diagnostic-section" hidden>
           <h3>Diagnóstico de grabación</h3>
           <div id="voice-recording-status" class="voice-diagnostic-item"></div>
@@ -70,6 +79,11 @@
         </div>
         <audio id="voice-audio" controls aria-label="Respuesta hablada local"></audio><small id="voice-timing"></small>
         <details><summary>Preferencias de voz</summary><fieldset id="voice-preferences">
+          <label>Reconocimiento de voz<select id="voice-engine">
+            <option id="voice-engine-vosk" value="vosk" selected>Vosk · predeterminado</option>
+            <option id="voice-engine-whisper" value="whisper-small" disabled>Whisper Small · experimental</option>
+          </select></label>
+          <small id="voice-engine-status" class="voice-wide">Vosk es el motor predeterminado.</small>
           <label><input id="voice-wake" type="checkbox"> Esperar «Oye, ITGlasses» · experimental</label>
           <label><input id="voice-speak" type="checkbox" checked> Leer las respuestas</label>
           <label>Ventana de seguimiento<select id="voice-window"><option value="15">15 segundos</option><option value="30">30 segundos</option><option value="60">60 segundos</option></select></label>

@@ -10,27 +10,34 @@ Three guarantees are implemented here:
   citation of the chunk they came from.
 """
 import asyncio
+import html
 import re
 import uuid
+from urllib.parse import urlsplit
 
 from backend.app.assistant.memory import SessionStore
 from backend.app.assistant.procedures import flatten
 from backend.app.assistant.references import detect_reference
 from backend.app.assistant.web_search import (
+    WebSearchError,
     WebSearchService,
     _WEB_NEED_QUERY,
     WebSearchResult,
+    search_query_category,
 )
 from backend.app.knowledge.social import detect_social_intent, social_response
 
 TOKEN = re.compile(r"[a-z0-9]+")
 ACCENTS = str.maketrans("áàäâãéèëêíìïîóòöôõúùüûñç", "aaaaaeeeeiiiiooooouuuunc")
 SENTENCE_END = re.compile(r"[.!?;:]")
+WINDOWS_11 = re.compile(r"\bwindows\s+11\b", re.IGNORECASE)
+CURRENT_VERSION = re.compile(
+    r"\b(?:versi[oó]n|version|latest|current|newest|reciente|actual|[uú]ltim)",
+    re.IGNORECASE,
+)
 
-# Ordinary conceptual questions ("¿qué es X?", "explícame X", "diferencia
-# entre X e Y"). They ask for an explanation, not for a company procedure, so
-# they are answered by the general provider instead of the grounded knowledge
-# pipeline.
+# Recognize conceptual question phrasing. IT topics still query manuals first;
+# non-IT concepts can use the general provider directly.
 CONCEPTUAL_QUESTION = re.compile(
     r"qu[eé]\s+(?:es|son|significa)\b"
     r"|\bdefinicion\b|\bdefin(?:e|icio|icioname|ame|iendo)\b"
@@ -40,6 +47,27 @@ CONCEPTUAL_QUESTION = re.compile(
     r"|\bcomo\s+funciona\b"
     r"|\bwhat\s+(?:is|are)\b|\bexplain\b|\bdifference\s+between\b"
     r"|\bhow\s+does\b.*\bwork\b",
+    re.IGNORECASE,
+)
+
+# Common IT topics whose explanations should first be checked against the
+# authorized knowledge base. General conversation remains on the fast path.
+IT_RELATED = re.compile(
+    r"\b(?:vpn|dns|dhcp|tcp|udp|ip|ipv4|ipv6|http|https|wifi|wi-fi|ethernet|"
+    r"active directory|directorio activo|windows|linux|macos|android|ios|"
+    r"computadora|ordenador|equipo|laptop|impresora|servidor|red|redes|"
+    r"router|switch|firewall|cortafuegos|proxy|correo|outlook|office|"
+    r"hardware|software|sistema operativo|protocolo|base de datos|"
+    r"contrase(?:n|ñ)a|credencial|error\s+(?:http\s*)?\d{3}|"
+    r"blue screen|pantalla azul|bios|uefi|ram|ssd|disco duro|"
+    r"teclado|rat[oó]n|mouse|monitor|tarjeta de red|gateway|subred|subnet|raid|"
+    r"impresor[ií]a)\b",
+    re.IGNORECASE,
+)
+
+IT_CONTEXTUAL_FOLLOWUP = re.compile(
+    r"^(?:y\s+)?(?:eso|esto|lo anterior|el anterior|la anterior|si eso|si no|"
+    r"que pasa|que hago|como|por que|para que|ahora que|y si)\b",
     re.IGNORECASE,
 )
 
@@ -56,10 +84,77 @@ DOCUMENTED_TOPIC = re.compile(
     re.IGNORECASE,
 )
 
-# The knowledge service refuses a *company* question it cannot verify with
-# this sentence. Such a refusal must be preserved, because the user asked for
-# a documented procedure that does not exist.
-COMPANY_REFUSAL_MARK = "no pude verificar"
+EXPLICIT_MANUAL_REQUEST = re.compile(
+    r"\bseg[uú]n\s+(?:(?:mis|los|las|la)\s+)?(?:manual(?:es)?|documentos?|"
+    r"documentaci[oó]n|gu[ií]as?|procedimientos?)\b"
+    r"|\b(?:en|desde|de)\s+(?:(?:mis|los|las|un|una)\s+)?"
+    r"(?:manual(?:es)?|documentos?|gu[ií]as?)\b"
+    r"|\b(?:manual(?:es)?|documentos?)\s+(?:internos?|autorizados?|de\s+(?:mi|la)\s+empresa)\b"
+    r"|\bde\s+acuerdo\s+con\s+(?:mis\s+)?(?:manual(?:es)?|documentos?|"
+    r"documentaci[oó]n|gu[ií]as?)\b",
+    re.IGNORECASE,
+)
+
+_PUBLIC_TOPICS = (
+    (re.compile(r"\bactive\s+directory\b|\bdirectorio\s+activo\b", re.I),
+     "Active Directory", "Active Directory"),
+    (re.compile(r"\bvpn\b|\bred\s+privada\s+virtual\b", re.I),
+     "VPN", "VPN (Red Privada Virtual)"),
+    (re.compile(r"\bdhcp\b", re.I), "DHCP", "DHCP"),
+    (re.compile(r"\bdns\b", re.I), "DNS", "DNS"),
+    (re.compile(r"\bwi[\s-]?fi\b|\bwifi\b", re.I), "Wi-Fi", "Wi-Fi"),
+    (re.compile(r"\bimpresora\b|\bprinter\b", re.I), "impresora", "impresora"),
+    (re.compile(r"\bwindows\s+11\b", re.I), "Windows 11", "Windows 11"),
+    (re.compile(r"\bwindows\s+10\b", re.I), "Windows 10", "Windows 10"),
+    (re.compile(r"\bwindows\b", re.I), "Windows", "Windows"),
+    (re.compile(r"\bandroid\b", re.I), "Android", "Android"),
+    (re.compile(r"\b(?:macos|mac\s*os)\b", re.I), "macOS", "macOS"),
+    (re.compile(r"\b(?:ios|iphone|ipad)\b", re.I), "iOS", "iOS"),
+    (re.compile(r"\blinux\b", re.I), "Linux", "Linux"),
+)
+
+_PLATFORMS = (
+    (re.compile(r"\bwindows\s+11\b", re.I), "Windows 11"),
+    (re.compile(r"\bwindows\s+10\b", re.I), "Windows 10"),
+    (re.compile(r"\bwindows\b", re.I), "Windows"),
+    (re.compile(r"\bandroid\b", re.I), "Android"),
+    (re.compile(r"\b(?:macos|mac\s*os)\b", re.I), "macOS"),
+    (re.compile(r"\b(?:ios|iphone|ipad)\b", re.I), "iOS"),
+    (re.compile(r"\blinux\b", re.I), "Linux"),
+)
+
+_SEARCH_SELECTION = re.compile(
+    r"\b(?:busca(?:r|lo|la|rlo|rla)?|investiga(?:r|lo|la|rlo|rla)?|"
+    r"primera\s+opci[oó]n|opci[oó]n\s+uno)\b",
+    re.IGNORECASE,
+)
+_GENERAL_SELECTION = re.compile(
+    r"\b(?:expl[ií]ca(?:me|melo)?|gu[ií]a\s+general|explicaci[oó]n\s+general|"
+    r"con\s+lo\s+que\s+sabes|lo\s+que\s+sabes)\b"
+    r"|\bsegunda\s+opci[oó]n\b|\bopci[oó]n\s+dos\b",
+    re.IGNORECASE,
+)
+_DECLINE_SELECTION = re.compile(
+    r"\bno\s*(?:,\s*)?gracias\b|\bdespu[eé]s\b|\bya\s+no\s+importa\b|"
+    r"\bno\s+lo\s+necesito\b|\bcancel(?:a|ar)\b",
+    re.IGNORECASE,
+)
+_AFFIRMATION = re.compile(r"^(?:s[ií]|claro|vale|ok|de\s+acuerdo)[.! ]*$", re.I)
+_PUBLIC_ACTION = re.compile(
+    r"\b(?:abre|abrir|selecciona|seleccionar|pulsa|presiona|haz clic|"
+    r"agrega|añade|introduce|ingresa|conecta|configura|instala|"
+    r"open|select|click|add|enter|connect|configure|install|go to)\b",
+    re.IGNORECASE,
+)
+_PUBLIC_STOPWORDS = frozenset("""
+    a al algo algunos ante bajo cada como con contra cual cuales cuando de del desde
+    donde durante e el ella ellas ellos en entre era es esa esas ese eso esos esta
+    estaba estas este esto estos fue ha hacia hasta hay la las le les lo los mas
+    me mi mis mucho muy ni no o para pero por porque que quien se sin sobre son su
+    sus te tiene tu tus un una unas uno unos y ya the a an and are as at be been
+    by for from had has have in into is it its of on or that the their there these
+    this to was were what when where which who with you your
+""".split())
 
 # Answer used when the general provider cannot be reached. It states that the
 # route is unavailable instead of inventing an explanation.
@@ -180,6 +275,401 @@ class UnifiedAssistantService:
         self.provider = provider
         self.sessions = SessionStore()
         self.web_search = web_search if web_search is not None else WebSearchService()
+
+    @staticmethod
+    def _alternative_choice(message):
+        folded = _fold(message).strip(" .!?¡¿")
+        if _DECLINE_SELECTION.search(folded):
+            return "decline"
+        if _SEARCH_SELECTION.search(folded):
+            return "public"
+        if _GENERAL_SELECTION.search(folded):
+            return "general"
+        if re.fullmatch(r"s[ií]\s*,?\s*por\s*favor[.! ]*", folded):
+            return "public"
+        if _AFFIRMATION.fullmatch(folded):
+            return "ambiguous"
+        return None
+
+    @staticmethod
+    def _public_query_parts(question, history=(), extra_description=""):
+        """Build public search text exclusively from allowlisted IT terms."""
+        topic_context = " ".join([question or "", extra_description or ""])
+        conversation = " ".join(
+            [topic_context] +
+            [entry[0] for entry in history[-6:] if isinstance(entry, (tuple, list)) and entry]
+        )
+        topic = next((entry for pattern, entry, _ in _PUBLIC_TOPICS if pattern.search(topic_context)), None)
+        if not topic:
+            return None, None, None
+
+        folded = _fold(topic_context)
+        if re.search(r"\b(?:versi[oó]n|reciente|actual|ultima|latest|current)\b", folded):
+            action = "Versión más reciente de"
+        elif re.search(r"\b(configur|configura|configure|instal|conect|setup)\w*\b", folded):
+            action = "Cómo configurar"
+        elif re.search(r"\b(error|problema|fall[oa]|no funciona|soluciona|resolver)\b", folded):
+            action = "Cómo solucionar problemas de"
+        elif re.search(r"\b(qu[eé]\s+es|significa|definici[oó]n|define)\b", folded):
+            action = "Qué es"
+        else:
+            action = "Información sobre"
+
+        platform = next(
+            (name for pattern, name in _PLATFORMS
+             if pattern.search(question or "") or pattern.search(extra_description or "")
+             or any(pattern.search(entry[0]) for entry in history[-6:]
+                    if isinstance(entry, (tuple, list)) and entry)),
+            None,
+        )
+        query = f"{action} {topic}"
+        if platform and platform != topic:
+            query += f" en {platform}"
+        display = next((label for pattern, _, label in _PUBLIC_TOPICS if pattern.search(topic_context)), topic)
+        return query, display, platform
+
+    @staticmethod
+    def _topic_key(message):
+        return next((key for pattern, key, _ in _PUBLIC_TOPICS if pattern.search(message or "")), None)
+
+    @staticmethod
+    def _pending_topic_changed(pending, message):
+        if not (re.search(r"[?¿]", message) or UnifiedAssistantService._is_it_related(message)
+                or _problem_subject(message)):
+            return False
+        pending_topic = pending.get("topic_key")
+        current_topics = {
+            key for pattern, key, _ in _PUBLIC_TOPICS if pattern.search(message or "")
+        }
+        if pending_topic and pending_topic in current_topics:
+            return False
+        if not pending_topic:
+            return bool(re.search(r"[?¿]", message) and current_topics)
+        return True
+
+    @staticmethod
+    def _offer_general_recovery(state, question, topic_key, display_topic, error):
+        state["web_sources"] = []
+        category = getattr(error, "category", "provider_unavailable")
+        if isinstance(error, TimeoutError):
+            category = "timeout"
+        public_message = getattr(
+            error, "public_message",
+            WebSearchError("public search failed", category).public_message,
+        )
+        state["pending_alternative"] = {
+            "question": (question or "")[:4000],
+            "topic_key": topic_key,
+            "offered_alternatives": ["general"],
+            "search_consent": True,
+            "public_search_failed": True,
+        }
+        return (
+            f"{public_message} ¿Quieres que te explique {display_topic} "
+            "de manera general?"
+        ), []
+
+    @staticmethod
+    def _log_public_search_diagnostics(
+        web_search,
+        query,
+        *,
+        relevance_filtered_count=0,
+        conversational_discard_reasons=None,
+        error_category=None,
+        response_mode="conversational_recovery",
+    ):
+        service_diagnostics = getattr(web_search, "last_diagnostics", {}) or {}
+        backend = getattr(web_search, "backend", None)
+        provider = (
+            "duckduckgo" if type(backend).__name__ == "DuckDuckGoSearch"
+            else "offline" if type(backend).__name__ == "OfflineSearch"
+            else "custom" if backend is not None
+            else "unavailable"
+        )
+        safe_reasons = {
+            "invalid_result", "missing_title", "invalid_url", "url_credentials",
+            "missing_fields", "invalid_content", "irrelevant_topic",
+            "no_actionable_evidence", "max_sources", "not_official_domain",
+            "unverified_source",
+        }
+
+        def filter_reasons(reasons):
+            if not isinstance(reasons, dict):
+                return {}
+            return {
+                reason: count
+                for reason, count in (reasons or {}).items()
+                if reason in safe_reasons and isinstance(count, int)
+                and not isinstance(count, bool) and count > 0
+            }
+
+        valid_errors = {"provider_unavailable", "timeout", "rate_limited", "no_results", "irrelevant"}
+        safe_error = error_category or service_diagnostics.get("error_category")
+        if not isinstance(safe_error, str) or safe_error not in valid_errors:
+            safe_error = None
+        provider_name = service_diagnostics.get("provider", provider)
+        if not isinstance(provider_name, str) or provider_name not in {
+            "duckduckgo", "offline", "custom", "unavailable"
+        }:
+            provider_name = "custom"
+
+        def safe_count(name, fallback=0):
+            count = service_diagnostics.get(name, fallback)
+            return count if isinstance(count, int) and not isinstance(count, bool) and count >= 0 else fallback
+
+        diagnostic = {
+            "query_category": search_query_category(query),
+            "provider": provider_name,
+            "provider_result_count": safe_count("provider_result_count"),
+            "basic_validated_count": safe_count("basic_validated_count"),
+            "relevance_filtered_count": relevance_filtered_count,
+            "discard_reasons": {
+                "provider": filter_reasons(service_diagnostics.get("provider_discard_reasons")),
+                "conversational": filter_reasons(conversational_discard_reasons),
+            },
+            "error_category": safe_error,
+            "response_mode": response_mode,
+        }
+        import logging
+        logging.getLogger("uvicorn.error").info(
+            "Public search diagnostics",
+            extra={"public_search_diagnostics": diagnostic},
+        )
+
+    async def _public_alternative_answer(
+        self, state, query, display_topic, original_question=None, topic_key=None
+    ):
+        if self.web_search is None:
+            self._log_public_search_diagnostics(
+                None, query, error_category="provider_unavailable"
+            )
+            return self._offer_general_recovery(
+                state, original_question, topic_key, display_topic,
+                WebSearchError("public search unavailable", "provider_unavailable"),
+            )
+        try:
+            results = await self.web_search.search(query, max_results=5)
+        except Exception as exc:  # noqa: BLE001 - report failure without exposing the original request
+            self._log_public_search_diagnostics(
+                self.web_search,
+                query,
+                error_category=getattr(exc, "category", "provider_unavailable"),
+            )
+            return self._offer_general_recovery(
+                state, original_question, topic_key, display_topic, exc
+            )
+        if not results:
+            error = getattr(self.web_search, "last_error", None) or WebSearchError(
+                "provider returned no public sources", "no_results"
+            )
+            self._log_public_search_diagnostics(
+                self.web_search,
+                query,
+                error_category=getattr(error, "category", "no_results"),
+            )
+            return self._offer_general_recovery(
+                state, original_question, topic_key, display_topic, error
+            )
+
+        topic = self._topic_key(display_topic or query)
+        if not topic:
+            topic = self._topic_key(query)
+        topic_pattern = re.compile(
+            r"(?<![a-z0-9])" + re.escape((topic or "").casefold()) + r"(?![a-z0-9])",
+            re.IGNORECASE,
+        ) if topic else None
+        evidence = []
+        conversational_discard_reasons = {}
+
+        def discard(reason):
+            conversational_discard_reasons[reason] = (
+                conversational_discard_reasons.get(reason, 0) + 1
+            )
+
+        for source_index, source in enumerate(results):
+            if len(evidence) == 3:
+                conversational_discard_reasons["max_sources"] = len(results) - source_index
+                break
+            if isinstance(source, dict):
+                title = source.get("title")
+                url = source.get("url")
+                snippet = source.get("snippet")
+                retrieved_at = source.get("retrieved_at")
+            else:
+                title = getattr(source, "title", None)
+                url = getattr(source, "url", None)
+                snippet = getattr(source, "snippet", None)
+                retrieved_at = getattr(source, "retrieved_at", None)
+            if not all(isinstance(value, str) and value.strip() for value in (title, url, snippet)):
+                discard("missing_fields")
+                continue
+            try:
+                parsed = urlsplit(url.strip())
+                valid_url = (
+                    parsed.scheme in {"http", "https"}
+                    and parsed.hostname
+                    and not parsed.username
+                )
+            except ValueError:
+                valid_url = False
+            if not valid_url:
+                discard("invalid_url")
+                continue
+            title = re.sub(r"[\[\]\r\n]", " ", html.unescape(title)).strip()
+            snippet = re.sub(r"\s+", " ", html.unescape(
+                re.sub(r"<[^>]*>", " ", snippet)
+            )).strip()
+            if not title or not snippet or len(snippet) > 1600:
+                discard("invalid_content")
+                continue
+            if topic_pattern and not topic_pattern.search(title + " " + snippet):
+                discard("irrelevant_topic")
+                continue
+            title_matches_topic = bool(topic_pattern and topic_pattern.search(title))
+            sentences = re.split(r"(?<=[.!?])\s+|\s*[•|]\s*", snippet)
+            facts = []
+            for sentence in sentences:
+                sentence = sentence.strip(" -\t")
+                if not 20 <= len(sentence) <= 360:
+                    continue
+                if (topic_pattern and topic_pattern.search(sentence)) or (
+                    title_matches_topic and _PUBLIC_ACTION.search(sentence)
+                ):
+                    if sentence not in facts:
+                        facts.append(sentence)
+            if not facts and title_matches_topic and len(snippet) <= 360 and _PUBLIC_ACTION.search(snippet):
+                facts = [snippet]
+            if facts:
+                evidence.append({
+                    "title": title,
+                    "url": url.strip(),
+                    "snippet": snippet,
+                    "retrieved_at": retrieved_at if isinstance(retrieved_at, str) else None,
+                    "facts": facts[:2],
+                })
+            else:
+                discard("no_actionable_evidence")
+
+        if not evidence:
+            self._log_public_search_diagnostics(
+                self.web_search,
+                query,
+                conversational_discard_reasons=conversational_discard_reasons,
+                error_category="irrelevant",
+            )
+            return self._offer_general_recovery(
+                state, original_question, topic_key, display_topic,
+                WebSearchError("public search results were not relevant", "irrelevant"),
+            )
+
+        facts = []
+        for source in evidence:
+            for fact in source["facts"]:
+                if fact not in facts and sum(map(len, facts)) + len(fact) <= 650:
+                    facts.append(fact)
+        if not facts:
+            self._log_public_search_diagnostics(
+                self.web_search,
+                query,
+                relevance_filtered_count=len(evidence),
+                conversational_discard_reasons=conversational_discard_reasons,
+                error_category="irrelevant",
+            )
+            return self._offer_general_recovery(
+                state, original_question, topic_key, display_topic,
+                WebSearchError("public sources lack usable evidence", "irrelevant"),
+            )
+
+        state["web_sources"] = evidence
+        state["pending_alternative"] = None
+        references = "\n".join(
+            f"- Fuente {index}: {source['title']}\n  Evidencia: "
+            + " ".join(source["facts"])
+            for index, source in enumerate(evidence, start=1)
+        )
+        prompt = (
+            "El usuario autorizó una búsqueda pública. Redacta en español una síntesis "
+            "natural y concisa, de máximo tres frases, usando únicamente los hechos que "
+            "aparecen en la evidencia seleccionada. No agregues pasos, requisitos, "
+            "configuraciones ni datos que no estén expresamente respaldados. Si la evidencia "
+            "no basta para responder, indícalo brevemente. No inventes políticas internas. "
+            f"\nTema general: {display_topic}\nConsulta pública segura: {query}\n"
+            f"Evidencia pública pertinente:\n{references}"
+        )
+        try:
+            answer = (await self.provider.generate(prompt) or "").strip()
+        except Exception:
+            answer = ""
+        if self._public_answer_is_grounded(answer, facts):
+            response_mode = "ollama_synthesis"
+        else:
+            answer = self._public_extractive_answer(facts)
+            response_mode = "evidence_fallback"
+        self._log_public_search_diagnostics(
+            self.web_search,
+            query,
+            relevance_filtered_count=len(evidence),
+            conversational_discard_reasons=conversational_discard_reasons,
+            response_mode=response_mode,
+        )
+        answer = (
+            f"Orientación pública sobre {display_topic} "
+            "(no es un procedimiento autorizado de la empresa):\n\n" + answer
+        )
+        citations = "\n".join(
+            f"- [{source['title']}]({source['url']})"
+            + (f" (consultada: {source['retrieved_at']})" if source.get("retrieved_at") else "")
+            for source in state["web_sources"][:3]
+        )
+        return answer + "\n\nFuentes públicas consultadas:\n" + citations, state["web_sources"]
+
+    @staticmethod
+    def _public_answer_is_grounded(answer, facts):
+        if not answer or len(answer) > 700 or re.search(r"https?://|\[[^\]]+\]\(", answer, re.I):
+            return False
+        evidence_tokens = set(TOKEN.findall(_fold(" ".join(facts))))
+        evidence_tokens |= {token[:-1] for token in evidence_tokens if len(token) > 4 and token.endswith("s")}
+        sentences = [sentence.strip(" -*\t") for sentence in
+                     re.split(r"(?<=[.!?])\s+|\n+", answer) if sentence.strip()]
+        if not sentences or len(sentences) > 3:
+            return False
+        for sentence in sentences:
+            tokens = TOKEN.findall(_fold(sentence))
+            content = [token for token in tokens if token not in _PUBLIC_STOPWORDS and len(token) > 2]
+            if not content or any(token not in evidence_tokens for token in content):
+                return False
+        return True
+
+    @staticmethod
+    def _public_extractive_answer(facts):
+        if len(facts) == 1:
+            return facts[0]
+        return "Las fuentes públicas indican:\n" + "\n".join(f"- {fact}" for fact in facts[:3])
+
+    async def _general_alternative_answer(self, display_topic, platform):
+        prompt = (
+            "El usuario eligió una explicación de conocimiento general, no una búsqueda web. "
+            "Responde en español, de forma concisa, y aclara que no es el procedimiento oficial "
+            "de su empresa. No inventes servidores, credenciales, políticas ni ajustes internos. "
+            f"Tema: {display_topic}."
+        )
+        if platform:
+            prompt += f" Plataforma indicada: {platform}. Da orientación general aplicable a esa plataforma."
+        else:
+            prompt += (
+                " Aún no se conoce el sistema operativo: no des pasos específicos; pregunta "
+                "brevemente si usará Windows, Android u otro sistema."
+            )
+        try:
+            answer = (await self.provider.generate(prompt) or "").strip()
+        except Exception as exc:  # noqa: BLE001
+            import logging
+            logging.getLogger("assistant").exception("general alternative failed: %s", exc)
+            return GENERAL_UNAVAILABLE
+        if not answer:
+            return GENERAL_UNAVAILABLE
+        return "Orientación general (no es un procedimiento autorizado de la empresa):\n\n" + answer
 
     @staticmethod
     def _needs_web(message):
@@ -700,12 +1190,7 @@ class UnifiedAssistantService:
     # ------------------------------------------------------------------ chat
     @staticmethod
     def _is_conceptual(message):
-        """True for an ordinary conceptual question about a topic.
-
-        A conceptual question asks for an explanation ("¿qué es X?", "explícame
-        X", "diferencia entre X e Y"). It is answered by the general provider
-        instead of the grounded knowledge pipeline.
-        """
+        """Return whether a message has a conceptual-question form."""
         text = _fold(message or "")
         company_scope = re.search(r"\b(?:empresa|interno|interna|autorizad[oa]s?|oficial|politica|manual|documento|segun)\b", text)
         if not company_scope and _problem_subject(text):
@@ -719,12 +1204,16 @@ class UnifiedAssistantService:
         return CONCEPTUAL_QUESTION.search(text) is not None
 
     @staticmethod
+    def _is_it_related(message):
+        return bool(IT_RELATED.search(_fold(message or "")) or _problem_subject(message))
+
+    @staticmethod
     def _continues_general(state, message):
         """True when the message continues a general (non-document) exchange.
 
         A follow-up of a general question ("y el firewall?") carries no
-        reference of its own, so it keeps the route of the conversation as long
-        as it does not ask about the authorized documentation.
+        reference of its own. IT follow-ups are separately checked against
+        authorized documents before they continue with local general knowledge.
         """
         if state.get("active_route") != "general":
             return False
@@ -732,6 +1221,15 @@ class UnifiedAssistantService:
         if not text:
             return False
         return DOCUMENTED_TOPIC.search(text) is None
+
+    @classmethod
+    def _continues_it(cls, state, message):
+        if state.get("active_route") != "general" or not state.get("active_it_topic"):
+            return False
+        if cls._is_it_related(message):
+            return True
+        text = _fold(message or "").lstrip("¿¡ \t")
+        return bool(IT_CONTEXTUAL_FOLLOWUP.search(text))
 
     async def _general_answer(self, state, message):
         """Answer with the general provider, optionally enriched with public sources.
@@ -741,24 +1239,118 @@ class UnifiedAssistantService:
         stored on the state so the chat layer can return them to the caller.
         """
         state["web_sources"] = []
+        if self._is_it_related(message):
+            state["active_it_topic"] = True
+        else:
+            conceptual = CONCEPTUAL_QUESTION.search(_fold(message))
+            topic = _fold(message)[conceptual.end():].strip(" ¿?¡!.,:;") if conceptual else ""
+            if topic and not re.search(r"\b(?:eso|esto|ello|ese|esa|este|esta|anterior|mismo|misma|su|sus)\b", topic):
+                state.pop("active_it_topic", None)
 
         web_block = ""
-        if self._needs_web(message) and self.web_search is not None:
+        if self._needs_web(message):
+            if self.web_search is None:
+                self._log_public_search_diagnostics(
+                    None, message, error_category="provider_unavailable"
+                )
+                return "No pude verificar información actual porque la búsqueda pública no está disponible."
+            search_error = None
             try:
                 web = await self.web_search.search(message, max_results=5)
-            except Exception:  # noqa: BLE001 - never break the answer on a web fault
+            except Exception as exc:  # noqa: BLE001 - report the failure without using stale model knowledge
+                search_error = exc
                 web = []
             if web:
+                if WINDOWS_11.search(message) and CURRENT_VERSION.search(message):
+                    official = [
+                        source for source in web
+                        if (urlsplit(source.url).hostname or "").casefold() == "microsoft.com"
+                        or (urlsplit(source.url).hostname or "").casefold().endswith(".microsoft.com")
+                    ]
+                    verified = [source for source in official if getattr(source, "verified", False)]
+                    if not verified:
+                        discarded = {}
+                        if len(web) > len(official):
+                            discarded["not_official_domain"] = len(web) - len(official)
+                        if official:
+                            discarded["unverified_source"] = len(official)
+                        self._log_public_search_diagnostics(
+                            self.web_search,
+                            message,
+                            conversational_discard_reasons=discarded,
+                            error_category="irrelevant",
+                        )
+                        state["web_sources"] = [
+                            {"title": source.title, "url": source.url, "snippet": source.snippet,
+                             "retrieved_at": getattr(source, "retrieved_at", None), "verified": False}
+                            for source in official[:1]
+                        ]
+                        return (
+                            "No pude confirmar de forma fiable cuál es la versión más reciente de Windows 11. "
+                            "La búsqueda no proporcionó una tabla oficial de Microsoft verificable."
+                        )
+                    source = verified[0]
+                    self._log_public_search_diagnostics(
+                        self.web_search,
+                        message,
+                        relevance_filtered_count=1,
+                        conversational_discard_reasons={
+                            "not_official_domain": max(0, len(web) - len(official)),
+                            "unverified_source": max(0, len(official) - len(verified)),
+                        },
+                        response_mode="evidence_fallback",
+                    )
+                    state["web_sources"] = [
+                        {"title": source.title, "url": source.url, "snippet": source.snippet,
+                         "retrieved_at": getattr(source, "retrieved_at", None), "verified": True}
+                    ]
+                    citation = f"Fuente oficial: [{source.title}]({source.url})"
+                    retrieved_at = getattr(source, "retrieved_at", None)
+                    if retrieved_at:
+                        citation += f" (consultada: {retrieved_at})"
+                    return f"{source.snippet}\n\n{citation}"
+
                 state["web_sources"] = [
-                    {"title": s2.title, "url": s2.url, "snippet": s2.snippet}
+                    {"title": s2.title, "url": s2.url, "snippet": s2.snippet,
+                     "retrieved_at": getattr(s2, "retrieved_at", None)}
                     for s2 in web
                 ]
                 refs = "\n".join(
-                    f"- [{w['title']}]({w['url']}): {w['snippet']}"
-                    for w in state["web_sources"][:5]
+                    f"- [{source['title']}]({source['url']}): {source['snippet']}"
+                    for source in state["web_sources"][:5]
                 )
-                return "Resultados recuperados de internet en esta consulta (extractos de las fuentes):\n\n" + refs
-            return "No se pudo realizar la búsqueda pública en este momento. No tengo resultados actuales verificados para responder."
+                web_block = (
+                    "\n\nFuentes públicas consultadas (extractos):\n" + refs
+                    + "\nResponde de forma breve y natural usando solo información respaldada por estos extractos. "
+                    "No presentes datos ausentes en las fuentes como verificados."
+                )
+            else:
+                search_error = search_error or getattr(self.web_search, "last_error", None)
+                error_category = getattr(search_error, "category", None)
+                if search_error is not None:
+                    safe_message = getattr(
+                        search_error, "public_message",
+                        WebSearchError(
+                            "public search failed",
+                            "timeout" if isinstance(search_error, TimeoutError)
+                            else "provider_unavailable",
+                        ).public_message,
+                    )
+                    self._log_public_search_diagnostics(
+                        self.web_search,
+                        message,
+                        error_category=error_category or (
+                            "timeout" if isinstance(search_error, TimeoutError)
+                            else "provider_unavailable"
+                        ),
+                    )
+                    return f"No pude verificar información actual. {safe_message}"
+                self._log_public_search_diagnostics(
+                    self.web_search,
+                    message,
+                    error_category="no_results",
+                )
+                return "No pude verificar información actual porque la búsqueda pública no devolvió fuentes."
 
         subject = _problem_subject(message)
         if subject:
@@ -788,11 +1380,32 @@ class UnifiedAssistantService:
         )
         try:
             answer = await self.provider.generate(prompt)
-        except Exception as exc:  # noqa: BLE001
+        except Exception:  # noqa: BLE001
             import logging
-            logging.getLogger("assistant").exception("general provider failed: %s", exc)
+            logging.getLogger("assistant").error("general provider failed")
+            if self._needs_web(message):
+                self._log_public_search_diagnostics(
+                    self.web_search,
+                    message,
+                    relevance_filtered_count=len(state.get("web_sources") or []),
+                    response_mode="conversational_recovery",
+                )
             return GENERAL_UNAVAILABLE
         answer = (answer or "").strip()
+        if self._needs_web(message):
+            self._log_public_search_diagnostics(
+                self.web_search,
+                message,
+                relevance_filtered_count=len(state.get("web_sources") or []),
+                response_mode="ollama_synthesis" if answer else "conversational_recovery",
+            )
+        if answer and state.get("web_sources"):
+            citations = "\n".join(
+                f"- [{source['title']}]({source['url']})"
+                + (f" (consultada: {source['retrieved_at']})" if source.get("retrieved_at") else "")
+                for source in state["web_sources"][:3]
+            )
+            answer += "\n\nFuentes consultadas:\n" + citations
         return answer or GENERAL_UNAVAILABLE
 
     async def chat(self, message, session_id=None):
@@ -811,6 +1424,98 @@ class UnifiedAssistantService:
             answer = social_response(social)
             self.sessions.remember(state, message, answer)
             return {"answer": answer, "session_id": session_id, "route": "social", "sources": []}
+
+        pending = state.get("pending_alternative")
+        if pending:
+            if self._pending_topic_changed(pending, message):
+                state["pending_alternative"] = None
+                pending = None
+        if pending:
+            choice = self._alternative_choice(message)
+            if choice == "ambiguous":
+                if pending.get("offered_alternatives") == ["general"]:
+                    choice = "general"
+                else:
+                    answer = "¿Prefieres que busque una guía pública en internet o que te explique el tema de forma general?"
+                    self.sessions.remember(state, message, answer)
+                    return {"answer": answer, "session_id": session_id, "route": "knowledge", "sources": []}
+
+            if choice == "decline":
+                state["pending_alternative"] = None
+                answer = "De acuerdo. No haré una búsqueda pública ni una guía general. Si lo necesitas después, puedo retomarlo."
+                self.sessions.remember(state, message, answer)
+                return {"answer": answer, "session_id": session_id, "route": "social", "sources": []}
+
+            if choice == "general":
+                state["pending_alternative"] = None
+                _, display_topic, platform = self._public_query_parts(
+                    pending["question"], state.get("history") or [], message
+                )
+                if not display_topic:
+                    answer = "¿Qué tema técnico quieres que explique de manera general?"
+                else:
+                    answer = await self._general_alternative_answer(display_topic, platform)
+                state["active_route"] = "general"
+                self.sessions.remember(state, message, answer)
+                return {"answer": answer, "session_id": session_id, "route": "general", "sources": []}
+
+            if choice == "public":
+                if pending.get("public_search_failed"):
+                    _, display_topic, _ = self._public_query_parts(
+                        pending["question"], state.get("history") or [], message
+                    )
+                    answer = (
+                        f"La búsqueda pública no pudo completarse. ¿Quieres que te explique "
+                        f"{display_topic or 'el tema'} de manera general?"
+                    )
+                    self.sessions.remember(state, message, answer)
+                    return {"answer": answer, "session_id": session_id, "route": "knowledge", "sources": []}
+                pending["search_consent"] = True
+                query, display_topic, _ = self._public_query_parts(
+                    pending["question"], state.get("history") or [], message
+                )
+                if not query:
+                    pending["awaiting_public_description"] = True
+                    answer = (
+                        "No puedo convertir esa consulta en una búsqueda pública segura todavía. "
+                        "Dime solo el tema técnico general y, si aplica, el sistema operativo; no incluyas datos internos."
+                    )
+                    self.sessions.remember(state, message, answer)
+                    return {"answer": answer, "session_id": session_id, "route": "knowledge", "sources": []}
+                answer, sources = await self._public_alternative_answer(
+                    state, query, display_topic,
+                    original_question=pending["question"],
+                    topic_key=pending.get("topic_key"),
+                )
+                state["active_route"] = "general"
+                self.sessions.remember(state, message, answer)
+                return {"answer": answer, "session_id": session_id, "route": "general", "sources": sources}
+
+            if pending.get("awaiting_public_description"):
+                query, display_topic, _ = self._public_query_parts(
+                    pending["question"], state.get("history") or [], message
+                )
+                if query:
+                    answer, sources = await self._public_alternative_answer(
+                        state, query, display_topic,
+                        original_question=pending["question"],
+                        topic_key=pending.get("topic_key"),
+                    )
+                    state["active_route"] = "general"
+                    self.sessions.remember(state, message, answer)
+                    return {"answer": answer, "session_id": session_id, "route": "general", "sources": sources}
+                if self._pending_topic_changed(pending, message):
+                    state["pending_alternative"] = None
+                else:
+                    answer = "¿Qué tema técnico general y sistema operativo quieres que busque?"
+                    self.sessions.remember(state, message, answer)
+                    return {"answer": answer, "session_id": session_id, "route": "knowledge", "sources": []}
+            elif self._pending_topic_changed(pending, message):
+                state["pending_alternative"] = None
+            else:
+                answer = "¿Prefieres la búsqueda pública en internet o una explicación general?"
+                self.sessions.remember(state, message, answer)
+                return {"answer": answer, "session_id": session_id, "route": "knowledge", "sources": []}
 
         # Revalidate cached evidence before answering any document follow-up.
         if state.get("active_document_id") and self.knowledge:
@@ -861,25 +1566,17 @@ class UnifiedAssistantService:
                 return {"answer": answer, "session_id": session_id, "route": "knowledge",
                         "sources": state.get("active_sources") or []}
 
-        # Ordinary conceptual questions are answered by the general provider.
-        # They do not ask for company documentation, so the grounded pipeline
-        # is not used and no citation is invented.
-        if self._needs_web(message):
-            # Never export a document turn or its conversation history to public search.
-            private = re.search(r"manual|guideline|documento|credencial|contrase|intern[oa]|empresa|seg[uú]n|https?://|token|password", message, re.I)
-            if self.knowledge:
-                private = private or any(_contains_phrase(_fold(message), _fold(d["title"]))
-                                         for d in self.knowledge.store.documents())
-            if private:
-                return {"answer": "No enviaré esta consulta documental o sensible a un buscador público. Formula una consulta pública sin contenido interno.",
-                        "session_id": session_id, "route": "general", "sources": []}
-            answer = await self._general_answer(state, message)
-            state["active_route"] = "general"
-            self.sessions.remember(state, message, answer)
-            return {"answer": answer, "session_id": session_id, "route": "general",
-                    "sources": state.get("web_sources") or []}
+        needs_web = self._needs_web(message)
+        documentation_only = bool(DOCUMENTED_TOPIC.search(_fold(message)))
+        ordinary_general = self._is_conceptual(message) or self._continues_general(state, message)
+        needs_knowledge = (
+            needs_web or documentation_only or self._is_it_related(message)
+            or self._continues_it(state, message) or not ordinary_general
+        )
 
-        if self._is_conceptual(message) or self._continues_general(state, message):
+        # Non-IT conceptual questions and ordinary follow-ups retain the fast,
+        # conversational path. IT topics proceed to authorized retrieval first.
+        if not needs_knowledge:
             answer = await self._general_answer(state, message)
             state["active_route"] = "general"
             self.sessions.remember(state, message, answer)
@@ -889,20 +1586,34 @@ class UnifiedAssistantService:
         # Everything else goes through the grounded knowledge pipeline.
         try:
             from backend.app.knowledge.models import KnowledgeRequest
+            if self.knowledge is None:
+                raise RuntimeError("authorized knowledge service is unavailable")
             request = KnowledgeRequest(message=message,
                                        conversation_id=state.get("knowledge_conversation_id"))
             result = await self.knowledge.query(request)
         except Exception as exc:  # noqa: BLE001
             import logging
             logging.getLogger("assistant").exception("knowledge query failed: %s", exc)
-            answer = "No se pudo consultar la documentación autorizada en este momento."
+            result = None
+
+        if result is not None:
+            state["knowledge_conversation_id"] = result.conversation_id
+        elif not needs_web:
+            answer = (
+                "No se pudo consultar la documentación autorizada en este momento; "
+                "no puedo confirmar si contiene información relevante."
+            )
             state["active_route"] = "knowledge"
             self.sessions.remember(state, message, answer)
-            return {"answer": answer, "session_id": session_id, "route": "knowledge", "sources": []}
-
-        state["knowledge_conversation_id"] = result.conversation_id
-        state["active_route"] = "knowledge"
-        if result.sources:
+            return {"answer": answer, "session_id": session_id, "route": "knowledge",
+                    "sources": []}
+        evidence_sufficient = (
+            result is not None
+            and result.status == "answered"
+            and result.documentation_sufficient
+            and bool(result.sources)
+        )
+        if evidence_sufficient and (not needs_web or documentation_only):
             document_ids = {s.get("document_id") for s in result.sources if s.get("document_id")}
             if len(document_ids) > 1:
                 choices = sorted({s.get("title", "Documento") for s in result.sources})
@@ -913,42 +1624,105 @@ class UnifiedAssistantService:
                 state["active_sources"] = []
                 self.sessions.remember(state, message, answer)
                 return {"answer": answer, "session_id": session_id, "route": "knowledge", "sources": result.sources}
-            if state.get("active_document_id") != result.sources[0].get("document_id"):
+            if result.sources and state.get("active_document_id") != result.sources[0].get("document_id"):
                 self.sessions.clear_procedure(state)
             state["active_sources"] = result.sources
-            state["active_document"] = result.sources[0].get("title")
-            state["active_document_id"] = result.sources[0].get("document_id")
-            self._load_catalog(state, request.message)
+            if result.sources:
+                state["active_document"] = result.sources[0].get("title")
+                state["active_document_id"] = result.sources[0].get("document_id")
+                self._load_catalog(state, request.message)
 
-        answer = None
-        if kind == "steps":
-            answer = await self._answer_steps(state, message)
-        if answer is None and kind in {"ordinal", "next", "previous", "last"}:
-            answer = await self._answer_movement(state, kind, reference.get("number"))
-        if answer is None and kind == "document":
-            answer = self._answer_document(state)
-        if answer is None and kind == "procedure":
-            answer = self._answer_procedure(state)
-        if answer is None:
-            answer = result.answer
+        if evidence_sufficient and (not needs_web or documentation_only):
+            state["active_route"] = "knowledge"
+            answer = None
+            if kind == "steps":
+                answer = await self._answer_steps(state, message)
+            if answer is None and kind in {"ordinal", "next", "previous", "last"}:
+                answer = await self._answer_movement(state, kind, reference.get("number"))
+            if answer is None and kind == "document":
+                answer = self._answer_document(state)
+            if answer is None and kind == "procedure":
+                answer = self._answer_procedure(state)
+            if answer is None:
+                answer = result.answer
+            self.sessions.remember(state, message, answer)
+            return {"answer": answer, "session_id": session_id, "route": "knowledge",
+                    "sources": result.sources}
 
-        # The documentation does not cover the topic. A company question keeps
-        # its refusal, but an ordinary question is answered by the general
-        # provider instead of returning an empty answer.
-        if (result.status == "insufficient_evidence"
-                and COMPANY_REFUSAL_MARK not in (answer or "").casefold()
-                and not DOCUMENTED_TOPIC.search(message or "")):
-            general = await self._general_answer(state, message)
-            if general:
-                answer = general
+        # Ambiguity and revision conflicts require user input, not a generic
+        # answer. Explicit documentation requests also remain manual-only.
+        if (result is not None and result.status in {"conflict", "clarification_required"}
+                and not needs_web):
+            state["active_route"] = "knowledge"
+            self.sessions.remember(state, message, result.answer)
+            return {"answer": result.answer, "session_id": session_id, "route": "knowledge",
+                    "sources": result.sources if result.sources else []}
+
+        if documentation_only:
+            if (result is not None and result.status == "insufficient_evidence"
+                    and EXPLICIT_MANUAL_REQUEST.search(message)):
+                query, display_topic, _ = self._public_query_parts(
+                    message, state.get("history") or []
+                )
+                topic_key = self._topic_key(message)
+                state["pending_alternative"] = {
+                    "question": message[:4000],
+                    "topic_key": topic_key,
+                    "offered_alternatives": ["public", "general"],
+                    "search_consent": False,
+                }
+                subject = display_topic or "el tema solicitado"
+                answer = (
+                    f"No encontré evidencia suficiente en los manuales autorizados para responder sobre {subject}. "
+                    "¿Prefieres que busque una guía pública en internet o que te explique el tema de forma general?"
+                )
+            else:
+                answer = result.answer if result is not None else (
+                    "No pude consultar los manuales autorizados en este momento, así que no puedo verificar esta información."
+                )
+                answer = answer or (
+                    "No pude verificar esta información en los manuales y documentos autorizados disponibles."
+                )
+            state["active_route"] = "knowledge"
+            self.sessions.remember(state, message, answer)
+            return {"answer": answer, "session_id": session_id, "route": "knowledge",
+                    "sources": []}
+
+        if needs_web:
+            # Search only after the manual attempt. Do not send internal topics,
+            # credentials, or company documents to a public search provider.
+            private = bool(re.search(
+                r"manual|guideline|documento|credencial|contrase|intern[oa]|empresa|"
+                r"seg[uú]n|https?://|token|password",
+                message, re.I,
+            ))
+            store = getattr(self.knowledge, "store", None)
+            if store is not None:
+                private = private or any(
+                    _contains_phrase(_fold(message), _fold(d["title"]))
+                    for d in store.documents()
+                )
+            if private:
+                answer = (
+                    "No enviaré esta consulta documental o sensible a un buscador público. "
+                    "Formula una consulta pública sin contenido interno."
+                )
                 state["active_route"] = "general"
                 self.sessions.remember(state, message, answer)
-                return {"answer": answer, "session_id": session_id, "route": "general",
-                        "sources": []}
+                return {"answer": answer, "session_id": session_id, "route": "general", "sources": []}
+            answer = await self._general_answer(state, message)
+            state["active_route"] = "general"
+            self.sessions.remember(state, message, answer)
+            return {"answer": answer, "session_id": session_id, "route": "general",
+                    "sources": state.get("web_sources") or []}
 
+        # If authorized evidence was insufficient, ordinary IT support may use
+        # local general knowledge. No document sources are carried into it.
+        answer = await self._general_answer(state, message)
+        state["active_route"] = "general"
         self.sessions.remember(state, message, answer)
-        return {"answer": answer, "session_id": session_id, "route": "knowledge",
-                "sources": result.sources}
+        return {"answer": answer, "session_id": session_id, "route": "general",
+                "sources": []}
 
     def _load_catalog(self, state, message=None):
         """Rebuild the deterministic procedure catalog of the active document.

@@ -27,7 +27,9 @@ async def status(provider: LLMProvider = Depends(get_provider)):
 
 
 @router.post("/api/v1/chat", response_model=ChatResponse, dependencies=[Depends(require_auth)])
-async def chat(payload: ChatRequest, provider: LLMProvider = Depends(get_provider)):
+async def chat(payload: ChatRequest, request: Request, provider: LLMProvider = Depends(get_provider)):
+    from backend.app.voice.service import release_whisper_for_chat
+    await release_whisper_for_chat(request)
     await provider.ensure_available()
     answer = await provider.generate(payload.message)
     return ChatResponse(answer=answer, provider=provider.name, model=provider.model)
@@ -35,6 +37,8 @@ async def chat(payload: ChatRequest, provider: LLMProvider = Depends(get_provide
 
 @router.post("/api/v1/assistant/chat", response_model=AssistantResponse, dependencies=[Depends(require_auth)])
 async def assistant_chat(payload: AssistantRequest, request: Request):
+    from backend.app.voice.service import release_whisper_for_chat
+    await release_whisper_for_chat(request)
     try:
         from backend.app.knowledge.routes import service as get_knowledge_service
         knowledge = get_knowledge_service(request)
