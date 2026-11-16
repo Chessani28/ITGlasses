@@ -14,6 +14,8 @@ from backend.app.providers.mock import MockLLM
 
 ORIGIN = "https://pilot.example"
 ROOT = "/api/v1"
+LOCAL = "http://127.0.0.1:8000"
+ADMIN_HEADERS = {"X-ITGlasses-Admin": "1"}
 
 
 def b64(data):
@@ -43,33 +45,37 @@ class Phone:
         return self.client.post(ROOT + path, headers=self.headers("POST", path, **claims))
 
 
+def admin_client(c, address="127.0.0.1", base_url=LOCAL, headers=ADMIN_HEADERS):
+    """The admin panel as seen by the backend: a browser on this PC, no proxy."""
+    return TestClient(c.app, base_url=base_url, client=(address, 50000), headers=headers)
+
+
 @pytest.fixture
 def setup(tmp_path, monkeypatch):
-    from backend.app.pairing.store import provision
     db = str(tmp_path / "pair.sqlite")
     monkeypatch.setenv("ITGLASSES_PAIRING_DB", db)
     monkeypatch.setenv("ITGLASSES_PAIRING_ORIGIN", ORIGIN)
-    provision(db, "only-for-this-test")
     with TestClient(create_app(MockLLM()), base_url=ORIGIN) as c:
         yield c, Phone(c), Phone(c)
 
 
 def test_lifecycle(setup):
     c, a, b = setup
-    def admin(path, **body):
-        return c.post(ROOT + "/admin/" + path, json=body, headers={"Origin": ORIGIN, "X-ITGlasses-Admin":"1"})
+    local = admin_client(c)
+    def admin(device_id, action):
+        return local.post(f"{ROOT}/admin/devices/{device_id}/{action}")
     req = a.post("/pairing/requests", variant="phone").json()
     rid = req["request_id"]
     other = b.post("/pairing/requests", variant="meta").json()
     assert other["user_code"] != req["user_code"]
     assert a.post("/pairing/requests", variant="phone").json()["request_id"] == rid
     assert a.post("/pairing/claim", rid=rid).status_code == 409
-    assert c.get(ROOT + "/admin/devices", headers={"Authorization":"Bearer enterprise"}).status_code == 401
-    assert admin("login", password="only-for-this-test").status_code == 200
-    assert c.post(ROOT + "/admin/decision", json={"id":rid,"decision":"approve"}).status_code == 403
-    assert admin("decision", id=other["request_id"], decision="deny").status_code == 200
+    # The phone-facing HTTPS origin can never reach administration.
+    assert c.get(ROOT + "/admin/devices", headers={"Authorization":"Bearer enterprise", **ADMIN_HEADERS}).status_code == 403
+    assert c.post(f"{ROOT}/admin/devices/{rid}/approve", headers=ADMIN_HEADERS).status_code == 403
+    assert admin(other["request_id"], "deny").status_code == 200
     assert b.post("/pairing/claim", rid=other["request_id"]).status_code == 409
-    assert admin("decision", id=rid, decision="approve").status_code == 200
+    assert admin(rid, "approve").status_code == 200
     assert b.post("/pairing/claim", rid=rid).status_code == 401
     token = a.post("/pairing/claim", rid=rid).json()["access_token"]
     path = "/chat"
@@ -84,9 +90,9 @@ def test_lifecycle(setup):
     nonce = a.post("/devices/challenge", rid=rid).json()["nonce"]
     renewed = a.post("/devices/token", rid=rid, nonce=nonce).json()["access_token"]
     assert a.post("/devices/token", rid=rid, nonce=nonce).status_code == 401
-    assert admin("revoke", id=rid).status_code == 200
-    assert chat(a.headers("POST", path, renewed)).status_code == 401
-    assert a.post("/devices/challenge", rid=rid).status_code == 401
+    assert local.delete(f"{ROOT}/admin/devices/{rid}").status_code == 200
+    assert chat(a.headers("POST", path, renewed)).status_code == 410
+    assert a.post("/devices/challenge", rid=rid).status_code == 410
 
 
 def test_transport_and_legacy(setup, monkeypatch):

@@ -43,6 +43,8 @@ def create_app(provider: LLMProvider | None = None, knowledge=None, voice=None) 
     )
     from backend.app.pairing.routes import router as pairing_router
     app.include_router(pairing_router)
+    from backend.app.pairing.admin import router as admin_router
+    app.include_router(admin_router)
     app.include_router(router)
     app.state.knowledge = knowledge
     app.include_router(knowledge_router, dependencies=[Depends(require_auth)])

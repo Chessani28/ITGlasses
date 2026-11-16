@@ -2,17 +2,14 @@ import os
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 
-from test_device_pairing import ORIGIN, ROOT, setup
+from test_device_pairing import ORIGIN, ROOT, admin_client, setup
 from test_voice import FakeVoice, wav
-
-ADMIN = {"Origin":ORIGIN,"X-ITGlasses-Admin":"1"}
 
 
 def authorize(c, phone):
     reg = phone.post("/pairing/requests",variant="phone").json()
     rid = reg["request_id"]
-    assert c.post(ROOT+"/admin/login",json={"password":"only-for-this-test"},headers=ADMIN).is_success
-    assert c.post(ROOT+"/admin/decision",json={"id":rid,"decision":"approve"},headers=ADMIN).is_success
+    assert admin_client(c).post(f"{ROOT}/admin/devices/{rid}/approve").is_success
     return rid
 
 
@@ -29,28 +26,13 @@ def test_two_active_devices_are_independent(setup):
         assert response.status_code == 200 and response.json()["session_id"] == "shared"
     sessions = c.app.state.assistant.sessions._sessions
     assert sessions[(rid_a,"shared")] is not sessions[(rid_b,"shared")]
-    assert c.post(ROOT+"/admin/revoke",json={"id":rid_a},headers=ADMIN).is_success
+    assert admin_client(c).post(f"{ROOT}/admin/devices/{rid_a}/block").is_success
     path = "/devices/me"
-    assert c.get(ROOT+path,headers=a.headers("GET",path,token_a)).status_code == 401
+    assert c.get(ROOT+path,headers=a.headers("GET",path,token_a)).status_code == 403
     assert c.get(ROOT+path,headers=b.headers("GET",path,token_b)).json()["device_id"] == rid_b
     assert c.get(ROOT+path,headers=b.headers("GET","/chat",token_b)).status_code == 401
     assert c.get(ROOT+path,headers=b.headers("POST",path,token_b)).status_code == 401
     assert c.post(ROOT+"/chat",json={"message":"hola"},headers={"Authorization":"Bearer "+token_b}).status_code == 401
-
-
-def test_admin_session_and_csrf(setup):
-    c, _, _ = setup
-    url = ROOT+"/admin/login"
-    assert c.post(url,json={"password":"only-for-this-test"},headers={**ADMIN,"Origin":"https://attacker.example"}).status_code == 403
-    reply = c.post(url,json={"password":"only-for-this-test"},headers=ADMIN)
-    cookie = reply.headers["set-cookie"].lower()
-    assert "secure" in cookie and "httponly" in cookie and "samesite=strict" in cookie
-    assert c.get(ROOT+"/documents").status_code == 401
-    assert c.post(ROOT+"/admin/logout",json={},headers=ADMIN).is_success
-    assert c.get(ROOT+"/admin/devices").status_code == 401
-    for _ in range(4):
-        assert c.post(url,json={"password":"incorrect"},headers=ADMIN).status_code == 401
-    assert c.post(url,json={"password":"only-for-this-test"},headers=ADMIN).status_code == 429
 
 
 def test_concurrent_claim_and_lost_response(setup):
