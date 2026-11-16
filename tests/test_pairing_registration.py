@@ -129,7 +129,7 @@ def test_last_seen_updates_at_most_once_per_minute(setup):
     database("UPDATE installs SET last_seen=? WHERE id=?", stale, rid)
     assert me(c, a, token).status_code == 200
     seen, ip = database("SELECT last_seen,last_ip FROM installs WHERE id=?", rid)
-    assert seen > stale + 60 and ip == "testclient"
+    assert seen > stale + 60 and ip == "127.0.0.1"
 
 
 def test_ip_is_not_identity(setup):

@@ -4,18 +4,16 @@ Every admin route depends on require_admin(), the ONLY admin gate in the code.
 To add a real administrator login later (pro version), change that function.
 This router is independent from the phone router: no pairing origin, no HTTPS.
 """
-import ipaddress
 import time
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Request
 
+from backend.app.core import local_request
 from backend.app.core.config import settings
 from .routes import clean
 from .store import transaction
 
-LOOPBACK = {"127.0.0.1", "::1"}
-PROXY_HEADERS = ("forwarded", "via", "x-forwarded-for", "x-forwarded-host", "x-forwarded-proto", "x-real-ip")
 ADMIN_HEADER = "x-itglasses-admin"
 LISTED = ("pending", "approved", "active", "blocked")
 FIELDS = "id,variant,name,model,state,code,created_at,approved_at,last_seen,last_ip"
@@ -26,25 +24,13 @@ def _local_hosts():
     return {f"127.0.0.1:{port}", f"localhost:{port}", f"[::1]:{port}"}
 
 
-def _loopback(address):
-    try:
-        ip = ipaddress.ip_address(address)
-    except ValueError:
-        return False
-    if ip.version == 6 and ip.ipv4_mapped:
-        ip = ip.ipv4_mapped
-    return str(ip) in LOOPBACK
-
-
 def require_admin(request: Request) -> None:
     """Accept only a browser on this PC talking directly to the backend."""
     hosts = _local_hosts()
     headers = request.headers
     allowed = (
-        # 1. Direct peer on this machine (uvicorn trusts proxy headers only from 127.0.0.1).
-        _loopback(request.client.host if request.client else ""),
-        # 2. Not relayed by Caddy or any other proxy, even if the peer looks local.
-        not any(name in headers for name in PROXY_HEADERS),
+        # 1-2. Loopback peer and no forwarding header (shared with api/auth.py).
+        local_request.is_direct_local(request),
         # 3. Host names this backend directly: defeats DNS rebinding and proxied hosts.
         headers.get("host", "").lower() in hosts,
         # 4. Custom header: a foreign page needs a CORS preflight that is never granted.

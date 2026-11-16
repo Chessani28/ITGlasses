@@ -2,6 +2,7 @@
 import os
 import secrets
 from fastapi import Header, HTTPException, Request
+from backend.app.core import local_request
 from backend.app.core.config import settings
 
 
@@ -22,8 +23,9 @@ def require_auth(request: Request, authorization: str | None = Header(default=No
         from backend.app.pairing.routes import mobile_auth
         mobile_auth(request, authorization[5:])
         return
-    if not required and not os.environ.get("ITGLASSES_PAIRING_ORIGIN"):
-        return  # Preserve explicit loopback development without credentials.
+    if (not required and not os.environ.get("ITGLASSES_PAIRING_ORIGIN")
+            and local_request.is_direct_local(request)):
+        return  # Credential-free local development: direct loopback requests only, never via a proxy.
     if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(status_code=401, detail="missing_credentials")
     token = authorization.split(" ", 1)[1].strip().encode("utf-8")
