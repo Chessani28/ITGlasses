@@ -15,6 +15,7 @@ test_*.txt
 test_*.pdf
 test_*.docx
 test_*.py
+!tests/test_*.py
 # The assistant service regression suite must always be tracked.
 !tests/test_assistant_service.py
 phase1b_output.txt
