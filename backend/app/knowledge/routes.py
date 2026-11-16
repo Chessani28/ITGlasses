@@ -9,9 +9,9 @@ router = APIRouter(prefix="/api/v1")
 
 def service(request: Request):
     # Local single-user management. Reject browser cross-origin write requests.
-    if request.method != "GET" and request.headers.get("origin"):
-        if request.headers["origin"] not in {"http://127.0.0.1:8000", "http://localhost:8000"}:
-            raise KnowledgeError("origin_rejected", "Cross-origin document operations are not permitted.", 403)
+    from backend.app.pairing.store import permitted_browser_origin
+    if request.method != "GET" and not permitted_browser_origin(request):
+        raise KnowledgeError("origin_rejected", "Cross-origin document operations are not permitted.", 403)
     if request.app.state.knowledge is None:
         from backend.app.core.config import PROJECT_ROOT, settings
         from .service import KnowledgeService

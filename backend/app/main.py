@@ -41,6 +41,8 @@ def create_app(provider: LLMProvider | None = None, knowledge=None, voice=None) 
     app.state.provider = provider if provider is not None else (
         OllamaProvider(settings) if settings.provider == "ollama" else MockLLM()
     )
+    from backend.app.pairing.routes import router as pairing_router
+    app.include_router(pairing_router)
     app.include_router(router)
     app.state.knowledge = knowledge
     app.include_router(knowledge_router, dependencies=[Depends(require_auth)])
@@ -57,7 +59,10 @@ def create_app(provider: LLMProvider | None = None, knowledge=None, voice=None) 
                 return error_response(411, "length_required", "Document uploads require Content-Length.")
             if int(length) > 10 * 1024 * 1024 + 65536:
                 return error_response(413, "file_size", "Document upload exceeds 10 MiB plus metadata allowance.")
-        return await call_next(request)
+        response = await call_next(request)
+        if request.url.path.startswith(("/api/v1/pairing/", "/api/v1/admin/", "/api/v1/devices/")):
+            response.headers["Cache-Control"] = "no-store"
+        return response
 
     @app.exception_handler(KnowledgeError)
     async def knowledge_error(request: Request, exc: KnowledgeError):
@@ -94,7 +99,9 @@ def create_app(provider: LLMProvider | None = None, knowledge=None, voice=None) 
 
     @app.exception_handler(HTTPException)
     async def http_error(request: Request, exc: HTTPException):
-        return error_response(exc.status_code, "http_error", "The requested resource or method is unavailable.")
+        response = error_response(exc.status_code, "http_error", "The requested resource or method is unavailable.")
+        response.headers.update(exc.headers or {})
+        return response
 
     @app.exception_handler(Exception)
     async def internal_error(request: Request, exc: Exception):

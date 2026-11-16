@@ -53,5 +53,12 @@ async def assistant_chat(payload: AssistantRequest, request: Request):
     else:
         request.app.state.assistant.knowledge = knowledge
         request.app.state.assistant.provider = provider
-    result = await request.app.state.assistant.chat(payload.message, payload.session_id)
+    session = payload.session_id
+    device = getattr(request.state, "device_id", None)
+    if device:
+        from uuid import uuid4
+        session = session or str(uuid4())
+    result = await request.app.state.assistant.chat(payload.message, (device, session) if device else session)
+    if device:
+        result = {**result, "session_id": session}
     return AssistantResponse(**result)

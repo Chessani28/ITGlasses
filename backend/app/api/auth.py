@@ -1,11 +1,7 @@
-"""Bearer-only API authentication. Browser sessions are not enabled.
-
-The unfinished session implementation is preserved in the recovery backup;
-cookies and query parameters must never authenticate these API routes.
-"""
+"""Enterprise Bearer and scoped device proofs. Admin cookies cannot authorize these routes."""
 import os
 import secrets
-from fastapi import Header, HTTPException
+from fastapi import Header, HTTPException, Request
 from backend.app.core.config import settings
 
 
@@ -14,7 +10,7 @@ def _tokens():
     return {token.strip() for token in raw.split(",") if token.strip()}
 
 
-def require_auth(authorization: str | None = Header(default=None)) -> None:
+def require_auth(request: Request, authorization: str | None = Header(default=None)) -> None:
     enabled = {"1", "true", "yes"}
     required = (
         os.environ.get("ITGLASSES_REQUIRE_AUTH", "").lower() in enabled
@@ -22,7 +18,11 @@ def require_auth(authorization: str | None = Header(default=None)) -> None:
         or settings.allow_lan_binding
         or settings.host != "127.0.0.1"
     )
-    if not required:
+    if authorization and authorization.lower().startswith("dpop "):
+        from backend.app.pairing.routes import mobile_auth
+        mobile_auth(request, authorization[5:])
+        return
+    if not required and not os.environ.get("ITGLASSES_PAIRING_ORIGIN"):
         return  # Preserve explicit loopback development without credentials.
     if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(status_code=401, detail="missing_credentials")

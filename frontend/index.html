@@ -9,6 +9,7 @@
   <link rel="icon" href="/ui/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/ui/styles.css">
   <script type="module" src="/ui/app.js"></script>
+  <script type="module" src="/ui/devices.js"></script>
 </head>
 <body>
   <a class="skip" href="#main">Ir al contenido</a>
@@ -145,6 +146,17 @@
         <article class="panel status-card"><span class="eyebrow">CHAT GENERAL</span><h2>Proveedor LLM</h2><p id="provider-status">Comprobando…</p><small id="provider-model">—</small></article>
         <article class="panel status-card"><span class="eyebrow">RECUPERACIÓN</span><h2>Conocimiento</h2><p id="knowledge-status">Comprobando…</p><small id="embedding-model">—</small></article>
       </div>
+      <details id="device-panel" class="panel" hidden>
+        <summary>Dispositivos</summary>
+        <form id="device-login"><label>Contraseña de administración
+          <input name="password" type="password" maxlength="256" autocomplete="current-password" required>
+        </label><button class="primary-button">Entrar</button></form>
+        <div id="device-management" hidden>
+          <p>Compara el código con el que muestra el teléfono antes de aprobar.</p>
+          <ul id="pairing-list"></ul><button id="device-logout" type="button">Cerrar sesión</button>
+        </div>
+        <p id="device-feedback" role="status"></p>
+      </details>
       <div class="panel system-note"><h2>Cómo interpretar el estado</h2><p id="provider-note">Esperando la respuesta del proveedor.</p><p>La disponibilidad del modelo de embeddings no garantiza una respuesta: también se necesita documentación autorizada y evidencia suficiente. El modelo de respuestas de Conocimiento se verifica al realizar la consulta.</p><p>La latencia de cada petición aparece junto a su resultado. El backend no expone aquí consumo de CPU, RAM ni VRAM.</p><small id="status-updated">Sin comprobaciones todavía.</small></div>
     </section>
     <footer class="page-footer"><span>ITGlasses / Local AI assistant</span><span>Diseñado para explorar. Respaldado por tus fuentes.</span></footer>

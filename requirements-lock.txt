@@ -3,6 +3,9 @@ annotated-types==0.8.0
 anyio==4.15.1
 certifi==2026.10.18
 charset-normalizer==3.5.2
+cryptography==50.0.2
+cffi==2.1.1
+pycparser==3.11
 click==8.5.0
 colorama==0.4.6
 ddgs==9.16.1

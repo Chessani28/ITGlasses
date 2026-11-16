@@ -30,8 +30,8 @@ class SpeechRequest(BaseModel):
 
 
 def speech_service(request):
-    origin = request.headers.get("origin")
-    if origin and origin not in {"http://127.0.0.1:8000", "http://localhost:8000"}:
+    from backend.app.pairing.store import permitted_browser_origin
+    if not permitted_browser_origin(request):
         raise KnowledgeError("origin_rejected", "Cross-origin speech requests are not permitted.", 403)
     if request.app.state.voice is None:
         request.app.state.voice = VoiceService()
