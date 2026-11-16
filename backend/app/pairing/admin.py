@@ -15,8 +15,9 @@ from .routes import clean
 from .store import transaction
 
 ADMIN_HEADER = "x-itglasses-admin"
-LISTED = ("pending", "approved", "active", "blocked")
-FIELDS = "id,variant,name,model,state,code,created_at,approved_at,last_seen,last_ip"
+LISTED = ("pending", "approved", "active", "blocked", "denied")
+# expires: when the registration request lapses (pending, approved or denied rows).
+FIELDS = "id,variant,name,model,state,code,created_at,approved_at,last_seen,last_ip,expires"
 
 
 def _local_hosts():

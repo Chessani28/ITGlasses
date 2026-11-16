@@ -1,4 +1,6 @@
 """Administration gate (require_admin) and device states. See pairing/admin.py."""
+import time
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -120,7 +122,10 @@ def test_approve_block_unblock_delete_lifecycle(setup):
     c, a, _ = setup
     rid = register(a)
     row = listed(c)[rid]
+    assert set(row) == {"id", "variant", "name", "model", "state", "code", "created_at",
+                        "approved_at", "last_seen", "last_ip", "expires"}
     assert row["state"] == "pending" and row["code"] and row["approved_at"] is None
+    assert int(time.time()) < row["expires"] <= int(time.time()) + 300
     assert act(c, rid, "approve").json() == {"id": rid, "state": "approved"}
     assert listed(c)[rid]["approved_at"] is not None
     token = a.post("/pairing/claim", rid=rid).json()["access_token"]
@@ -140,7 +145,7 @@ def test_deny_rejects_a_pending_request(setup):
     assert act(c, rid, "deny").json()["state"] == "denied"
     assert a.post("/pairing/status", rid=rid).json() == {"state": "denied"}
     assert a.post("/pairing/claim", rid=rid).status_code == 409
-    assert rid not in listed(c)
+    assert listed(c)[rid]["state"] == "denied"
 
 
 def test_transitions_require_the_right_state(setup):

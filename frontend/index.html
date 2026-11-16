@@ -146,22 +146,20 @@
         <article class="panel status-card"><span class="eyebrow">CHAT GENERAL</span><h2>Proveedor LLM</h2><p id="provider-status">Comprobando…</p><small id="provider-model">—</small></article>
         <article class="panel status-card"><span class="eyebrow">RECUPERACIÓN</span><h2>Conocimiento</h2><p id="knowledge-status">Comprobando…</p><small id="embedding-model">—</small></article>
       </div>
-      <details id="device-panel" class="panel" hidden>
-        <summary>Dispositivos</summary>
-        <form id="device-login"><label>Contraseña de administración
-          <input name="password" type="password" maxlength="256" autocomplete="current-password" required>
-        </label><button class="primary-button">Entrar</button></form>
-        <div id="device-management" hidden>
-          <p>Compara el código con el que muestra el teléfono antes de aprobar.</p>
-          <ul id="pairing-list"></ul><button id="device-logout" type="button">Cerrar sesión</button>
-        </div>
-        <p id="device-feedback" role="status"></p>
-      </details>
+      <section id="device-panel" class="panel device-panel" aria-labelledby="device-title">
+        <div class="panel-heading"><h2 id="device-title">Dispositivos</h2><small id="device-updated" class="device-updated"></small></div>
+        <p class="device-help">Compara el código del panel con el que muestra el celular antes de aprobar. La IP es solo informativa.</p>
+        <p id="device-toast" class="feedback" role="status"></p>
+        <div id="device-alert" class="device-alert" role="alert" hidden><span id="device-alert-text"></span><button id="device-retry" type="button" class="secondary-button">Reintentar ahora</button></div>
+        <div id="device-list" class="device-list" tabindex="-1"></div>
+        <p id="device-feedback" class="feedback" role="status"></p>
+      </section>
       <div class="panel system-note"><h2>Cómo interpretar el estado</h2><p id="provider-note">Esperando la respuesta del proveedor.</p><p>La disponibilidad del modelo de embeddings no garantiza una respuesta: también se necesita documentación autorizada y evidencia suficiente. El modelo de respuestas de Conocimiento se verifica al realizar la consulta.</p><p>La latencia de cada petición aparece junto a su resultado. El backend no expone aquí consumo de CPU, RAM ni VRAM.</p><small id="status-updated">Sin comprobaciones todavía.</small></div>
     </section>
     <footer class="page-footer"><span>ITGlasses / Local AI assistant</span><span>Diseñado para explorar. Respaldado por tus fuentes.</span></footer>
   </main>
   <dialog id="source-dialog" aria-labelledby="source-title"><div class="dialog-heading"><div><span class="eyebrow">EVIDENCIA DOCUMENTAL</span><h2 id="source-title">Fuente</h2></div><button id="close-source" class="icon-button" aria-label="Cerrar fuente">×</button></div><p id="source-meta"></p><pre id="source-text"></pre><p id="source-feedback" role="status"></p></dialog>
+  <dialog id="device-dialog" aria-labelledby="device-dialog-title"><h2 id="device-dialog-title"></h2><dl id="device-dialog-details" class="device-details"></dl><p id="device-dialog-consequence"></p><div class="dialog-actions"><button id="device-dialog-cancel" type="button" class="secondary-button">Cancelar</button><button id="device-dialog-confirm" type="button" class="danger-button"></button></div></dialog>
   <dialog id="withdraw-dialog" aria-labelledby="withdraw-title"><h2 id="withdraw-title">¿Retirar este documento?</h2><p id="withdraw-description"></p><p>Dejará de utilizarse en nuevas respuestas y aclaraciones pendientes. El archivo original se conserva.</p><div class="dialog-actions"><button id="cancel-withdraw" class="secondary-button">Cancelar</button><button id="confirm-withdraw" class="danger-button">Retirar documento</button></div></dialog>
   <noscript>Activa JavaScript para utilizar esta interfaz local.</noscript>
 </body>

@@ -80,3 +80,17 @@ main{margin-left:240px;min-height:100dvh;display:flex;flex-direction:column}.top
 .voice-heading{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-top:16px}.voice-heading strong{display:block;font-size:19px;color:#a8edc2}.voice-heading small{display:block;margin-top:5px;font-size:10px;letter-spacing:.08em}
 .voice-buttons{display:flex;gap:8px;flex-wrap:wrap}.voice-panel p{line-height:1.6;margin:10px 0;color:#b6c4bf}.voice-transcription{background:#101617;border-radius:8px;padding:12px;white-space:pre-wrap;overflow-wrap:anywhere}.voice-panel audio{width:min(100%,400px);height:34px;display:block;margin:10px 0}.voice-panel small{color:#a2b0aa;line-height:1.6}.voice-panel details{margin:14px 0}.voice-panel fieldset{border:0;padding:12px 0;display:grid;grid-template-columns:1fr 1fr;gap:12px}.voice-panel label{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.voice-panel select,.voice-panel input:not([type=checkbox]),.voice-transcript-confirmation textarea{background:#101617;border:1px solid #38433f;border-radius:6px;color:#e4eae7;padding:8px;max-width:100%}.voice-wide{grid-column:1/-1}.voice-wide input{width:100%}.voice-engine-label{font-size:12px}.voice-transcript-confirmation{display:grid;gap:8px;padding:12px;background:#101617;border-radius:8px}.voice-transcript-confirmation textarea{width:100%;resize:vertical}.voice-transcript-confirmation[hidden]{display:none}#voice-state[data-state=error]{color:#ffb1a9}
 @media(max-width:760px){.voice-panel{margin:0 12px 12px;padding:12px}.voice-heading{align-items:flex-start;flex-direction:column}.voice-panel fieldset{grid-template-columns:1fr}.voice-buttons button{font-size:12px}}
+/* Device administration panel */
+.device-panel{margin-top:24px}.device-help{font-size:12px;color:var(--muted);margin:6px 0 16px}.device-updated{font-size:10px;color:#9aaca0}
+.device-alert{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:12px 0;padding:12px 14px;border:1px solid #72473f;border-radius:10px;background:#2a1d1b;color:#ffd0c5;font-size:12px}.device-alert[hidden]{display:none}
+.device-list{display:grid;gap:14px}.device-list:focus{outline:none}.device-list.stale{opacity:.55}
+.device-group-title{font-size:12px;font-weight:600;color:#bfcec2;margin:4px 0 8px;cursor:default}details.device-group>summary{cursor:pointer}
+.device-rows{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.device-row{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:10px 14px;background:#181f1a;border:1px solid #303d33;border-radius:10px;overflow-wrap:anywhere}
+.device-row.device-pending{border:2px solid var(--green);background:#1b241e}.device-row.device-blocked,.device-row.device-denied{opacity:.85}
+.device-info{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px;min-width:0;font-size:11px;color:#a9b7ad}
+.device-name{font-size:13px;font-weight:500;color:var(--text)}.device-state{color:#d5e3d9}
+.device-code{font:600 20px/1.2 ui-monospace,Consolas,monospace;letter-spacing:2px;color:var(--green)}
+.device-actions{display:flex;gap:6px;flex-wrap:wrap;flex-shrink:0}.device-actions button{padding:7px 10px;font-size:11px}
+.device-actions button:disabled{opacity:.6;cursor:progress}.device-panel button:focus-visible,.device-group>summary:focus-visible{outline:2px solid var(--green);outline-offset:2px}
+.device-details{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:12px;margin:0 0 12px}.device-details dt{color:#8fa193}.device-details dd{margin:0;color:var(--text);overflow-wrap:anywhere}

@@ -1,94 +1,272 @@
-const panel = document.querySelector("#device-panel");
-const form = document.querySelector("#device-login");
-const management = document.querySelector("#device-management");
-const list = document.querySelector("#pairing-list");
-const feedback = document.querySelector("#device-feedback");
-let timer;
-let lastRows;
+// Device administration panel (local beta). Served at http://127.0.0.1:8000 only.
+// Everything a phone sends (name, model) is untrusted: text goes in with textContent,
+// never as HTML. No imports, so tests can run this file in a vm context.
+const POLL_MS = 5000;
+const MAX_BACKOFF_MS = 30000;
+const TOAST_MS = 8000;
+const COLLAPSE_OVER = 5;
+const ORDER = ["pending", "approved", "active", "blocked", "denied"];
+const GROUPS = {pending: "Pendientes", approved: "Aprobados", active: "Activos", blocked: "Bloqueados", denied: "Rechazados"};
+const STATES = {pending: "Pendiente", approved: "Aprobado, esperando al celular", active: "Activo",
+  blocked: "Bloqueado", denied: "Rechazado"};
+const ACTIONS = {pending: ["approve", "deny", "delete"], approved: ["delete"], active: ["block", "delete"],
+  blocked: ["unblock", "delete"], denied: ["delete"]};
+const LABELS = {approve: "Aprobar", deny: "Rechazar", block: "Bloquear", unblock: "Desbloquear", delete: "Eliminar"};
+const STYLES = {approve: "primary-button", block: "danger-button", delete: "danger-button"};
+const CONFIRM = {
+  block: {title: "¿Bloquear este dispositivo?", button: "Bloquear",
+    consequence: "Dejará de funcionar hasta que lo desbloquees. No hace falta tocar el celular."},
+  delete: {title: "¿Eliminar este dispositivo?", button: "Eliminar",
+    consequence: "Tendrá que emparejarse y aprobarse de nuevo desde la app."},
+};
+const FORBIDDEN = "Abre el panel desde la PC del servidor: http://127.0.0.1:8000";
+const OFFLINE = "No se puede contactar con el servidor. Reintentando en ";
 
-async function api(endpoint, body) {
-  const options = {cache: "no-store", credentials: "same-origin", redirect: "error"};
-  if (body !== undefined) {
-    options.method = "POST";
-    options.headers = {"Content-Type": "application/json", "X-ITGlasses-Admin": "1"};
-    options.body = JSON.stringify(body);
-  }
-  const response = await fetch("/api/v1/admin/" + endpoint, options);
-  if (!response.ok) throw Object.assign(new Error(), {status: response.status});
+const $ = id => document.getElementById(id);
+const state = {timer: null, loading: false, again: false, failures: 0, forbidden: false, devices: [],
+  known: null, lastSuccess: 0, buttons: new Map(), closed: new Set(), confirming: null, toastTimer: null};
+
+async function api(path, method = "GET") {
+  const response = await fetch("/api/v1/admin/" + path, {
+    method, cache: "no-store", credentials: "omit", redirect: "error", headers: {"X-ITGlasses-Admin": "1"},
+  });
+  if (!response.ok) throw Object.assign(new Error("HTTP " + response.status), {status: response.status});
   return response.json();
 }
 
-function session(active) {
-  management.hidden = !active;
-  form.hidden = active;
-  if (!active) {
-    list.replaceChildren();
-    lastRows = undefined;
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+function nowSeconds() { return Math.floor(Date.now() / 1000); }
+
+function relative(seconds) {
+  if (!seconds) return "nunca";
+  const diff = Math.max(0, nowSeconds() - seconds);
+  if (diff < 60) return "hace unos segundos";
+  if (diff < 3600) return `hace ${Math.floor(diff / 60)} min`;
+  if (diff < 86400) return `hace ${Math.floor(diff / 3600)} h`;
+  return `hace ${Math.floor(diff / 86400)} d`;
+}
+
+function formatCode(code) { return /^\d{6}$/.test(code) ? code.slice(0, 3) + " " + code.slice(3) : code; }
+
+function remaining(expires) {
+  const left = Math.max(0, expires - nowSeconds());
+  return `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`;
+}
+
+function label(device) { return device.name || "Sin nombre"; }
+
+function ordered(group, status) {
+  return [...group].sort(status === "pending"
+    ? (a, b) => (a.created_at || 0) - (b.created_at || 0)
+    : (a, b) => (b.last_seen || 0) - (a.last_seen || 0));
+}
+
+function row(device) {
+  const item = el("li", "device-row device-" + device.state);
+  const info = el("div", "device-info");
+  info.append(el("strong", "device-name", label(device)));
+  const kind = device.variant === "meta" ? "Ray-Ban Meta" : "Celular";
+  info.append(el("span", "device-meta", [device.model, kind].filter(Boolean).join(" · ")));
+  info.append(el("span", "device-state", STATES[device.state] || device.state));
+  if (device.state === "pending" && device.code) {
+    const code = el("span", "device-code", formatCode(device.code));
+    code.setAttribute("aria-label", "Código " + device.code.split("").join(" "));
+    info.append(code);
+    if (device.expires) info.append(el("span", "device-expiry", "Caduca en " + remaining(device.expires)));
   }
+  const seen = el("span", "device-seen", "Última conexión: " + relative(device.last_seen));
+  if (device.last_seen) seen.setAttribute("title", new Date(device.last_seen * 1000).toLocaleString("es-MX"));
+  info.append(seen);
+  if (device.last_ip) info.append(el("span", "device-ip", "IP: " + device.last_ip + " (informativa)"));
+  const actions = el("div", "device-actions");
+  for (const action of ACTIONS[device.state] || ["delete"]) {
+    const button = el("button", STYLES[action] || "secondary-button", LABELS[action]);
+    button.type = "button";
+    button.setAttribute("aria-label", LABELS[action] + " " + label(device));
+    button.dataset.key = device.id + ":" + action;
+    button.addEventListener("click", () => choose(device, action, button));
+    state.buttons.set(button.dataset.key, button);
+    actions.append(button);
+  }
+  item.append(info, actions);
+  return item;
 }
 
-function report(error) {
-  if (error.status === 401) session(false);
-  feedback.textContent = error.status === 429 ? "Demasiados intentos. Espera antes de reintentar."
-    : error.status === 401 ? "Introduce la contraseña de administración."
-    : "No se pudo completar la operación. Comprueba la conexión.";
-}
-
-async function refresh() {
-  const {devices} = await api("devices");
-  session(true);
-  const current = JSON.stringify(devices);
-  if (current === lastRows) return;
-  lastRows = current;
+function render(focusKey) {
+  const list = $("device-list");
+  const active = document.activeElement;
+  const keep = focusKey || (active && active.dataset && active.dataset.key);
+  state.buttons = new Map();
   list.replaceChildren();
-  for (const device of devices) {
-    const row = document.createElement("li");
-    const pending = device.state === "pending";
-    const state = pending ? "Pendiente" : device.state === "approved" ? "Aprobado, esperando teléfono" : "Autorizado";
-    row.append(document.createTextNode([device.variant, device.code || device.id.slice(0, 8), state].join(" · ") + " "));
-    for (const [label, decision] of pending ? [["Aprobar","approve"],["Rechazar","deny"]] : [["Revocar","revoke"]]) {
-      const button = document.createElement("button");
-      button.textContent = label;
-      button.onclick = async () => {
-        button.disabled = true;
-        try {
-          if (decision === "revoke") await api("revoke", {id: device.id});
-          else await api("decision", {id: device.id, decision});
-          await refresh();
-          feedback.textContent = "";
-        } catch (error) { report(error); }
-        finally { button.disabled = false; }
-      };
-      row.append(button);
-    }
-    list.append(row);
+  if (!state.devices.length && !state.forbidden) {
+    list.append(el("p", "empty-panel", "Aún no hay dispositivos. Instala la app en un celular y aparecerá aquí como pendiente."));
   }
-  if (!devices.length) list.textContent = "Aún no hay dispositivos.";
+  for (const status of ORDER) {
+    const group = state.devices.filter(device => device.state === status);
+    if (!group.length) continue;
+    const title = `${GROUPS[status]} (${group.length})`;
+    const collapsible = status !== "pending" && group.length > COLLAPSE_OVER;
+    const section = el(collapsible ? "details" : "section", "device-group device-group-" + status);
+    if (collapsible) {
+      section.open = !state.closed.has(status);
+      section.addEventListener("toggle", () => section.open ? state.closed.delete(status) : state.closed.add(status));
+      section.append(el("summary", "device-group-title", title));
+    } else {
+      section.append(el("h3", "device-group-title", title));
+    }
+    const rows = el("ul", "device-rows");
+    for (const device of ordered(group, status)) rows.append(row(device));
+    section.append(rows);
+    list.append(section);
+  }
+  if (keep) {
+    const button = state.buttons.get(keep);
+    if (button) button.focus();
+    else if (focusKey) list.focus();
+  }
 }
 
-form.onsubmit = async event => {
-  event.preventDefault();
+function setAlert(message) {
+  $("device-alert-text").textContent = message || "";
+  $("device-alert").hidden = !message;
+}
+
+function setFeedback(message) { $("device-feedback").textContent = message; }
+
+function toast(message) {
+  $("device-toast").textContent = message;
+  clearTimeout(state.toastTimer);
+  state.toastTimer = setTimeout(() => { $("device-toast").textContent = ""; }, TOAST_MS);
+}
+
+function stamp(stale) {
+  $("device-list").classList.toggle("stale", stale);
+  $("device-updated").textContent = state.lastSuccess
+    ? (stale ? "Datos de " : "Actualizado ") + relative(Math.floor(state.lastSuccess / 1000)) : "";
+}
+
+function announce(devices) {
+  if (state.known) {
+    for (const device of devices) {
+      const before = state.known.get(device.id);
+      if (device.state === "active" && (before === "pending" || before === "approved")) {
+        toast("Dispositivo conectado, guardado: " + label(device));
+      }
+    }
+  }
+  state.known = new Map(devices.map(device => [device.id, device.state]));
+}
+
+function schedule(delay) {
+  clearTimeout(state.timer);
+  state.timer = null;
+  if (!state.forbidden && !document.hidden) state.timer = setTimeout(() => { state.timer = null; refresh(); }, delay);
+}
+
+function forbidden() {
+  state.forbidden = true;
+  state.devices = [];
+  clearTimeout(state.timer);
+  state.timer = null;
+  render();
+  setAlert(FORBIDDEN);
+}
+
+async function refresh(focusKey) {
+  if (state.loading) { state.again = true; return; }
+  state.loading = true;
   try {
-    await api("login", {password: form.elements.password.value});
-    form.reset();
-    await refresh();
-    feedback.textContent = "";
-  } catch (error) { report(error); }
-};
-document.querySelector("#device-logout").onclick = async () => {
-  try { await api("logout", {}); session(false); feedback.textContent = ""; }
-  catch (error) { report(error); }
-};
-panel.ontoggle = async () => {
-  clearInterval(timer);
-  if (!panel.open) return;
-  try { await refresh(); } catch (error) { report(error); }
-  if (panel.open) timer = setInterval(() => {
-    if (!document.hidden && !management.hidden) refresh().catch(report);
-  }, 5000);
-};
-if (location.protocol === "https:") {
-  api("devices").then(() => { panel.hidden = false; })
-    .catch(error => { if (error.status === 401) panel.hidden = false; });
+    const {devices} = await api("devices");
+    state.failures = 0;
+    state.forbidden = false;
+    setAlert("");
+    announce(devices);
+    state.devices = devices;
+    state.lastSuccess = Date.now();
+    render(focusKey);
+    stamp(false);
+    schedule(POLL_MS);
+  } catch (error) {
+    if (error.status === 403) {
+      forbidden();
+    } else {
+      state.failures += 1;
+      const delay = Math.min(POLL_MS * 2 ** (state.failures - 1), MAX_BACKOFF_MS);
+      setAlert(OFFLINE + Math.round(delay / 1000) + " s.");
+      stamp(true);
+      schedule(delay);
+    }
+  } finally {
+    state.loading = false;
+    if (state.again) { state.again = false; await refresh(); }
+  }
 }
 
+async function perform(device, action, button) {
+  button.disabled = true;
+  const path = "devices/" + encodeURIComponent(device.id) + (action === "delete" ? "" : "/" + action);
+  try {
+    await api(path, action === "delete" ? "DELETE" : "POST");
+    setFeedback("");
+  } catch (error) {
+    if (error.status === 403) { forbidden(); return; }
+    setFeedback(error.status === 409 ? "El estado cambió; lista actualizada."
+      : error.status === 404 ? "Ese dispositivo ya no existe; lista actualizada."
+      : "No se pudo completar la acción. Comprueba la conexión.");
+  } finally {
+    button.disabled = false;
+  }
+  await refresh(button.dataset.key);
+}
+
+function choose(device, action, button) {
+  const info = CONFIRM[action];
+  if (!info) return perform(device, action, button);
+  $("device-dialog-title").textContent = info.title;
+  const details = $("device-dialog-details");
+  details.replaceChildren();
+  for (const [name, value] of [["Nombre", label(device)], ["Modelo", device.model || "—"],
+    ["IP", device.last_ip || "—"], ["Última conexión", relative(device.last_seen)]]) {
+    details.append(el("dt", "", name), el("dd", "", value));
+  }
+  $("device-dialog-consequence").textContent = info.consequence;
+  $("device-dialog-confirm").textContent = info.button;
+  state.confirming = {device, action, button};
+  $("device-dialog").showModal();
+  $("device-dialog-cancel").focus();
+}
+
+function start() {
+  if (!$("device-panel")) return;
+  $("device-dialog").addEventListener("close", () => {
+    if (!state.confirming) return;
+    const {button} = state.confirming;
+    state.confirming = null;
+    button.focus();
+  });
+  $("device-dialog-cancel").addEventListener("click", () => $("device-dialog").close());
+  $("device-dialog-confirm").addEventListener("click", () => {
+    const chosen = state.confirming;
+    state.confirming = null;
+    $("device-dialog").close();
+    return chosen && perform(chosen.device, chosen.action, chosen.button);
+  });
+  $("device-retry").addEventListener("click", () => {
+    state.forbidden = false;
+    state.failures = 0;
+    return refresh();
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) { clearTimeout(state.timer); state.timer = null; }
+    else if (!state.forbidden) refresh();
+  });
+  refresh();
+}
+
+start();
