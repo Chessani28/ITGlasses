@@ -35,6 +35,7 @@ def _run_runtime_config(project_root, environment=None):
         "ITGLASSES_ALLOW_LAN_BINDING",
         "ITGLASSES_API_TOKENS",
         "ITGLASSES_HOST",
+        "ITGLASSES_PAIRING_ORIGIN",
     ):
         env.pop(name, None)
     if environment:
@@ -233,3 +234,70 @@ def test_unknown_local_configuration_keys_are_rejected(tmp_path):
     assert result.returncode == 2
     assert "unsupported keys" in result.stdout
     assert "must-not-be-supported" not in result.stdout + result.stderr
+
+
+def _run_and_print_origin(project_root, environment=None):
+    """Like _run_runtime_config, then print the pairing origin the backend would receive."""
+    script = (
+        "$ErrorActionPreference='Stop'; "
+        f". {_quote_ps(ROOT / 'scripts' / 'runtime-config.ps1')}; "
+        f"try {{ $null=Set-ITGlassesRuntimeConfiguration -ProjectRoot {_quote_ps(project_root)}; "
+        "'ORIGIN=[' + $env:ITGLASSES_PAIRING_ORIGIN + ']' } "
+        "catch { 'CONFIG_ERROR:' + $_.Exception.Message; exit 2 }"
+    )
+    env = {**os.environ, "ITGLASSES_WHISPER_PYTHON": "", "ITGLASSES_WHISPER_MODEL": "",
+           "ITGLASSES_REQUIRE_AUTH": "", "ITGLASSES_ALLOW_LAN_BINDING": "", "ITGLASSES_API_TOKENS": "",
+           "ITGLASSES_PAIRING_ORIGIN": "", **(environment or {})}
+    return subprocess.run(
+        [POWERSHELL, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
+        capture_output=True, text=True, env=env, timeout=20, check=False,
+    )
+
+
+def _write_origin_config(project_root, value):
+    (project_root / "runtime-config.psd1").write_text(
+        "@{ WhisperPython = ''; WhisperModel = ''; RequireAuth = $false; AllowLanBinding = $false; "
+        f"PairingOrigin = {value} }}",
+        encoding="utf-8",
+    )
+
+
+def test_pairing_origin_from_configuration_is_exported(tmp_path):
+    _write_origin_config(tmp_path, "'https://172.16.5.143:8443'")
+
+    result = _run_and_print_origin(tmp_path)
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "ORIGIN=[https://172.16.5.143:8443]" in result.stdout
+
+
+def test_environment_pairing_origin_wins_over_configuration(tmp_path):
+    _write_origin_config(tmp_path, "'https://172.16.5.143:8443'")
+
+    result = _run_and_print_origin(tmp_path, {"ITGLASSES_PAIRING_ORIGIN": "https://10.0.0.5:9443"})
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "ORIGIN=[https://10.0.0.5:9443]" in result.stdout
+
+
+def test_missing_or_empty_pairing_origin_stays_off(tmp_path):
+    result = _run_and_print_origin(tmp_path)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "ORIGIN=[]" in result.stdout
+
+    _write_origin_config(tmp_path, "''")
+    result = _run_and_print_origin(tmp_path)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "ORIGIN=[]" in result.stdout
+
+
+def test_invalid_pairing_origin_stops_startup(tmp_path):
+    for value in ("'http://172.16.5.143:8443'", "'https://172.16.5.143:8443/'", "'https://HOST:8443'",
+                  "'https://172.16.5.143:443'", "'https://172.16.5.143 :8443'", "$true"):
+        _write_origin_config(tmp_path, value)
+
+        result = _run_and_print_origin(tmp_path)
+
+        assert result.returncode == 2, value
+        assert "Pairing origin" in result.stdout or "PairingOrigin" in result.stdout, value
+        assert "ORIGIN=[" not in result.stdout, value

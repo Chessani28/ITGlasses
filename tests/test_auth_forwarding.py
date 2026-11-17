@@ -3,6 +3,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.app.core import local_request
+from backend.app.core.config import settings
 from backend.app.main import create_app
 from backend.app.providers.mock import MockLLM
 from test_device_pairing import ORIGIN, ROOT, admin_client, setup
@@ -91,3 +92,46 @@ def test_auth_and_admin_share_one_local_check(setup, monkeypatch):
     monkeypatch.setattr(local_request, "is_direct_local", lambda request: False)
     assert c.post("/api/v1/chat", json={"message": "hola"}).status_code == 401
     assert admin_client(c).get(ROOT + "/admin/devices").status_code == 403
+
+
+# Stage 6: with a pairing origin (Caddy in front), local mode needs a direct request AND a local Host.
+STAGE6_ORIGIN = "https://172.16.5.143:8443"
+LOCAL_BASE = f"http://127.0.0.1:{settings.port}"
+CADDY = {"Host": "172.16.5.143:8443", "X-Forwarded-For": "172.16.5.50", "X-Forwarded-Proto": "https"}
+
+
+@pytest.fixture
+def stage6(app, monkeypatch, tmp_path):
+    # Own device database: these tests must never touch storage/pairing/devices.sqlite3.
+    monkeypatch.setenv("ITGLASSES_PAIRING_DB", str(tmp_path / "pair.sqlite"))
+    monkeypatch.setenv("ITGLASSES_PAIRING_ORIGIN", STAGE6_ORIGIN)
+    return app
+
+
+def chat_via(app, base_url=LOCAL_BASE, headers=None):
+    with TestClient(app, base_url=base_url, client=("127.0.0.1", 50000)) as client:
+        return client.post("/api/v1/chat", json={"message": "hola"}, headers=headers or {})
+
+
+def test_local_chat_and_panel_keep_working_with_pairing_origin(stage6):
+    assert chat_via(stage6).status_code == 200
+    for base_url in (f"http://localhost:{settings.port}", f"http://[::1]:{settings.port}"):
+        assert chat_via(stage6, base_url=base_url).status_code == 200, base_url
+    with TestClient(stage6, base_url=LOCAL_BASE, client=("127.0.0.1", 50000)) as client:
+        assert client.get(ROOT + "/admin/devices", headers={"X-ITGlasses-Admin": "1"}).status_code == 200
+
+
+def test_chat_through_caddy_is_refused_even_with_bearer(stage6):
+    # No ITGLASSES_API_TOKENS loaded: a shared-token phone through Caddy gets 401.
+    for extra in ({}, {"Authorization": "Bearer cualquier-cosa"}):
+        assert chat_via(stage6, headers={**CADDY, **extra}).status_code == 401, extra
+
+
+def test_foreign_host_is_not_local_with_pairing_origin(stage6):
+    for host in ("evil.example:8000", "172.16.5.143:8443", "127.0.0.1:9000", "testserver"):
+        assert chat_via(stage6, headers={"Host": host}).status_code == 401, host
+
+
+def test_required_auth_keeps_local_mode_closed_with_pairing_origin(stage6, monkeypatch):
+    monkeypatch.setenv("ITGLASSES_REQUIRE_AUTH", "true")
+    assert chat_via(stage6).status_code == 401

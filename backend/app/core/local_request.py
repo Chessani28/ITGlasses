@@ -7,6 +7,8 @@ is never treated as local whatever address it claims.
 """
 import ipaddress
 
+from backend.app.core.config import settings
+
 LOOPBACK = {"127.0.0.1", "::1"}
 PROXY_HEADERS = ("forwarded", "via", "x-forwarded-for", "x-forwarded-host", "x-forwarded-proto", "x-real-ip")
 
@@ -25,3 +27,13 @@ def is_direct_local(request):
     """True only for a loopback peer whose request carries no forwarding header."""
     client = request.client.host if request.client else ""
     return is_loopback(client) and not any(name in request.headers for name in PROXY_HEADERS)
+
+
+def local_hosts():
+    """Host header values that name this backend directly (defeats DNS rebinding and proxied hosts)."""
+    port = settings.port
+    return {f"127.0.0.1:{port}", f"localhost:{port}", f"[::1]:{port}"}
+
+
+def has_local_host(request):
+    return request.headers.get("host", "").lower() in local_hosts()

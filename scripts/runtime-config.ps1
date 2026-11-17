@@ -11,7 +11,8 @@ function Set-ITGlassesRuntimeConfiguration {
         'ITGLASSES_WHISPER_MODEL',
         'ITGLASSES_REQUIRE_AUTH',
         'ITGLASSES_ALLOW_LAN_BINDING',
-        'ITGLASSES_API_TOKENS'
+        'ITGLASSES_API_TOKENS',
+        'ITGLASSES_PAIRING_ORIGIN'
     )
     $previous = @{}
     foreach ($name in $names) {
@@ -32,7 +33,7 @@ function Set-ITGlassesRuntimeConfiguration {
             }
 
             $allowedKeys = @(
-                'WhisperPython', 'WhisperModel', 'RequireAuth', 'AllowLanBinding'
+                'WhisperPython', 'WhisperModel', 'RequireAuth', 'AllowLanBinding', 'PairingOrigin'
             )
             $unknownKeys = @($config.Keys | Where-Object { $_ -notin $allowedKeys })
             if ($unknownKeys.Count -gt 0) {
@@ -70,6 +71,21 @@ function Set-ITGlassesRuntimeConfiguration {
                     $setting.Variable, [string]$config[$setting.Key], 'Process'
                 )
             }
+        }
+
+        # Pairing origin for the phones behind Caddy. Must be identical to the APK's ITGLASSES_PAIRING_ORIGIN.
+        $originValue = [Environment]::GetEnvironmentVariable('ITGLASSES_PAIRING_ORIGIN', 'Process')
+        if ([string]::IsNullOrWhiteSpace($originValue) -and $config.Contains('PairingOrigin')) {
+            if ($config.PairingOrigin -isnot [string]) {
+                throw 'Runtime configuration value PairingOrigin must be a string.'
+            }
+            $originValue = $config.PairingOrigin
+        }
+        if (-not [string]::IsNullOrWhiteSpace($originValue)) {
+            if ($originValue -cnotmatch '^https://[a-z0-9.-]+(:[0-9]{1,5})?$' -or $originValue -match ':443$') {
+                throw 'Pairing origin must be a canonical HTTPS origin such as https://172.16.5.143:8443.'
+            }
+            [Environment]::SetEnvironmentVariable('ITGLASSES_PAIRING_ORIGIN', $originValue, 'Process')
         }
 
         $pythonPath = [Environment]::GetEnvironmentVariable(

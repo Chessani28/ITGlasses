@@ -10,7 +10,6 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Path, Request
 
 from backend.app.core import local_request
-from backend.app.core.config import settings
 from .routes import clean
 from .store import transaction
 
@@ -20,14 +19,9 @@ LISTED = ("pending", "approved", "active", "blocked", "denied")
 FIELDS = "id,variant,name,model,state,code,created_at,approved_at,last_seen,last_ip,expires"
 
 
-def _local_hosts():
-    port = settings.port
-    return {f"127.0.0.1:{port}", f"localhost:{port}", f"[::1]:{port}"}
-
-
 def require_admin(request: Request) -> None:
     """Accept only a browser on this PC talking directly to the backend."""
-    hosts = _local_hosts()
+    hosts = local_request.local_hosts()
     headers = request.headers
     allowed = (
         # 1-2. Loopback peer and no forwarding header (shared with api/auth.py).
