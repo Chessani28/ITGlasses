@@ -469,8 +469,13 @@ def test_chat_and_backend_shutdown_release_whisper():
             calls.append("shutdown")
 
     class KnowledgeSpy:
+        """Same contract as KnowledgeService.query: always a KnowledgeAnswer."""
+
         async def query(self, payload):
-            return {"status": "ok", "text": payload.message}
+            from backend.app.knowledge.models import KnowledgeAnswer
+            return KnowledgeAnswer(status="insufficient_evidence", answer=payload.message,
+                                   conversation_id="00000000-0000-0000-0000-000000000000",
+                                   intent="information")
 
     with TestClient(
         create_app(MockLLM(), knowledge=KnowledgeSpy(), voice=VoiceSpy())

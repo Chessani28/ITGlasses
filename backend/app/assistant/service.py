@@ -190,6 +190,15 @@ def _fold(text):
     return (text or "").casefold().translate(ACCENTS)
 
 
+# Words that make a question internal for the public search provider. Whole words only: "internacional",
+# "manualmente" or "según internet" are public questions. "Según el manual…" is EXPLICIT_MANUAL_REQUEST.
+PUBLIC_SEARCH_PRIVATE = re.compile(
+    r"\b(?:manual(?:es)?|guidelines?|documentos?|documentaci[oó]n|credencial(?:es)?|contrase[nñ]as?|"
+    r"intern[oa]s?|empresas?|tokens?|passwords?)\b|https?://",
+    re.IGNORECASE,
+)
+
+
 def _contains_phrase(haystack, phrase):
     """Whole-word containment test on an already folded string."""
     if not haystack or not phrase:
@@ -431,9 +440,12 @@ class UnifiedAssistantService:
             "error_category": safe_error,
             "response_mode": response_mode,
         }
+        import json
         import logging
+        # Counts and categories only (never the query): visible in the console as well as in ``extra``.
         logging.getLogger("uvicorn.error").info(
-            "Public search diagnostics",
+            "Public search diagnostics: %s",
+            json.dumps(diagnostic, sort_keys=True, ensure_ascii=False),
             extra={"public_search_diagnostics": diagnostic},
         )
 
@@ -670,6 +682,20 @@ class UnifiedAssistantService:
         if not answer:
             return GENERAL_UNAVAILABLE
         return "Orientación general (no es un procedimiento autorizado de la empresa):\n\n" + answer
+
+    @staticmethod
+    def _private_for_public_search(message, titles=()):
+        """True when ``message`` must not reach a public search provider.
+
+        An explicit reference to the manuals, an internal word (whole words only), a URL, or the title of an
+        indexed document. A public question that merely says "según internet" is not private.
+        """
+        if not message:
+            return False
+        if EXPLICIT_MANUAL_REQUEST.search(message) or PUBLIC_SEARCH_PRIVATE.search(message):
+            return True
+        folded = _fold(message)
+        return any(_contains_phrase(folded, _fold(title)) for title in titles if title)
 
     @staticmethod
     def _needs_web(message):
@@ -1691,18 +1717,9 @@ class UnifiedAssistantService:
         if needs_web:
             # Search only after the manual attempt. Do not send internal topics,
             # credentials, or company documents to a public search provider.
-            private = bool(re.search(
-                r"manual|guideline|documento|credencial|contrase|intern[oa]|empresa|"
-                r"seg[uú]n|https?://|token|password",
-                message, re.I,
-            ))
             store = getattr(self.knowledge, "store", None)
-            if store is not None:
-                private = private or any(
-                    _contains_phrase(_fold(message), _fold(d["title"]))
-                    for d in store.documents()
-                )
-            if private:
+            titles = [d["title"] for d in store.documents()] if store is not None else []
+            if self._private_for_public_search(message, titles):
                 answer = (
                     "No enviaré esta consulta documental o sensible a un buscador público. "
                     "Formula una consulta pública sin contenido interno."
