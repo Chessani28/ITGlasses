@@ -13,7 +13,9 @@ function Set-ITGlassesRuntimeConfiguration {
         'ITGLASSES_ALLOW_LAN_BINDING',
         'ITGLASSES_API_TOKENS',
         'ITGLASSES_PAIRING_ORIGIN',
-        'ITGLASSES_WHISPER_KEEP_RAM_GIB'
+        'ITGLASSES_WHISPER_KEEP_RAM_GIB',
+        'ITGLASSES_WHISPER_HINT_MODE',
+        'ITGLASSES_STT_CORRECTION'
     )
     $previous = @{}
     foreach ($name in $names) {
@@ -35,7 +37,7 @@ function Set-ITGlassesRuntimeConfiguration {
 
             $allowedKeys = @(
                 'WhisperPython', 'WhisperModel', 'RequireAuth', 'AllowLanBinding', 'PairingOrigin',
-                'WhisperKeepRamGiB'
+                'WhisperKeepRamGiB', 'WhisperHintMode', 'SttCorrection'
             )
             $unknownKeys = @($config.Keys | Where-Object { $_ -notin $allowedKeys })
             if ($unknownKeys.Count -gt 0) {
@@ -92,6 +94,26 @@ function Set-ITGlassesRuntimeConfiguration {
 
         # Free RAM (GiB) needed to keep Whisper loaded between voice questions. Optional: the backend uses 8 GiB
         # by default and never less than its 3 GiB load limit.
+        # Voz 2: Whisper vocabulary hint (hotwords, initial_prompt or off) and the transcript correction (on/off).
+        # Optional: the backend uses hotwords and the correction on by default.
+        $hintValue = [Environment]::GetEnvironmentVariable('ITGLASSES_WHISPER_HINT_MODE', 'Process')
+        if ([string]::IsNullOrWhiteSpace($hintValue) -and $config.Contains('WhisperHintMode')) {
+            if ($config.WhisperHintMode -isnot [string] -or
+                $config.WhisperHintMode -cnotin @('hotwords', 'initial_prompt', 'off')) {
+                throw 'Runtime configuration value WhisperHintMode must be hotwords, initial_prompt or off.'
+            }
+            [Environment]::SetEnvironmentVariable('ITGLASSES_WHISPER_HINT_MODE', $config.WhisperHintMode, 'Process')
+        }
+        $correctionValue = [Environment]::GetEnvironmentVariable('ITGLASSES_STT_CORRECTION', 'Process')
+        if ([string]::IsNullOrWhiteSpace($correctionValue) -and $config.Contains('SttCorrection')) {
+            if ($config.SttCorrection -isnot [bool]) {
+                throw 'Runtime configuration value SttCorrection must be true or false.'
+            }
+            [Environment]::SetEnvironmentVariable(
+                'ITGLASSES_STT_CORRECTION', ([string]$config.SttCorrection).ToLowerInvariant(), 'Process'
+            )
+        }
+
         $keepValue = [Environment]::GetEnvironmentVariable('ITGLASSES_WHISPER_KEEP_RAM_GIB', 'Process')
         if ([string]::IsNullOrWhiteSpace($keepValue) -and $config.Contains('WhisperKeepRamGiB')) {
             $keep = $config.WhisperKeepRamGiB

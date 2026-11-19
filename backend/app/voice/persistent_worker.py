@@ -17,6 +17,11 @@ import wave
 from ctypes import wintypes
 
 MAX_REQUEST_BYTES = 1_400_000
+# Voz 2: optional vocabulary hint for Whisper (built by the backend from authorized titles and headings).
+HINT_MODES = ("hotwords", "initial_prompt")
+MAX_HINT_CHARS = 1000
+# A hinted transcript made only of hint words, on audio Whisper itself rates as no speech, is an echo.
+HINT_ECHO_NO_SPEECH = 0.6
 MAX_RESPONSE_BYTES = 256_000
 MIN_LOAD_RAM_BYTES = 3 * 1024**3
 ABORT_RAM_BYTES = int(1.5 * 1024**3)
@@ -365,7 +370,35 @@ def _load_model(model_path):
     )
 
 
-def _transcribe(model, request_id, raw):
+def _fold_words(text):
+    import unicodedata
+
+    text = unicodedata.normalize("NFKD", (text or "").casefold())
+    text = "".join(c for c in text if not unicodedata.combining(c))
+    return "".join(c if c.isalnum() else " " for c in text).split()
+
+
+def _hint_echo(text, hint, segments):
+    """True when a hinted transcript only repeats hint words over audio rated as no speech (hallucination)."""
+    words = _fold_words(text)
+    if not hint or not words or not segments:
+        return False
+    if not all((segment.get("no_speech_prob") or 0) >= HINT_ECHO_NO_SPEECH for segment in segments):
+        return False
+    return set(words) <= set(_fold_words(hint))
+
+
+def _validated_hint(request):
+    """(hint, mode) from a request, or (None, None). Unknown modes or oversized hints are protocol errors."""
+    hint, mode = request.get("hint"), request.get("hint_mode")
+    if hint is None and mode is None:
+        return None, None
+    if not isinstance(hint, str) or not hint.strip() or len(hint) > MAX_HINT_CHARS or mode not in HINT_MODES:
+        raise ValueError("invalid hint")
+    return hint.strip(), mode
+
+
+def _transcribe(model, request_id, raw, hint=None, hint_mode=None):
     import numpy as np
 
     cpu_started = time.process_time()
@@ -386,6 +419,7 @@ def _transcribe(model, request_id, raw):
     else:
         samples = np.frombuffer(pcm, dtype="<i2").astype(np.float32) / 32768.0
         inference_started = time.perf_counter()
+        options = {hint_mode: hint} if hint and hint_mode in HINT_MODES else {}
         segment_iter, info = model.transcribe(
             samples,
             language="es",
@@ -396,6 +430,7 @@ def _transcribe(model, request_id, raw):
             condition_on_previous_text=False,
             vad_filter=False,
             word_timestamps=False,
+            **options,
         )
         segment_results = []
         parts = []
@@ -413,8 +448,11 @@ def _transcribe(model, request_id, raw):
             )
         text = "".join(parts).strip()
         segments = segment_results
+        if options and _hint_echo(text, hint, segments):
+            text = ""  # Hint words over silence or noise: treat as "No se reconoció ninguna voz."
         language_probability = info.language_probability
         inference_seconds = time.perf_counter() - inference_started
+    hint_used = bool(hint) and not quality["silence"]
     return {
         "id": request_id,
         "ok": True,
@@ -427,6 +465,8 @@ def _transcribe(model, request_id, raw):
         "segments": segments,
         "inference_seconds": round(inference_seconds, 4),
         "cpu_seconds": round(time.process_time() - cpu_started, 3),
+        "hint_used": hint_used,
+        "hint_mode": hint_mode if hint_used else None,
         "audio_quality": quality,
         "needs_clarification": not bool(text),
         "quality_reasons": ["no_speech"] if not text else [],
@@ -483,13 +523,14 @@ def _worker_main(model_path):
                 gc.collect()
                 _send_response({"event": "shutdown", "id": request_id})
                 return 0
-            if set(request) != {"id", "audio_b64"}:
+            if not {"id", "audio_b64"} <= set(request) <= {"id", "audio_b64", "hint", "hint_mode"}:
                 raise ValueError("unsupported request fields")
             encoded_audio = request["audio_b64"]
             if not isinstance(encoded_audio, str):
                 raise ValueError("audio payload must be base64 text")
+            hint, hint_mode = _validated_hint(request)
             raw = base64.b64decode(encoded_audio, validate=True)
-            response = _transcribe(model, request_id, raw)
+            response = _transcribe(model, request_id, raw, hint, hint_mode)
             _send_response(response)
             del raw, response
         except Exception as error:
@@ -770,7 +811,8 @@ class PersistentWhisperWorker:
             self.terminate()
             raise
 
-    def transcribe(self, audio):
+    def transcribe(self, audio, hint=None, hint_mode=None):
+        """``hint`` (vocabulary) is optional; it never appears in logs or in the response."""
         validate_audio(audio)
         if not self.process or self.closed:
             raise WorkerCrashedError("Whisper worker is not running")
@@ -781,6 +823,9 @@ class PersistentWhisperWorker:
                 "id": request_id,
                 "audio_b64": base64.b64encode(audio).decode("ascii"),
             }
+            if hint:
+                request["hint"] = hint
+                request["hint_mode"] = hint_mode
             encoded = json.dumps(request, separators=(",", ":")).encode("utf-8") + b"\n"
             if len(encoded) > MAX_REQUEST_BYTES:
                 raise ValueError("Whisper request exceeds the protocol size limit")

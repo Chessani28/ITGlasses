@@ -345,3 +345,46 @@ def test_invalid_whisper_keep_ram_stops_startup(tmp_path):
         assert "WhisperKeepRamGiB" in result.stdout, value
         assert "KEEP=[" not in result.stdout, value
 
+
+def _run_and_print_voice2(project_root, entries, environment=None):
+    (project_root / "runtime-config.psd1").write_text(
+        "@{ WhisperPython = ''; WhisperModel = ''; RequireAuth = $false; AllowLanBinding = $false; "
+        f"PairingOrigin = ''; {entries} }}",
+        encoding="utf-8",
+    )
+    script = (
+        "$ErrorActionPreference='Stop'; "
+        f". {_quote_ps(ROOT / 'scripts' / 'runtime-config.ps1')}; "
+        f"try {{ $null=Set-ITGlassesRuntimeConfiguration -ProjectRoot {_quote_ps(project_root)}; "
+        "'HINT=[' + $env:ITGLASSES_WHISPER_HINT_MODE + '] CORRECTION=[' + $env:ITGLASSES_STT_CORRECTION + ']' } "
+        "catch { 'CONFIG_ERROR:' + $_.Exception.Message; exit 2 }"
+    )
+    env = {**os.environ, "ITGLASSES_WHISPER_PYTHON": "", "ITGLASSES_WHISPER_MODEL": "",
+           "ITGLASSES_REQUIRE_AUTH": "", "ITGLASSES_ALLOW_LAN_BINDING": "", "ITGLASSES_API_TOKENS": "",
+           "ITGLASSES_PAIRING_ORIGIN": "", "ITGLASSES_WHISPER_HINT_MODE": "", "ITGLASSES_STT_CORRECTION": "",
+           **(environment or {})}
+    return subprocess.run(
+        [POWERSHELL, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
+        capture_output=True, text=True, env=env, timeout=20, check=False,
+    )
+
+
+def test_voice2_settings_from_configuration_are_exported(tmp_path):
+    result = _run_and_print_voice2(tmp_path, "WhisperHintMode = 'initial_prompt'; SttCorrection = $false")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "HINT=[initial_prompt] CORRECTION=[false]" in result.stdout
+
+
+def test_voice2_environment_wins_and_absent_keys_stay_unset(tmp_path):
+    result = _run_and_print_voice2(tmp_path, "WhisperHintMode = 'off'", {"ITGLASSES_WHISPER_HINT_MODE": "hotwords"})
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "HINT=[hotwords] CORRECTION=[]" in result.stdout
+
+
+def test_invalid_voice2_settings_stop_startup(tmp_path):
+    for entries, key in (("WhisperHintMode = 'prompt'", "WhisperHintMode"), ("WhisperHintMode = 1", "WhisperHintMode"),
+                         ("SttCorrection = 'yes'", "SttCorrection")):
+        result = _run_and_print_voice2(tmp_path, entries)
+        assert result.returncode == 2, entries
+        assert key in result.stdout, entries
+

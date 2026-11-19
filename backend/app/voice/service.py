@@ -27,6 +27,8 @@ from .persistent_worker import (
     WorkerTimeoutError,
     available_system_memory as _available_system_memory,
 )
+from . import vocabulary as voice_vocabulary
+from .correction import apply_to_result as _correct_transcript
 
 logger = logging.getLogger(__name__)
 
@@ -112,13 +114,48 @@ async def _spawn_worker(*args, **kwargs):
         return _ThreadProcess(process)
 
 
+# Voz 2: vocabulary hint for Whisper and post-transcription correction (Whisper and Vosk).
+HINT_MODES = ("hotwords", "initial_prompt", "off")
+_TRUE = {"1", "true", "on", "yes"}
+_FALSE = {"0", "false", "off", "no"}
+
+
+def whisper_hint_mode(value=None):
+    """ITGLASSES_WHISPER_HINT_MODE: hotwords (default), initial_prompt or off; anything else gives hotwords."""
+    raw = os.environ.get("ITGLASSES_WHISPER_HINT_MODE") if value is None else value
+    mode = str(raw or "").strip().lower()
+    if not mode:
+        return "hotwords"
+    if mode not in HINT_MODES:
+        logger.warning("ITGLASSES_WHISPER_HINT_MODE is not hotwords, initial_prompt or off; using hotwords")
+        return "hotwords"
+    return mode
+
+
+def stt_correction_enabled(value=None):
+    """ITGLASSES_STT_CORRECTION: on by default; 0/false/off/no turn it off; anything else keeps it on."""
+    raw = os.environ.get("ITGLASSES_STT_CORRECTION") if value is None else value
+    flag = str(raw or "").strip().lower()
+    if not flag or flag in _TRUE:
+        return True
+    if flag in _FALSE:
+        return False
+    logger.warning("ITGLASSES_STT_CORRECTION is not a boolean; keeping the correction on")
+    return True
+
+
 def _safe_label(value):
     return re.sub(r"[^a-zA-Z0-9_]", "", str(value or "unknown"))[:64]
 
 
 class VoiceService:
-    def __init__(self, root=PROJECT_ROOT):
+    def __init__(self, root=PROJECT_ROOT, knowledge_autoload=None):
         self.root = Path(root)
+        # The production service (project root) may start the knowledge service for the vocabulary; tests with a
+        # temporary root never touch the real knowledge base.
+        self.knowledge_autoload = (self.root == Path(PROJECT_ROOT)) if knowledge_autoload is None else knowledge_autoload
+        self._vocabulary = None
+        self._vocabulary_signature = None
         self.models = self.root / "storage/voice/models"
         self.temporary = self.root / ".cache/voice"
         self.busy = False
@@ -355,7 +392,38 @@ class VoiceService:
                 await asyncio.to_thread(worker.terminate)
             raise
 
-    async def _run_persistent_whisper(self, payload, request):
+    def _vocabulary_for(self, request):
+        """Vocabulary of the authorized knowledge base, rebuilt only when its signature changes; None if unavailable.
+
+        Logged as counts only. Never returned to clients (the response only says whether a hint was used).
+        """
+        if request is None:
+            return None
+        state = getattr(getattr(request, "app", None), "state", None)
+        knowledge = getattr(state, "knowledge", None)
+        if knowledge is None and self.knowledge_autoload:
+            try:
+                from backend.app.knowledge.routes import service as knowledge_service
+                knowledge = knowledge_service(request)
+            except Exception as error:  # noqa: BLE001 - transcription must work without a vocabulary
+                logger.warning("Voice vocabulary unavailable error_type=%s", _safe_label(type(error).__name__))
+                return None
+        if getattr(knowledge, "store", None) is None:
+            return None
+        try:
+            signature = voice_vocabulary.signature(knowledge.store.documents(eligible_only=True))
+            if self._vocabulary is None or signature != self._vocabulary_signature:
+                self._vocabulary = voice_vocabulary.from_knowledge(knowledge)
+                self._vocabulary_signature = signature
+                stats = self._vocabulary.stats()
+                logger.info("Voice vocabulary rebuilt terms=%d chars=%d titles=%d headings=%d fixed=%d",
+                            stats["terms"], stats["chars"], stats["title"], stats["heading"], stats["fixed"])
+            return self._vocabulary
+        except Exception as error:  # noqa: BLE001
+            logger.warning("Voice vocabulary unavailable error_type=%s", _safe_label(type(error).__name__))
+            return None
+
+    async def _run_persistent_whisper(self, payload, request, hint=None, hint_mode=None):
         if self.busy:
             raise KnowledgeError(
                 "voice_busy",
@@ -365,7 +433,7 @@ class VoiceService:
         self.busy = True
         self._whisper_active = True
         try:
-            return await self._run_persistent_whisper_request(payload, request)
+            return await self._run_persistent_whisper_request(payload, request, hint, hint_mode)
         finally:
             self._whisper_active = False
             self.busy = False
@@ -373,7 +441,7 @@ class VoiceService:
             if worker and worker.alive:
                 self._schedule_whisper_idle_shutdown(worker)
 
-    async def _run_persistent_whisper_request(self, payload, request):
+    async def _run_persistent_whisper_request(self, payload, request, hint=None, hint_mode=None):
         config, reason = self._whisper_configuration()
         if config is None:
             if self._whisper_worker:
@@ -453,7 +521,8 @@ class VoiceService:
                 startup = None
 
             inference = asyncio.create_task(
-                asyncio.to_thread(worker.transcribe, payload)
+                asyncio.to_thread(worker.transcribe, payload, hint=hint, hint_mode=hint_mode)
+                if hint else asyncio.to_thread(worker.transcribe, payload)
             )
             try:
                 while not inference.done():
@@ -560,12 +629,31 @@ class VoiceService:
 
 
     async def run(self, kind, payload, request=None, engine="vosk"):
+        """Speech operation. STT (Voz 2): Whisper gets the vocabulary hint (ITGLASSES_WHISPER_HINT_MODE) and every
+        transcript, Whisper or Vosk, is corrected against known titles (ITGLASSES_STT_CORRECTION): ``text`` is the
+        corrected transcript, ``raw_text`` the original. Logs carry counts only."""
+        if kind != "stt" or engine not in STT_ENGINES:
+            return await self._run_engine(kind, payload, request, engine)
+        vocabulary = self._vocabulary_for(request)
+        mode = whisper_hint_mode()
+        hint = vocabulary.hint if vocabulary is not None and mode != "off" and engine == "whisper-small" else None
+        result = await self._run_engine(kind, payload, request, engine, hint, mode if hint else None)
+        if vocabulary is not None and stt_correction_enabled() and isinstance(result.get("text"), str):
+            result = _correct_transcript(result, vocabulary)
+            made = result["corrections"]
+            if made:
+                # engine is already one of STT_ENGINES (checked above): logged as is, hyphen included.
+                logger.info("STT corrections engine=%s count=%d anchored=%d", engine, len(made),
+                            sum(bool(c.get("anchored")) for c in made))
+        return result
+
+    async def _run_engine(self, kind, payload, request=None, engine="vosk", hint=None, hint_mode=None):
         if kind == "stt" and engine not in STT_ENGINES:
             raise KnowledgeError("voice_engine_invalid", "Select a supported local speech engine.", 422)
         if self.busy:
             raise KnowledgeError("voice_busy", "A local speech operation is already running. Try again after it finishes.", 409)
         if kind == "stt" and engine == "whisper-small":
-            return await self._run_persistent_whisper(payload, request)
+            return await self._run_persistent_whisper(payload, request, hint, hint_mode)
         if self._whisper_worker:
             await self.release_whisper()
         if kind == "stt":
