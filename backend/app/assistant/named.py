@@ -35,6 +35,33 @@ GLOSSARY = {
     "equipo": ("computer",),
     "aplicacion": ("app", "application"),
 }
+# Spanish names of the English headings, one each, for people who do not read English. They match as the heading
+# and go into the Whisper vocabulary (Voz 2) when the heading is in an authorized document. The only alias table.
+ALIASES = {
+    "computer preparation": "preparación de la computadora",
+    "windows deployment procedure": "despliegue de Windows",
+    "graphene stations deployment procedure": "despliegue de estaciones Graphene",
+    "required peripherals": "periféricos requeridos",
+    "apps installation": "instalación de aplicaciones",
+    "confirms the cpu frecuency": "frecuencia del CPU",
+}
+# Spanish nicknames of the documents with an English title. They match as the title (never offered as the closest
+# name) and go into the Whisper vocabulary before the heading aliases.
+DOCUMENT_ALIASES = {
+    "training setup guideline": ("manual de entrenamiento", "guía de capacitación"),
+}
+SUGGEST_MIN = 0.70     # a heading this close is offered as "¿Te refieres a «X»?"
+SUGGEST_MARGIN = 0.05  # ...only when it stands out from the second closest
+
+
+def alias_of(heading):
+    """The Spanish alias of a heading, or None."""
+    return ALIASES.get(" ".join(fold(heading or "").split()))
+
+
+def nicknames_of(title):
+    """The Spanish nicknames of a document title (possibly empty)."""
+    return DOCUMENT_ALIASES.get(" ".join(fold(title or "").split()), ())
 
 
 def fold(text):
@@ -81,6 +108,7 @@ class Entry:
     document_id: str
     document_title: str
     procedure: str | None  # None for a document title
+    alias: bool = False    # a Spanish alias: it matches, but is never offered as the closest name
 
 
 @dataclass(frozen=True)
@@ -90,6 +118,7 @@ class Resolution:
     document_title: str | None = None
     procedure: str | None = None   # the named (or only) procedure of that document
     nearest: str | None = None     # "missing": the closest title or heading, if any
+    suggestion: str | None = None  # "found" without a procedure: a heading close to what the question says
 
 
 def build_index(documents, procedures_of):
@@ -100,7 +129,13 @@ def build_index(documents, procedures_of):
         procedures = [p for p in (procedures_of(document["id"]) or []) if p.get("title")]
         counts[document["id"]] = [p["title"] for p in procedures]
         entries.append(Entry(document["title"], document["id"], document["title"], None))
-        entries.extend(Entry(p["title"], document["id"], document["title"], p["title"]) for p in procedures)
+        entries.extend(Entry(nickname, document["id"], document["title"], None, alias=True)
+                       for nickname in nicknames_of(document["title"]))
+        for procedure in procedures:
+            entries.append(Entry(procedure["title"], document["id"], document["title"], procedure["title"]))
+            if alias_of(procedure["title"]):
+                entries.append(Entry(alias_of(procedure["title"]), document["id"], document["title"],
+                                     procedure["title"], alias=True))
     return tuple(entries), counts
 
 
@@ -119,25 +154,59 @@ def _covers(window, heading):
     return SequenceMatcher(None, " ".join(window), " ".join(heading_tokens)).ratio()
 
 
-def find_heading(message, headings):
-    """The heading a question mentions, also misspelled or in Spanish: (heading, score) or None.
-
-    Spans of the question's content words as long as the heading or one word longer must cover the heading (every
-    word, or a similarity of HEADING_FUZZY_MIN or more), so one shared word ("equipo" -> computer) never selects
-    COMPUTER PREPARATION.
-    """
+def heading_scores(message, headings):
+    """{heading: how well the question names it}: the best span of the question's content words, compared with the
+    heading and with its Spanish alias. Spans are as long as the name or one word longer and must cover it."""
     words = content_tokens(message)
-    best = None
+    scores = {}
     for heading in headings:
-        size = len(content_tokens(heading))
-        if not size:
-            continue
-        for length in (size, size + 1):
-            for start in range(0, max(0, len(words) - length) + 1):
-                value = _covers(words[start:start + length], heading)
-                if value >= HEADING_FUZZY_MIN and (best is None or value > best[1]):
-                    best = (heading, value)
-    return best
+        best = 0.0
+        for name in (heading, alias_of(heading)):
+            size = len(content_tokens(name)) if name else 0
+            if not size:
+                continue
+            for length in (size, size + 1):
+                for start in range(0, max(0, len(words) - length) + 1):
+                    best = max(best, _covers(words[start:start + length], name))
+        scores[heading] = best
+    return scores
+
+
+def find_heading(message, headings):
+    """The heading a question mentions, also misspelled or by its Spanish alias: (heading, score) or None.
+
+    The span must cover the heading (every word, or a similarity of HEADING_FUZZY_MIN or more), so one shared word
+    ("equipo" -> computer) never selects COMPUTER PREPARATION.
+    """
+    scores = heading_scores(message, headings)
+    best = max(scores.items(), key=lambda item: item[1], default=None)
+    return best if best and best[1] >= HEADING_FUZZY_MIN else None
+
+
+def closest_heading(message, headings):
+    """A heading worth offering as "¿Te refieres a «X»?" (SUGGEST_MIN or more and ahead of the rest), or None."""
+    ranked = sorted(heading_scores(message, headings).items(), key=lambda item: -item[1])
+    if not ranked or ranked[0][1] < SUGGEST_MIN:
+        return None
+    if len(ranked) > 1 and ranked[0][1] - ranked[1][1] < SUGGEST_MARGIN:
+        return None
+    return ranked[0][0]
+
+
+def find_heading_anywhere(message, index):
+    """Resolution of the only heading (or heading alias) the question names in any authorized document, or None.
+
+    The heading must be covered (HEADING_FUZZY_MIN or more) and be the only (document, heading) pair that is: a
+    heading repeated in two documents, or two headings named, give None.
+    """
+    entries, _ = index
+    pairs = {(entry.document_id, entry.procedure): entry.document_title for entry in entries if entry.procedure}
+    scores = heading_scores(message, sorted({heading for _, heading in pairs}))
+    named_pairs = [pair for pair in pairs if scores.get(pair[1], 0.0) >= HEADING_FUZZY_MIN]
+    if len(named_pairs) != 1:
+        return None
+    (document_id, heading), = named_pairs
+    return Resolution("found", document_id, pairs[(document_id, heading)], heading)
 
 
 def resolve(name, index, message=None):
@@ -151,11 +220,11 @@ def resolve(name, index, message=None):
     scored = sorted(((score(name, entry.text), entry) for entry in entries), key=lambda item: -item[0])
     matches = [(value, entry) for value, entry in scored if value >= MATCH_MIN]
     if not matches:
-        mentioned = find_heading(message, [e.text for e in entries if e.procedure]) if message else None
+        mentioned = find_heading(message, [e.text for e in entries if e.procedure and not e.alias]) if message else None
         if mentioned:
             nearest = next(e.document_title for e in entries if e.procedure and e.text == mentioned[0])
         else:
-            nearest = next((entry.text for value, entry in scored if value >= NEAREST_MIN), None)
+            nearest = next((entry.text for value, entry in scored if value >= NEAREST_MIN and not entry.alias), None)
         return Resolution("missing", nearest=nearest)
     best = matches[0][0]
     top = [entry for value, entry in matches if value == best]
@@ -163,7 +232,7 @@ def resolve(name, index, message=None):
     if len(documents) > 1:
         return Resolution("ambiguous")
     document_id = top[0].document_id
-    headings = [entry.procedure for entry in top if entry.procedure]
+    headings = list(dict.fromkeys(entry.procedure for entry in top if entry.procedure))
     if len(headings) == 1:
         procedure = headings[0]
     elif not headings and len(procedures.get(document_id, [])) == 1:
@@ -173,7 +242,10 @@ def resolve(name, index, message=None):
         procedure = mentioned[0] if mentioned else None
     else:
         procedure = None
-    return Resolution("found", document_id, top[0].document_title, procedure)
+    suggestion = None
+    if procedure is None and message:
+        suggestion = closest_heading(message, procedures.get(document_id, []))
+    return Resolution("found", document_id, top[0].document_title, procedure, suggestion=suggestion)
 
 
 def not_found_message(target, nearest):

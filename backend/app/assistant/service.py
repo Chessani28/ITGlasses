@@ -259,6 +259,21 @@ _READS_PROCEDURE = re.compile(
 _READING_KINDS = {"ordinal", "next", "previous", "last", "steps", "procedure", "document"}
 # With a name, "el procedimiento de X" is the name itself, not a request to read it.
 _NAMED_READING_KINDS = _READING_KINDS - {"procedure"}
+# Answers to "¿Te refieres a «X»?" (the whole message).
+_YES = re.compile(r"(?:si|correcto|ese|esa|eso|exacto|claro|afirmativo|asi es|esa misma|ese mismo)"
+                  r"(?:[\s,]+(?:si|ese|esa|eso|correcto|exacto|mismo|misma|por favor|gracias))*")
+_NO = re.compile(r"(?:no|ninguno|ninguna|otro|otra|ese no|esa no)(?:[\s,]+(?:no|ese|esa|es|otro|otra|gracias|por favor))*")
+
+
+def _section_reply(message):
+    """"yes", "no" or None for a reply to the pending section suggestion."""
+    text = re.sub(r"[¿?¡!.]+", " ", _fold(message or "")).strip(" ,")
+    text = " ".join(text.split())
+    if _YES.fullmatch(text):
+        return "yes"
+    if _NO.fullmatch(text):
+        return "no"
+    return None
 
 
 def _pasos(count):
@@ -1468,6 +1483,16 @@ class UnifiedAssistantService:
         if not state.get("history") and re.fullmatch(r"(?:no se conecta|no funciona|no arranca)[.!?]*", message, re.I):
             return {"answer": "¿Qué dispositivo no funciona y qué sucede al intentarlo?", "session_id": session_id, "route": "general", "sources": []}
 
+        # A pending "¿Te refieres a «X»?" is answered by the next message only ("sí" / "no"); anything else drops it.
+        pending_section = state.pop("pending_section", None)
+        if pending_section:
+            reply = _section_reply(message)
+            if reply is not None:
+                answer, sources = await self._answer_section_reply(state, pending_section, reply)
+                state["active_route"] = "knowledge"
+                self.sessions.remember(state, message, answer)
+                return {"answer": answer, "session_id": session_id, "route": "knowledge", "sources": sources}
+
         # Social messages never disturb the procedure continuity of the session.
         social = detect_social_intent(message)
         if social:
@@ -1586,6 +1611,21 @@ class UnifiedAssistantService:
         target = named_target(message)
         resolution = self._resolve_named(target, message) if target else None
         if resolution is not None and resolution.status == "missing" and not self._needs_web(message):
+            # A misheard document name ("Trading Sarah Guyton") with the only heading of a document in the question:
+            # answer from that heading, with a one-line notice first.
+            if kind in _NAMED_READING_KINDS or _READS_PROCEDURE.search(message):
+                anywhere = self._find_heading_anywhere(message)
+                read = (await self._answer_named_procedure(state, anywhere, kind, reference)
+                        if anywhere is not None else None)
+                if read is not None:
+                    article, called = ("una", "llamada") if target.get("feminine") else ("un", "llamado")
+                    notice = (f"No encontré {article} {target['noun']} {called} «{target['name']}»; "
+                              f"respondo desde «{anywhere.document_title}».")
+                    answer, sources = read
+                    answer = notice + "\n" + answer
+                    state["active_route"] = "knowledge"
+                    self.sessions.remember(state, message, answer)
+                    return {"answer": answer, "session_id": session_id, "route": "knowledge", "sources": sources}
             answer = named_reference.not_found_message(target, resolution.nearest)
             self._forget_document(state)
             state["active_route"] = "knowledge"
@@ -1611,6 +1651,23 @@ class UnifiedAssistantService:
             if mentioned:
                 named_document = named_reference.Resolution(
                     "found", state["active_document_id"], state.get("active_document"), mentioned[0])
+            elif kind in _NAMED_READING_KINDS or _READS_PROCEDURE.search(message):
+                # Not named: offer the sections only when one is close, so unrelated questions never get the list.
+                suggestion = named_reference.closest_heading(
+                    message, [p.get("title") for p in state["procedures"] if p.get("title")])
+                if suggestion:
+                    sections = self._sections_answer(state, named_reference.Resolution(
+                        "found", state["active_document_id"], state.get("active_document"), suggestion=suggestion))
+                    if sections is not None:
+                        state["active_route"] = "knowledge"
+                        self.sessions.remember(state, message, sections)
+                        return {"answer": sections, "session_id": session_id, "route": "knowledge", "sources": []}
+        # Nothing named and nothing found in the active document: the only heading (or alias) the question names in
+        # any authorized document.
+        if (named_document is None and target is None
+                and (kind in _READING_KINDS or _READS_PROCEDURE.search(message))
+                and not match_procedures(state.get("procedures"), message)):
+            named_document = self._find_heading_anywhere(message)
         # A named procedure that was parsed is read straight from the document: no retrieval needed.
         if (named_document is not None and named_document.procedure
                 and (kind in (_NAMED_READING_KINDS if target else _READING_KINDS)
@@ -1621,6 +1678,14 @@ class UnifiedAssistantService:
                 state["active_route"] = "knowledge"
                 self.sessions.remember(state, message, answer)
                 return {"answer": answer, "session_id": session_id, "route": "knowledge", "sources": sources}
+        # A named document whose section was not recognized: its sections instead of the retrieval's generic answer.
+        if (target is not None and named_document is not None and not named_document.procedure
+                and (kind in _NAMED_READING_KINDS or _READS_PROCEDURE.search(message))):
+            sections = self._sections_answer(state, named_document)
+            if sections is not None:
+                state["active_route"] = "knowledge"
+                self.sessions.remember(state, message, sections)
+                return {"answer": sections, "session_id": session_id, "route": "knowledge", "sources": []}
 
         # References that can be answered directly from the session state.
         if use_session and kind in {"ordinal", "next", "previous", "last"}:
@@ -1840,6 +1905,10 @@ class UnifiedAssistantService:
             logging.getLogger("assistant").warning("named index unavailable error_type=%s", type(exc).__name__)
             return None
 
+    def _find_heading_anywhere(self, message):
+        index = self._named_index()
+        return None if index is None else named_reference.find_heading_anywhere(message, index)
+
     def _resolve_named(self, target, message=None):
         index = self._named_index()
         return None if index is None else named_reference.resolve(target["name"], index, message)
@@ -1865,6 +1934,46 @@ class UnifiedAssistantService:
                 step = next(s for s in entry["steps"] if (s.get("source") or {}).get("citation_id") == identifier)
                 sources.append(dict(step["source"]))
         return sources
+
+    def _sections_answer(self, state, resolution):
+        """"En «X» no identifiqué esa sección. [¿Te refieres a «Y»?] Tiene: A, B, C. ¿Cuál quieres?", or None when
+        the document has fewer than two titled sections. The document becomes the active one; a suggestion waits
+        for "sí" / "no" in the session."""
+        try:
+            catalog = self.knowledge.procedure_catalog(resolution.document_id)
+        except Exception:  # noqa: BLE001
+            catalog = None
+        procedures = (catalog or {}).get("procedures") or []
+        titles = [p["title"] for p in procedures if p.get("title") and p.get("steps")]
+        if len(titles) < 2:
+            return None
+        title = resolution.document_title or ((catalog or {}).get("document") or {}).get("title") or "el documento"
+        if state.get("active_document_id") != resolution.document_id:
+            self._forget_document(state)
+        state["active_document"] = title
+        state["active_document_id"] = resolution.document_id
+        state["procedures"] = procedures
+        state["document_steps"] = flatten(procedures)
+        suggestion = resolution.suggestion if resolution.suggestion in titles else None
+        if suggestion:
+            state["pending_section"] = {"document_id": resolution.document_id, "document_title": title,
+                                        "heading": suggestion}
+        answer = f"En «{title}» no identifiqué esa sección."
+        if suggestion:
+            answer += f" ¿Te refieres a «{suggestion}»?"
+        return answer + " Tiene: " + ", ".join(titles) + ". ¿Cuál quieres?"
+
+    async def _answer_section_reply(self, state, pending, reply):
+        """(answer, sources) for "sí" (read the suggested section) or "no" (list the sections)."""
+        resolution = named_reference.Resolution(
+            "found", pending["document_id"], pending["document_title"],
+            pending["heading"] if reply == "yes" else None)
+        if reply == "yes":
+            read = await self._answer_named_procedure(state, resolution, "steps", None)
+            if read is not None:
+                return read
+        answer = self._sections_answer(state, resolution)
+        return (answer or "¿Qué sección quieres consultar?"), []
 
     async def _answer_named_procedure(self, state, resolution, kind, reference):
         """(answer, sources) read from the parsed procedure of the named document, or None to use the retrieval."""

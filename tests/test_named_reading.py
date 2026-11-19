@@ -119,7 +119,8 @@ def test_find_heading_covers_the_whole_heading(message, heading):
 @pytest.mark.parametrize(("message", "heading"), [
     (PHRASES[0][0], "COMPUTER PREPARATION"), (PHRASES[1][0], "WINDOWS DEPLOYMENT PROCEDURE"),
     (PHRASES[2][0], "REQUIRED PERIPHERALS"), (PHRASES[3][0], "GRAPHENE STATIONS DEPLOYMENT PROCEDURE"),
-    *((text, None) for text, _ in PHRASES[4:]),
+    *((text, None) for text, _ in PHRASES[4:10]),
+    (PHRASES[10][0], "REQUIRED PERIPHERALS"), (PHRASES[11][0], "WINDOWS DEPLOYMENT PROCEDURE"),  # Spanish aliases
 ])
 def test_recorded_questions_find_only_the_headings_they_name(message, heading):
     found = named.find_heading(message, HEADINGS)

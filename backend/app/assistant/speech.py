@@ -25,6 +25,9 @@ _ITEM = re.compile(r"^(\d{1,2})[.)]\s+(.+)$")
 _PROCEDURE_ITEM = re.compile(r"(?:^|\s)\d{1,2}\)\s+")
 _INCLUDES = re.compile(r"\s*\(incluye:[^)]*\)")
 _SENTENCE_END = re.compile(r"(?<=[.!?…:])\s+")
+# "En «X» no identifiqué esa sección. [¿Te refieres a «Y»?] Tiene: A, B, C. ¿Cuál quieres?"
+_SECTIONS = re.compile(r"^(?P<lead>En «[^»]+» no identifiqué esa sección\.)(?P<suggestion> ¿Te refieres a «[^»]+»\?)?"
+                       r" Tiene: (?P<list>.+)\. ¿Cuál quieres\?$", re.S)
 
 
 def _clean(answer):
@@ -70,12 +73,25 @@ def _first_sentences(text, limit):
     return spoken
 
 
+_NOTICE = re.compile(r"^(No encontré [^\n]+; respondo desde «[^»]+»\.)\n(.+)$", re.S)
+
+
 def spoken_summary(answer):
     """The text to read aloud, or None when the answer is short enough to be read as it is."""
+    notice = _NOTICE.match(answer or "")
+    if notice:  # the one-line notice is read first, then the answer (short, or its summary)
+        rest = notice.group(2)
+        spoken_rest = spoken_summary(rest) or re.sub(r"\s+", " ", _clean(rest)).strip()
+        return f"{notice.group(1)} {spoken_rest}".strip()
     text = _clean(answer)
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     if not lines:
         return None
+    sections = _SECTIONS.match(" ".join(lines))
+    if sections:  # never read the list aloud: it stays in the chat
+        count = len([item for item in sections.group("list").split(", ") if item.strip()])
+        question = sections.group("suggestion") or " ¿Cuál quieres?"
+        return f"{sections.group('lead')}{question} Las {count} secciones están en el chat."
     header = _LIST_HEADER.match(lines[0])
     if header:
         items = []

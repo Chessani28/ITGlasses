@@ -47,7 +47,7 @@ def clean_term(value) -> str | None:
 @dataclass(frozen=True)
 class Term:
     text: str
-    kind: str  # "title", "heading" or "fixed"
+    kind: str  # "title", "heading", "fixed" or "alias" (Spanish name of an English heading)
 
     @property
     def words(self) -> int:
@@ -60,14 +60,20 @@ class Vocabulary:
 
     @property
     def hint(self) -> str:
-        """Text for Whisper's hotwords / initial_prompt: titles, then headings, then acronyms."""
-        order = {"title": 0, "heading": 1, "fixed": 2}
+        """Text for Whisper's hotwords / initial_prompt: titles, headings, acronyms, then the Spanish aliases (last,
+        so a token limit cuts them first)."""
+        order = {"title": 0, "heading": 1, "fixed": 2, "alias": 3}
         return SEPARATOR.join(t.text for t in sorted(self.terms, key=lambda t: order[t.kind]))
 
     @property
     def candidates(self) -> tuple[Term, ...]:
-        """Correction targets: titles and headings of two words or more (never single acronyms)."""
-        return tuple(t for t in self.terms if t.kind in ("title", "heading") and t.words >= 2)
+        """Correction targets: titles, headings and their aliases of two words or more (never single acronyms)."""
+        return tuple(t for t in self.terms if t.kind in ("title", "heading", "alias") and t.words >= 2)
+
+    @property
+    def aliases(self) -> int:
+        """Number of Spanish heading aliases (a count: safe to log)."""
+        return sum(t.kind == "alias" for t in self.terms)
 
     def stats(self) -> dict:
         """Counts only: safe to log."""
@@ -75,12 +81,12 @@ class Vocabulary:
         return {"terms": len(self.terms), "chars": len(self.hint), **kinds}
 
 
-def build(titles, headings, fixed=FIXED_TERMS, max_terms=MAX_TERMS, max_chars=MAX_CHARS) -> Vocabulary:
-    """Priority when the limits are reached: acronyms always stay, then titles, then headings."""
+def build(titles, headings, fixed=FIXED_TERMS, max_terms=MAX_TERMS, max_chars=MAX_CHARS, aliases=()) -> Vocabulary:
+    """Priority when the limits are reached: acronyms always stay, then titles, then headings, then aliases."""
     selected: list[Term] = []
     seen: set[str] = set()
     used = 0
-    for kind, values in (("fixed", fixed), ("title", titles), ("heading", headings)):
+    for kind, values in (("fixed", fixed), ("title", titles), ("heading", headings), ("alias", aliases)):
         for value in values:
             term = clean_term(value)
             if term is None or fold(term) in seen:
@@ -104,14 +110,26 @@ def _headings(procedures) -> list[str]:
     return [p.get("title") for p in procedures or [] if isinstance(p, dict) and p.get("title")]
 
 
-def from_knowledge(knowledge) -> Vocabulary:
-    """Backend: the KnowledgeService in use (authorized, non-withdrawn documents only)."""
+def _aliases(titles, headings, aliases, nicknames) -> list[str]:
+    """Low-priority Spanish names: document nicknames first, then the heading aliases (the last cut first)."""
+    from backend.app.assistant.named import alias_of, nicknames_of
+
+    found = [nickname for title in titles for nickname in nicknames_of(title)] if nicknames else []
+    if aliases:
+        found.extend(alias for alias in (alias_of(heading) for heading in headings) if alias)
+    return found
+
+
+def from_knowledge(knowledge, aliases=False, nicknames=False) -> Vocabulary:
+    """Backend: the KnowledgeService in use (authorized, non-withdrawn documents only). ``aliases`` adds the
+    Spanish names of the English headings that exist, ``nicknames`` those of the documents."""
     documents = knowledge.store.documents(eligible_only=True)
     headings = []
     for document in documents:
         catalog = knowledge.procedure_catalog(document["id"]) or {}
         headings.extend(_headings(catalog.get("procedures")))
-    return build([d["title"] for d in documents], headings)
+    titles = [d["title"] for d in documents]
+    return build(titles, headings, aliases=_aliases(titles, headings, aliases, nicknames))
 
 
 _ELIGIBLE = """SELECT d.id, d.title FROM documents d JOIN revisions r ON r.document_id=d.id
@@ -123,7 +141,7 @@ _CHUNKS = """SELECT c.*, d.title, d.scope, d.procedure_id, d.procedure_key, r.ve
     ORDER BY COALESCE(c.page,0), COALESCE(c.paragraph,0), c.offset"""
 
 
-def from_database_readonly(path: Path) -> Vocabulary:
+def from_database_readonly(path: Path, aliases=False, nicknames=False, max_chars=MAX_CHARS) -> Vocabulary:
     """Offline evaluation: the same SQL as Store, opened read-only and immutable (no locks, no side files)."""
     from backend.app.assistant.procedures import parse_document
 
@@ -135,4 +153,5 @@ def from_database_readonly(path: Path) -> Vocabulary:
         for document in documents:
             chunks = [dict(row) for row in db.execute(_CHUNKS, (document["id"],))]
             headings.extend(_headings(parse_document(chunks)))
-    return build([d["title"] for d in documents], headings)
+    titles = [d["title"] for d in documents]
+    return build(titles, headings, max_chars=max_chars, aliases=_aliases(titles, headings, aliases, nicknames))

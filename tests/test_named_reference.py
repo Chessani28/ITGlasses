@@ -69,7 +69,8 @@ DOCUMENTS = {
                                                  "3. Verificar las credenciales de usuario."),
 }
 
-# work/voice-eval/frases.csv (Voz 2): the 10 recorded questions. p09 and p10 name documents that do not exist.
+# work/voice-eval/frases.csv (Voz 2): the 12 recorded questions. p09 and p10 name documents that do not exist;
+# p11 and p12 name sections by their Spanish alias.
 PHRASES = [
     ("Según el manual de Training Setup Guideline, cuáles son los pasos de COMPUTER PREPARATION", True),
     ("En el Training Setup Guideline, cómo es el WINDOWS DEPLOYMENT PROCEDURE", True),
@@ -81,6 +82,8 @@ PHRASES = [
     ("En el manual de soporte VPN Phase1B, cómo configuro la VPN", True),
     ("Según el manual de Server Rack Guide, cómo se monta un servidor", False),
     ("Según la guía de Network Cabling Standards, qué cable uso", False),
+    ("Según el manual de Training Setup Guideline, qué dice periféricos requeridos", True),
+    ("Según el manual de Training Setup Guideline, cómo es el despliegue de Windows", True),
 ]
 
 
