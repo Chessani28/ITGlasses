@@ -32,6 +32,8 @@ class AssistantResponse(BaseModel):
     session_id: str
     route: Literal["social", "general", "knowledge"]
     sources: list = Field(default_factory=list)
+    # What the voice reads of a long answer (title and first steps, or first sentences). None: read the answer.
+    speech: str | None = None
 
 
 class HealthResponse(BaseModel):

@@ -55,6 +55,20 @@ def _is_toc(line: str) -> bool:
     return bool(_TOC_LINE.search(line)) or bool(re.search(r"\bPage\s+\d+\s*(?:-\s*\d+)?\s*$", line))
 
 
+_INDEX_TITLE = re.compile(r"^(?:index|indice|índice|table of contents|contents|contenido)$", re.IGNORECASE)
+INDEX_PAGE_SHARE = 0.6
+
+
+def is_index_page(text) -> bool:
+    """True for a table-of-contents page: most of its lines are index rows ("1. X ........ Page 2")."""
+    lines = [line.strip() for line in (text or "").splitlines()]
+    lines = [line for line in lines if line and not _PAGE_ONLY.match(line)]
+    if not lines:
+        return False
+    index_rows = sum(1 for line in lines if _is_toc(line) or _INDEX_TITLE.match(line))
+    return index_rows / len(lines) >= INDEX_PAGE_SHARE
+
+
 def parse_document(chunks) -> list:
     """Return ordered procedures with ordered steps for a list of chunks.
 

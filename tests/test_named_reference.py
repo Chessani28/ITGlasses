@@ -294,7 +294,8 @@ def test_unknown_name_is_said_and_the_previous_topic_is_not_carried():
 
 def test_evidence_from_another_document_is_not_presented_as_the_named_one():
     service = build(Knowledge(force="doc-training"))
-    result = ask(service, "Según el procedimiento de reinicio, ¿qué hago primero?")
+    # A question that is not a reading one goes to the retrieval (a reading one is answered from the document).
+    result = ask(service, "Según el procedimiento de reinicio, ¿cuánto tiempo espero?")
     assert result["answer"] == ("Encontré «Procedimiento de Reinicio», pero no pude verificar esa respuesta en su "
                                 "contenido.")
     assert result["sources"] == []

@@ -61,4 +61,5 @@ async def assistant_chat(payload: AssistantRequest, request: Request):
     result = await request.app.state.assistant.chat(payload.message, (device, session) if device else session)
     if device:
         result = {**result, "session_id": session}
-    return AssistantResponse(**result)
+    from backend.app.assistant.speech import spoken_summary
+    return AssistantResponse(**result, speech=spoken_summary(result.get("answer")))

@@ -249,6 +249,18 @@ def _sentence_count(text):
     return max(1, ends)
 
 
+# Questions that read a named procedure ("qué dice", "muéstrame", "cómo se hace"...). Other questions about it
+# ("¿cuánto espero?") go to the retrieval.
+_READS_PROCEDURE = re.compile(
+    r"\b(?:qu[eé]\s+dice|mu[eé]strame|muestra(?:me)?|c[oó]mo\s+(?:es|se\s+hace)|expl[ií]ca(?:me)?|"
+    r"en\s+qu[eé]\s+consiste|dime|cu[aá]l\s+es\s+el\s+(?:procedimiento|proceso))\b",
+    re.IGNORECASE,
+)
+_READING_KINDS = {"ordinal", "next", "previous", "last", "steps", "procedure", "document"}
+# With a name, "el procedimiento de X" is the name itself, not a request to read it.
+_NAMED_READING_KINDS = _READING_KINDS - {"procedure"}
+
+
 def _pasos(count):
     return "1 paso" if count == 1 else f"{count} pasos"
 
@@ -1139,14 +1151,14 @@ class UnifiedAssistantService:
         lines.append(self._citation(step, document_title))
         return "\n".join(lines)
 
-    async def _answer_steps(self, state, message):
+    async def _answer_steps(self, state, message, only=None):
         """Answer a request for the complete list of steps.
 
         Uses the structured procedure catalog when available, formatting steps
         deterministically without calling the model unnecessarily. Falls back to
         translation only when the catalog lacks step data.
         """
-        procedures = state.get("procedures") or []
+        procedures = (only if only is not None else state.get("procedures")) or []
         matched = match_procedures(procedures, message)
         if not matched:
             matched = [p for p in procedures if p.get("steps")]
@@ -1572,7 +1584,7 @@ class UnifiedAssistantService:
         # procedure of the previous question, and a name that matches nothing is said so, offering one closest
         # name (never a list). Explicit internet requests keep the public search flow.
         target = named_target(message)
-        resolution = self._resolve_named(target) if target else None
+        resolution = self._resolve_named(target, message) if target else None
         if resolution is not None and resolution.status == "missing" and not self._needs_web(message):
             answer = named_reference.not_found_message(target, resolution.nearest)
             self._forget_document(state)
@@ -1580,6 +1592,8 @@ class UnifiedAssistantService:
             self.sessions.remember(state, message, answer)
             return {"answer": answer, "session_id": session_id, "route": "knowledge", "sources": []}
         named_document = resolution if resolution is not None and resolution.status == "found" else None
+        if target is not None and kind == "procedure" and not _READS_PROCEDURE.search(message):
+            kind = None  # "el procedimiento de X" is the name: the question itself decides
         if named_document is not None:
             if named_document.document_id != state.get("active_document_id"):
                 self._forget_document(state)
@@ -1589,6 +1603,24 @@ class UnifiedAssistantService:
         use_session = target is None or (
             named_document is not None and named_document.document_id == state.get("active_document_id")
         )
+        # Nothing named, but a heading of the active document misspelled or in Spanish ("Require Peripherals").
+        if (target is None and kind not in {"next", "previous", "last"} and state.get("active_document_id")
+                and state.get("procedures") and not match_procedures(state.get("procedures"), message)):
+            mentioned = named_reference.find_heading(
+                message, [p.get("title") for p in state["procedures"] if p.get("title")])
+            if mentioned:
+                named_document = named_reference.Resolution(
+                    "found", state["active_document_id"], state.get("active_document"), mentioned[0])
+        # A named procedure that was parsed is read straight from the document: no retrieval needed.
+        if (named_document is not None and named_document.procedure
+                and (kind in (_NAMED_READING_KINDS if target else _READING_KINDS)
+                     or _READS_PROCEDURE.search(message))):
+            read = await self._answer_named_procedure(state, named_document, kind, reference)
+            if read is not None:
+                answer, sources = read
+                state["active_route"] = "knowledge"
+                self.sessions.remember(state, message, answer)
+                return {"answer": answer, "session_id": session_id, "route": "knowledge", "sources": sources}
 
         # References that can be answered directly from the session state.
         if use_session and kind in {"ordinal", "next", "previous", "last"}:
@@ -1808,9 +1840,61 @@ class UnifiedAssistantService:
             logging.getLogger("assistant").warning("named index unavailable error_type=%s", type(exc).__name__)
             return None
 
-    def _resolve_named(self, target):
+    def _resolve_named(self, target, message=None):
         index = self._named_index()
-        return None if index is None else named_reference.resolve(target["name"], index)
+        return None if index is None else named_reference.resolve(target["name"], index, message)
+
+    def _step_sources(self, entry):
+        """Sources of a procedure's steps, each citation authorized again; None if any is no longer valid."""
+        store = getattr(self.knowledge, "store", None)
+        if store is None or not hasattr(store, "evidence"):
+            return None
+        identifiers = list(dict.fromkeys(
+            (step.get("source") or {}).get("citation_id") for step in entry.get("steps") or []))
+        if not identifiers or None in identifiers:
+            return None
+        source_of = getattr(self.knowledge, "source", None)
+        sources = []
+        for identifier in identifiers:
+            row = store.evidence(identifier)
+            if not row:
+                return None
+            if callable(source_of) and isinstance(row, dict):
+                sources.append(source_of(row))
+            else:
+                step = next(s for s in entry["steps"] if (s.get("source") or {}).get("citation_id") == identifier)
+                sources.append(dict(step["source"]))
+        return sources
+
+    async def _answer_named_procedure(self, state, resolution, kind, reference):
+        """(answer, sources) read from the parsed procedure of the named document, or None to use the retrieval."""
+        try:
+            catalog = self.knowledge.procedure_catalog(resolution.document_id)
+        except Exception:  # noqa: BLE001
+            catalog = None
+        procedures = (catalog or {}).get("procedures") or []
+        entry = next((p for p in procedures if p.get("title") == resolution.procedure and p.get("steps")), None)
+        if entry is None:
+            return None
+        sources = self._step_sources(entry)
+        if sources is None:
+            return None
+        state["active_document"] = resolution.document_title or (catalog.get("document") or {}).get("title")
+        state["active_document_id"] = resolution.document_id
+        state["active_sources"] = sources
+        state["procedures"] = procedures
+        state["document_steps"] = flatten(procedures)
+        if state.get("active_procedure") != entry["title"]:
+            state["current_step_index"] = 0
+        state["active_procedure"] = entry["title"]
+        state["active_steps"] = entry.get("steps") or []
+        if kind in {"ordinal", "next", "previous", "last"}:
+            answer = await self._answer_movement(state, kind, (reference or {}).get("number"))
+        elif kind == "document":
+            answer = self._answer_document(state)
+        else:
+            answer = await self._answer_steps(state, entry["title"], only=[entry])
+        return (answer, sources) if answer else None
 
     def _forget_document(self, state):
         """Drop the previous question's document and procedure so they are not carried into this one."""

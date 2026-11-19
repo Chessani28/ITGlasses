@@ -57,12 +57,12 @@ _FIRST = re.compile(
 )
 
 # A document or procedure named in the question: "según el procedimiento de reinicio", "el manual de soporte VPN
-# Phase1B", "la guía «X»". The name ends at punctuation, an interrogative or the end of the question.
+# Phase1B", "la guía «X»", or a capitalized title right after the noun ("el manual Training Setup Guideline"). The name ends at punctuation, an interrogative or the end of the question.
 _NOUNS = {"procedimiento": False, "proceso": False, "manual": False, "documento": False, "instructivo": False,
           "protocolo": False, "guía": True}
 _NAMED = re.compile(
     r"(?<![\wáéíóúñ])(?P<before>\w+\s+)?(?P<noun>procedimiento|proceso|manual|documento|gu[ií]a|instructivo|protocolo)"
-    r"\s+(?:(?:de|del|para|sobre)\s+(?:(?:el|la|los|las)\s+)?|llamad[oa]\s+)"
+    r"\s+(?:(?:de|del|para|sobre)\s+(?:(?:el|la|los|las)\s+)?|llamad[oa]\s+|(?=(?-i:[A-Z0-9])))"
     r"«?(?P<name>[^,;:?¿!¡.«»]+?)»?"
     r"(?=\s*(?:[,;:?¿!¡.]|$|(?<![\wáéíóúñ])(?:qu[eé]|c[oó]mo|cu[aá]l(?:es)?|d[oó]nde|cu[aá]ndo|qui[eé]n(?:es)?|"
     r"a\s+qui[eé]n|paso\s+a\s+paso|por\s+favor|seg[uú]n)(?![\wáéíóúñ])))",

@@ -2,6 +2,7 @@ import asyncio
 from dataclasses import asdict
 import hashlib
 import json
+import logging
 from pathlib import Path
 import re
 import sys
@@ -13,6 +14,19 @@ from .models import KnowledgeAnswer, KnowledgeError, Metadata
 from .retrieval import Retriever, exact_ids, intent
 from .social import detect_social_intent, social_response
 from .store import Store
+
+
+def reserve_answer(evidence, reason):
+    """Answer when no grounded generation is available: the selected evidence, without table-of-contents pages
+    (unless every row is one). Only this text changes; the selection, ranking and sources do not."""
+    from backend.app.assistant.procedures import is_index_page
+
+    rows = [row for row in evidence if not is_index_page(row.get("text"))] or list(evidence)
+    logging.getLogger("knowledge").info(
+        "Knowledge reserve answer reason=%s rows=%d index_pages_dropped=%d",
+        re.sub(r"[^A-Za-z0-9_]", "", str(reason))[:64], len(rows), len(evidence) - len(rows),
+    )
+    return "Según la documentación autorizada:\n\n" + "\n\n".join(row["text"] for row in rows)
 
 
 class KnowledgeService:
@@ -293,7 +307,7 @@ class KnowledgeService:
                     if hasattr(self.selector, "generate_grounded_answer"):
                         answer = await self.selector.generate_grounded_answer(request.message, evidence)
                     else:
-                        answer = "Según la documentación autorizada:\n\n" + "\n\n".join(row["text"] for row in evidence)
-                except Exception:
-                    answer = "Según la documentación autorizada:\n\n" + "\n\n".join(row["text"] for row in evidence)
+                        answer = reserve_answer(evidence, "no_generator")
+                except Exception as exc:  # noqa: BLE001 - the reserve answer is the selected evidence itself
+                    answer = reserve_answer(evidence, type(exc).__name__)
             return respond("answered", answer, [selected_document], sources, stats)

@@ -32,6 +32,7 @@ GLOSSARY = {
     "frecuencia": ("frecuency", "frequency"),
     "estacion": ("station",),
     "computadora": ("computer",),
+    "equipo": ("computer",),
     "aplicacion": ("app", "application"),
 }
 
@@ -103,13 +104,58 @@ def build_index(documents, procedures_of):
     return tuple(entries), counts
 
 
-def resolve(name, index):
-    """Resolution of a name against an index from build_index."""
+HEADING_FUZZY_MIN = 0.85
+
+
+def _covers(window, heading):
+    """How well a span of the question names a heading: 1.0 when every word of the heading is in the span (glossary
+    included), otherwise the similarity of the words ("Require Peripherals" ~ REQUIRED PERIPHERALS)."""
+    heading_tokens = content_tokens(heading)
+    if not window or not heading_tokens:
+        return 0.0
+    expanded = set().union(*(_variants(token) for token in window))
+    if set(heading_tokens) <= expanded:
+        return 1.0
+    return SequenceMatcher(None, " ".join(window), " ".join(heading_tokens)).ratio()
+
+
+def find_heading(message, headings):
+    """The heading a question mentions, also misspelled or in Spanish: (heading, score) or None.
+
+    Spans of the question's content words as long as the heading or one word longer must cover the heading (every
+    word, or a similarity of HEADING_FUZZY_MIN or more), so one shared word ("equipo" -> computer) never selects
+    COMPUTER PREPARATION.
+    """
+    words = content_tokens(message)
+    best = None
+    for heading in headings:
+        size = len(content_tokens(heading))
+        if not size:
+            continue
+        for length in (size, size + 1):
+            for start in range(0, max(0, len(words) - length) + 1):
+                value = _covers(words[start:start + length], heading)
+                if value >= HEADING_FUZZY_MIN and (best is None or value > best[1]):
+                    best = (heading, value)
+    return best
+
+
+def resolve(name, index, message=None):
+    """Resolution of a name against an index from build_index.
+
+    With the whole ``message``: a named document without a named procedure takes the heading the question mentions
+    (find_heading), and a missing name offers as the closest one the document of a heading the question mentions
+    ("Según el manual de Terry D., qué dice REQUIRED PERIPHERALS" -> «Training Setup Guideline»).
+    """
     entries, procedures = index
     scored = sorted(((score(name, entry.text), entry) for entry in entries), key=lambda item: -item[0])
     matches = [(value, entry) for value, entry in scored if value >= MATCH_MIN]
     if not matches:
-        nearest = next((entry.text for value, entry in scored if value >= NEAREST_MIN), None)
+        mentioned = find_heading(message, [e.text for e in entries if e.procedure]) if message else None
+        if mentioned:
+            nearest = next(e.document_title for e in entries if e.procedure and e.text == mentioned[0])
+        else:
+            nearest = next((entry.text for value, entry in scored if value >= NEAREST_MIN), None)
         return Resolution("missing", nearest=nearest)
     best = matches[0][0]
     top = [entry for value, entry in matches if value == best]
@@ -122,6 +168,9 @@ def resolve(name, index):
         procedure = headings[0]
     elif not headings and len(procedures.get(document_id, [])) == 1:
         procedure = procedures[document_id][0]
+    elif not headings and message:
+        mentioned = find_heading(message, procedures.get(document_id, []))
+        procedure = mentioned[0] if mentioned else None
     else:
         procedure = None
     return Resolution("found", document_id, top[0].document_title, procedure)
