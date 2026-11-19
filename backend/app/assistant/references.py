@@ -49,6 +49,71 @@ _ALL_STEPS = re.compile(
 
 _ORDINAL_WORDS = sorted(ORDINALS, key=len, reverse=True)
 
+# "¿Qué hago primero?" asks for step 1 even without the word "paso".
+_FIRST = re.compile(
+    r"\b(?:qu[eé]\s+(?:hago|debo\s+hacer|tengo\s+que\s+hacer|se\s+hace)\s+primero|"
+    r"lo\s+primero\s+que\s+(?:hago|debo|tengo|se))\b",
+    re.IGNORECASE,
+)
+
+# A document or procedure named in the question: "según el procedimiento de reinicio", "el manual de soporte VPN
+# Phase1B", "la guía «X»". The name ends at punctuation, an interrogative or the end of the question.
+_NOUNS = {"procedimiento": False, "proceso": False, "manual": False, "documento": False, "instructivo": False,
+          "protocolo": False, "guía": True}
+_NAMED = re.compile(
+    r"(?<![\wáéíóúñ])(?P<before>\w+\s+)?(?P<noun>procedimiento|proceso|manual|documento|gu[ií]a|instructivo|protocolo)"
+    r"\s+(?:(?:de|del|para|sobre)\s+(?:(?:el|la|los|las)\s+)?|llamad[oa]\s+)"
+    r"«?(?P<name>[^,;:?¿!¡.«»]+?)»?"
+    r"(?=\s*(?:[,;:?¿!¡.]|$|(?<![\wáéíóúñ])(?:qu[eé]|c[oó]mo|cu[aá]l(?:es)?|d[oó]nde|cu[aá]ndo|qui[eé]n(?:es)?|"
+    r"a\s+qui[eé]n|paso\s+a\s+paso|por\s+favor|seg[uú]n)(?![\wáéíóúñ])))",
+    re.IGNORECASE,
+)
+_QUOTED = re.compile(
+    r"(?P<noun>procedimiento|proceso|manual|documento|gu[ií]a|instructivo|protocolo)\s+«(?P<name>[^»]{1,80})»",
+    re.IGNORECASE,
+)
+# An English document title without a Spanish noun: "según el Server Rack Guide", "en el Training Setup Guideline".
+_TITLED = re.compile(
+    r"\b(?:[Ss]eg[uú]n|[Ee]n|[Dd]el?)\s+(?:(?:el|la)\s+)?"
+    r"(?P<name>(?:[A-Z0-9][\w-]*\s+){1,7}(?:Guide|Guideline|Manual|Procedure|Standards?|Handbook|Policy|"
+    r"GUIDE|GUIDELINE|MANUAL|PROCEDURE|STANDARDS?|HANDBOOK|POLICY))\b"
+)
+_ANAPHORIC_BEFORE = {"este", "ese", "esta", "esa", "aquel", "aquella", "dicho", "dicha", "mismo", "misma"}
+_NOT_A_NAME = {"la empresa", "empresa", "actual", "completo", "completa", "anterior", "siguiente", "este", "ese",
+               "esta", "esa", "arriba", "antes", "ahora"}
+_NAME_STOPWORDS = {"de", "del", "la", "el", "los", "las", "a", "al", "y", "en", "un", "una"}
+MAX_NAME_WORDS = 8
+
+
+def named_target(message):
+    """The document or procedure the question names, or None.
+
+    Returns ``{"noun": "procedimiento", "name": "reinicio", "feminine": False}``. Anaphoric references ("este
+    procedimiento", "el procedimiento" with nothing after it) are not names: they keep using the session.
+    """
+    text = (message or "").strip()
+    match = _QUOTED.search(text)
+    if not match:
+        for candidate in _NAMED.finditer(text):
+            before = (candidate.group("before") or "").strip().lower()
+            if before in _ANAPHORIC_BEFORE:
+                continue
+            match = candidate
+            break
+    if match:
+        noun = match.group("noun").lower().replace("guia", "guía")
+        name = match.group("name").strip(" «»\"'")
+        words = name.split()
+        lowered = name.lower()
+        if (not words or len(words) > MAX_NAME_WORDS or lowered in _NOT_A_NAME
+                or all(word.lower() in _NAME_STOPWORDS for word in words)):
+            return None
+        return {"noun": noun, "name": name, "feminine": _NOUNS.get(noun, False)}
+    titled = _TITLED.search(text)
+    if titled:
+        return {"noun": "documento", "name": titled.group("name").strip(), "feminine": False}
+    return None
+
 
 CARDINALS = dict(zip("cero uno dos tres cuatro cinco seis siete ocho nueve diez once doce trece catorce quince dieciséis diecisiete dieciocho diecinueve veinte".split(), range(21)))
 CARDINALS["dieciseis"] = 16
@@ -60,6 +125,8 @@ def detect_reference(message):
     words = "|".join(sorted(values, key=len, reverse=True))
     pattern = r"\bpaso\s+(?:(?:número|numero|n[°º])\s*)?(\d{1,2}|" + words + r")\b|\b(" + words + r")\s+paso\b"
     match = re.search(pattern, lowered)
+    if not match and _FIRST.search(lowered):
+        return {"kind": "ordinal", "number": 1, "text": text}
     if match:
         value = match.group(1) or match.group(2)
         return {"kind": "ordinal", "number": int(value) if value.isdigit() else values[value], "text": text}

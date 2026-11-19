@@ -17,7 +17,8 @@ from urllib.parse import urlsplit
 
 from backend.app.assistant.memory import SessionStore
 from backend.app.assistant.procedures import flatten
-from backend.app.assistant.references import detect_reference
+from backend.app.assistant import named as named_reference
+from backend.app.assistant.references import detect_reference, named_target
 from backend.app.assistant.web_search import (
     WebSearchError,
     WebSearchService,
@@ -248,6 +249,10 @@ def _sentence_count(text):
     return max(1, ends)
 
 
+def _pasos(count):
+    return "1 paso" if count == 1 else f"{count} pasos"
+
+
 def match_procedures(procedures, message):
     """Return the procedures whose title is referenced by ``message``.
 
@@ -284,6 +289,7 @@ class UnifiedAssistantService:
         self.provider = provider
         self.sessions = SessionStore()
         self.web_search = web_search if web_search is not None else WebSearchService()
+        self._named_cache = None
 
     @staticmethod
     def _alternative_choice(message):
@@ -1152,7 +1158,7 @@ class UnifiedAssistantService:
         for procedure in matched:
             steps = self._scope_steps({"active_steps": procedure.get("steps") or []})
             title = procedure.get("title") or "Procedimiento"
-            lines = [f"«{title}» ({len(steps)} pasos):"]
+            lines = [f"«{title}» ({_pasos(len(steps))}):"]
             # Use steps from the catalog directly - format deterministically.
             # Translate each step's text naturally into Spanish, but sequentially
             # (not concurrently) to avoid overwhelming the model and to preserve
@@ -1206,9 +1212,15 @@ class UnifiedAssistantService:
                          "steps": steps}
         steps = procedure.get("steps") or []
         answer = (f"El procedimiento «{procedure.get('title') or 'actual'}» "
-                  f"tiene {len(steps)} pasos: ")
-        answer += " ".join(f"{index}) {step.get('text')}. "
-                           for index, step in enumerate(steps, start=1))
+                  f"tiene {_pasos(len(steps))}: ")
+        parts = []
+        for index, step in enumerate(steps, start=1):
+            text = (step.get("text") or "").strip().rstrip(".")
+            substeps = [item.strip().rstrip(".") for item in step.get("substeps") or [] if item.strip()]
+            if substeps:
+                text += " (incluye: " + "; ".join(substeps) + ")"
+            parts.append(f"{index}) {text}.")
+        answer += " ".join(parts)
         if steps:
             answer += " " + self._citation(steps[0], state.get("active_document"))
         return answer.strip()
@@ -1556,8 +1568,30 @@ class UnifiedAssistantService:
         if re.search(r"\bpasos\b", message, re.I) and match_procedures(state.get("procedures"), message):
             kind = "steps"
 
+        # A named document or procedure decides the context. Another document's name is never answered with the
+        # procedure of the previous question, and a name that matches nothing is said so, offering one closest
+        # name (never a list). Explicit internet requests keep the public search flow.
+        target = named_target(message)
+        resolution = self._resolve_named(target) if target else None
+        if resolution is not None and resolution.status == "missing" and not self._needs_web(message):
+            answer = named_reference.not_found_message(target, resolution.nearest)
+            self._forget_document(state)
+            state["active_route"] = "knowledge"
+            self.sessions.remember(state, message, answer)
+            return {"answer": answer, "session_id": session_id, "route": "knowledge", "sources": []}
+        named_document = resolution if resolution is not None and resolution.status == "found" else None
+        if named_document is not None:
+            if named_document.document_id != state.get("active_document_id"):
+                self._forget_document(state)
+            else:
+                self._anchor_named(state, named_document)
+        # Session shortcuts only when nothing is named, or the named document is the active one.
+        use_session = target is None or (
+            named_document is not None and named_document.document_id == state.get("active_document_id")
+        )
+
         # References that can be answered directly from the session state.
-        if kind in {"ordinal", "next", "previous", "last"}:
+        if use_session and kind in {"ordinal", "next", "previous", "last"}:
             named = match_procedures(state.get("procedures"), message)
             if len(named) == 1:
                 if state.get("active_procedure") != named[0].get("title"):
@@ -1570,21 +1604,21 @@ class UnifiedAssistantService:
                 self.sessions.remember(state, message, answer)
                 return {"answer": answer, "session_id": session_id, "route": "knowledge",
                         "sources": state.get("active_sources") or []}
-        if kind == "document":
+        if use_session and kind == "document":
             answer = self._answer_document(state)
             if answer is not None:
                 state["active_route"] = "knowledge"
                 self.sessions.remember(state, message, answer)
                 return {"answer": answer, "session_id": session_id, "route": "knowledge",
                         "sources": state.get("active_sources") or []}
-        if kind == "procedure":
+        if use_session and kind == "procedure":
             answer = self._answer_procedure(state)
             if answer is not None:
                 state["active_route"] = "knowledge"
                 self.sessions.remember(state, message, answer)
                 return {"answer": answer, "session_id": session_id, "route": "knowledge",
                         "sources": state.get("active_sources") or []}
-        if kind == "steps":
+        if use_session and kind == "steps":
             answer = await self._answer_steps(state, message)
             if answer is not None:
                 state["active_route"] = "knowledge"
@@ -1639,6 +1673,16 @@ class UnifiedAssistantService:
             and result.documentation_sufficient
             and bool(result.sources)
         )
+        if evidence_sufficient and (not needs_web or documentation_only) and named_document is not None:
+            own = [s for s in result.sources if s.get("document_id") == named_document.document_id]
+            if not own:
+                # The evidence came from another document: never present it as the named one.
+                answer = (f"Encontré «{named_document.document_title}», pero no pude verificar esa respuesta "
+                          "en su contenido.")
+                state["active_route"] = "knowledge"
+                self.sessions.remember(state, message, answer)
+                return {"answer": answer, "session_id": session_id, "route": "knowledge", "sources": []}
+            result = result.model_copy(update={"sources": own})
         if evidence_sufficient and (not needs_web or documentation_only):
             document_ids = {s.get("document_id") for s in result.sources if s.get("document_id")}
             if len(document_ids) > 1:
@@ -1657,6 +1701,8 @@ class UnifiedAssistantService:
                 state["active_document"] = result.sources[0].get("title")
                 state["active_document_id"] = result.sources[0].get("document_id")
                 self._load_catalog(state, request.message)
+                if named_document is not None:
+                    self._anchor_named(state, named_document)
 
         if evidence_sufficient and (not needs_web or documentation_only):
             state["active_route"] = "knowledge"
@@ -1741,6 +1787,51 @@ class UnifiedAssistantService:
         return {"answer": answer, "session_id": session_id, "route": "general",
                 "sources": []}
 
+    def _named_index(self):
+        """Titles and procedure headings of the authorized documents, rebuilt only when they change."""
+        store = getattr(self.knowledge, "store", None)
+        if store is None or not hasattr(self.knowledge, "procedure_catalog"):
+            return None
+        try:
+            documents = store.documents(eligible_only=True)
+            signature = tuple(sorted((str(d.get("id")), d.get("current_revision"), d.get("authorized"),
+                                      d.get("withdrawn"), d.get("title")) for d in documents))
+            if self._named_cache is not None and self._named_cache[0] == signature:
+                return self._named_cache[1]
+            index = named_reference.build_index(
+                documents, lambda document_id: (self.knowledge.procedure_catalog(document_id) or {}).get("procedures")
+            )
+            self._named_cache = (signature, index)
+            return index
+        except Exception as exc:  # noqa: BLE001 - without the index, the question goes to the documentation
+            import logging
+            logging.getLogger("assistant").warning("named index unavailable error_type=%s", type(exc).__name__)
+            return None
+
+    def _resolve_named(self, target):
+        index = self._named_index()
+        return None if index is None else named_reference.resolve(target["name"], index)
+
+    def _forget_document(self, state):
+        """Drop the previous question's document and procedure so they are not carried into this one."""
+        self.sessions.clear_procedure(state)
+        state["active_document"] = None
+        state["active_document_id"] = None
+        state["active_sources"] = []
+
+    @staticmethod
+    def _anchor_named(state, resolution):
+        """Make the named (or only) procedure of the named document the active one."""
+        if not resolution.procedure:
+            return
+        entry = next((p for p in state.get("procedures") or [] if p.get("title") == resolution.procedure), None)
+        if entry is None:
+            return
+        if state.get("active_procedure") != entry.get("title"):
+            state["current_step_index"] = 0
+        state["active_procedure"] = entry.get("title")
+        state["active_steps"] = entry.get("steps") or []
+
     def _load_catalog(self, state, message=None):
         """Rebuild the deterministic procedure catalog of the active document.
 
@@ -1805,7 +1896,7 @@ class UnifiedAssistantService:
             step = steps[number - 1] if 1 <= number <= len(steps) else None
             if step is None:
                 return (f"No existe el paso {number} en el procedimiento actual. "
-                        f"El procedimiento documentado tiene {len(steps)} pasos.")
+                        f"El procedimiento documentado tiene {_pasos(len(steps))}.")
             ordinal = number
             state["current_step_index"] = steps.index(step)
         elif kind == "next":

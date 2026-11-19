@@ -21,6 +21,23 @@ _DOTTED_LEADER = re.compile(r"[.\u2024]{2,}.*$", re.DOTALL)
 _TOC_LINE = re.compile(r"(?:\.{3,}|\u2024{2,})")
 _BULLET = re.compile(r"^[\u2022\u25aa\u27a2\u2192\u27a4\u2043>]\s*(.+)$")
 _SECTION = re.compile(r"^(\d+\.\d+(?:\.\d+)?)\s+([A-Za-z].*)$")
+# "Procedimiento 10: Reinicio de servidor" / "Procedure 3: ..." headings.
+_NAMED_HEADING = re.compile(r"^(?:Procedimiento|Procedure)\s+(\d+)\s*[:\-\u2013]\s*(\S.{1,80})$", re.IGNORECASE)
+# Steps written on one line: "Pasos: 1. Apagar el servidor. 2. Esperar 30 segundos. 3. Encender el servidor."
+_INLINE_STEPS = re.compile(r"^(?:Pasos?|Steps?)\s*:\s*(.+)$", re.IGNORECASE)
+_INLINE_NUMBER = re.compile(r"(?:^|(?<=\s))(\d{1,2})\.\s+")
+
+
+def inline_steps(text):
+    """[(1, "Apagar el servidor."), ...] when the text is a list numbered 1..n (n >= 2), otherwise []."""
+    parts = _INLINE_NUMBER.split(text.strip())
+    if len(parts) < 5 or parts[0].strip():
+        return []
+    numbers = [int(number) for number in parts[1::2]]
+    texts = [value.strip() for value in parts[2::2]]
+    if numbers != list(range(1, len(numbers) + 1)) or not all(texts):
+        return []
+    return list(zip(numbers, texts))
 
 
 def clean_title(text: str) -> str:
@@ -69,6 +86,20 @@ def parse_document(chunks) -> list:
         for raw_line in (chunk.get("text") or "").splitlines():
             line = raw_line.strip()
             if not line or _PAGE_ONLY.match(line) or _is_noise(line) or _is_toc(line):
+                continue
+            named_heading = _NAMED_HEADING.match(line)
+            if named_heading:
+                new_procedure(named_heading.group(1), clean_title(named_heading.group(2)))
+                continue
+            inline = _INLINE_STEPS.match(line)
+            listed = inline_steps(inline.group(1)) if inline else []
+            if listed:
+                if current is None:
+                    new_procedure("", "")
+                for number, text in listed:
+                    if not any(s["number"] == number and s["section"] == section for s in current["steps"]):
+                        current["steps"].append({"number": number, "text": text, "substeps": [],
+                                                 "section": section, "source": dict(citation)})
                 continue
             subsection = _SECTION.match(line)
             if subsection:
