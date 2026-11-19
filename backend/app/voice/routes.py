@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from backend.app.knowledge.models import KnowledgeError
 from backend.app.knowledge.routes import service as knowledge_service
 from .normalize import normalize_for_speech
-from .service import MAX_AUDIO, VOICE_NAME, VoiceService, validate_audio
+from .service import MAX_AUDIO, STT_ENGINE_ALIASES, STT_ENGINES, VOICE_NAME, VoiceService, validate_audio
 
 router = APIRouter(prefix="/api/v1/voice")
 
@@ -65,7 +65,10 @@ async def update_diagnostic_settings(payload: DiagnosticSettings, request: Reque
 async def transcribe(request: Request):
     svc = speech_service(request)
     engine = request.headers.get("x-itglasses-stt-engine", "vosk").strip().lower()
-    if engine not in {"vosk", "whisper-small"}:
+    # Voz 3: "whisper" is the configured Whisper chain (GPU, then the CPU fallback); "whisper-small" stays as its
+    # synonym for the current app. Responses keep reporting engine "whisper-small".
+    engine = STT_ENGINE_ALIASES.get(engine, engine)
+    if engine not in STT_ENGINES:
         raise KnowledgeError("voice_engine_invalid", "Select a supported local speech engine.", 422)
     if request.headers.get("content-type", "").split(";")[0] != "audio/wav":
         raise KnowledgeError("audio_format", "Send audio/wav, not browser-compressed audio.", 415)

@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Depends
 from fastapi.exceptions import RequestValidationError
@@ -20,14 +21,31 @@ def error_response(status: int, code: str, message: str):
     return JSONResponse(status_code=status, content={"error": {"code": code, "message": message}})
 
 
+def _start_whisper_preload(app):
+    """Voz 3: background Whisper load at startup when ITGLASSES_WHISPER_PRELOAD is on (off by default)."""
+    from backend.app.voice.service import VoiceService, whisper_preload_enabled
+
+    if not whisper_preload_enabled():
+        return None
+    if getattr(app.state, "voice", None) is None:
+        app.state.voice = VoiceService()
+    preload = getattr(app.state.voice, "preload_whisper", None)
+    return asyncio.create_task(preload()) if preload else None
+
+
 def create_app(provider: LLMProvider | None = None, knowledge=None, voice=None) -> FastAPI:
     from backend.app.api.auth import require_auth
 
     @asynccontextmanager
     async def lifespan(app):
+        preload_task = None
         try:
+            preload_task = _start_whisper_preload(app)
             yield
         finally:
+            if preload_task is not None and not preload_task.done():
+                preload_task.cancel()
+                await asyncio.gather(preload_task, return_exceptions=True)
             voice_service = getattr(app.state, "voice", None)
             shutdown = getattr(voice_service, "shutdown", None)
             if shutdown:

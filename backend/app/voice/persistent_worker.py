@@ -28,6 +28,22 @@ ABORT_RAM_BYTES = int(1.5 * 1024**3)
 MODEL_START_TIMEOUT_SECONDS = 120
 REQUEST_TIMEOUT_SECONDS = 90
 POLL_SECONDS = 0.1
+# Voz 3: Whisper on the GPU (CUDA). Compute types allowed per device; the first one is the default (the
+# configurations measured with work/voice-hints-eval.py: int8 on the CPU, int8_float16 on the RTX 2060).
+WHISPER_DEVICES = ("cpu", "cuda")
+COMPUTE_TYPES = {"cpu": ("int8", "int8_float32", "float32"), "cuda": ("int8_float16", "float16", "int8")}
+# A GPU load measured 3.5 s alone and 11.5 s with Ollama loaded; a shorter limit than on the CPU leaves time for
+# the CPU fallback inside the app's 120 s read timeout.
+GPU_STARTUP_TIMEOUT_SECONDS = 45
+# Process memory after loading: the CPU model lives in RAM, the CUDA weights live in VRAM.
+MIN_LOADED_PRIVATE_BYTES = {"cpu": 500 * 1024**2, "cuda": 100 * 1024**2}
+# Worker error types that describe the GPU, mapped to the reasons the backend acts on.
+GPU_ERROR_TYPES = {
+    "CudaLibrariesMissing": "cuda_libraries_missing",
+    "CudaDeviceMissing": "cuda_device_missing",
+    "CudaOutOfMemory": "cuda_out_of_memory",
+}
+_DLL_DIRECTORY_HANDLES = []
 
 _JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x00002000
 _JOB_OBJECT_EXTENDED_LIMIT_INFORMATION = 9
@@ -203,6 +219,127 @@ class WorkerTimeoutError(PersistentWorkerError):
     pass
 
 
+class WorkerGpuError(PersistentWorkerError):
+    """GPU failure: CUDA libraries or device missing, or GPU memory exhausted. ``code`` is the API error code."""
+
+    CODES = {
+        "cuda_libraries_missing": "voice_gpu_unavailable",
+        "cuda_device_missing": "voice_gpu_unavailable",
+        "cuda_out_of_memory": "voice_vram_limit",
+    }
+
+    def __init__(self, reason):
+        super().__init__(reason)
+        self.reason = reason
+
+    @property
+    def code(self):
+        return self.CODES.get(self.reason, "voice_gpu_unavailable")
+
+
+class CudaLibrariesMissing(RuntimeError):
+    pass
+
+
+class CudaDeviceMissing(RuntimeError):
+    pass
+
+
+def model_files(model_path):
+    """Required file names of a CTranslate2 Whisper folder, or None when it is incomplete.
+
+    model.bin, config.json and tokenizer.json, plus vocabulary.txt (Small) or vocabulary.json together with
+    preprocessor_config.json (large-v3 / turbo: without it faster-whisper would use 80 mel bands instead of 128 and
+    transcribe garbage without any error).
+    """
+    path = Path(model_path)
+    base = ("model.bin", "config.json", "tokenizer.json")
+    if not path.is_dir() or not all((path / name).is_file() for name in base):
+        return None
+    if (path / "vocabulary.txt").is_file():
+        return base + ("vocabulary.txt",)
+    if (path / "vocabulary.json").is_file() and (path / "preprocessor_config.json").is_file():
+        return base + ("vocabulary.json", "preprocessor_config.json")
+    return None
+
+
+def validate_runtime(device, compute_type=None):
+    """(device, compute type) after validation; the compute type defaults to the device's first allowed one."""
+    if device not in WHISPER_DEVICES:
+        raise ValueError("Whisper device must be cpu or cuda")
+    compute_type = compute_type or COMPUTE_TYPES[device][0]
+    if compute_type not in COMPUTE_TYPES[device]:
+        raise ValueError("Whisper compute type is not valid for this device")
+    return device, compute_type
+
+
+def cuda_dll_directories(prefix=None, extra=None):
+    """Folders with the cuBLAS and cuDNN DLLs for the worker environment.
+
+    <environment>\\Lib\\site-packages\\nvidia\\*\\bin (the pip wheels nvidia-cublas-cu12 / nvidia-cudnn-cu12), only
+    inside the environment, plus the absolute folders in ITGLASSES_WHISPER_CUDA_DLLS (separated by ";").
+    """
+    prefix = Path(sys.prefix if prefix is None else prefix).resolve()
+    found = []
+    for folder in sorted((prefix / "Lib" / "site-packages" / "nvidia").glob("*/bin")):
+        try:
+            resolved = folder.resolve()
+            resolved.relative_to(prefix)
+        except (OSError, ValueError):
+            continue
+        if resolved.is_dir():
+            found.append(resolved)
+    extra = os.environ.get("ITGLASSES_WHISPER_CUDA_DLLS", "") if extra is None else extra
+    for item in str(extra or "").split(";"):
+        item = item.strip()
+        if item and Path(item).is_absolute() and Path(item).is_dir() and Path(item) not in found:
+            found.append(Path(item))
+    return found
+
+
+def enable_cuda_dlls(prefix=None, extra=None):
+    """Make the CUDA DLLs loadable in this process only (add_dll_directory and this process's PATH).
+
+    cuDNN 9 loads its sub-libraries by name, so the PATH is needed as well. The system PATH is never changed.
+    """
+    folders = cuda_dll_directories(prefix, extra)
+    if not folders:
+        raise CudaLibrariesMissing("cuBLAS and cuDNN were not found in the Whisper environment")
+    if hasattr(os, "add_dll_directory"):
+        for folder in folders:
+            _DLL_DIRECTORY_HANDLES.append(os.add_dll_directory(str(folder)))
+    os.environ["PATH"] = os.pathsep.join([*(str(folder) for folder in folders), os.environ.get("PATH", "")])
+    return len(folders)
+
+
+def _error_type(error, device):
+    """Error type reported by the worker; on CUDA, GPU memory and library failures get their own names."""
+    name = type(error).__name__
+    if device == "cuda" and name not in GPU_ERROR_TYPES:
+        text = str(error).lower()
+        if "out of memory" in text:
+            return "CudaOutOfMemory"
+        if any(marker in text for marker in ("cublas", "cudnn", "cudart", ".dll")):
+            return "CudaLibrariesMissing"
+    return name
+
+
+def startup_failure(response):
+    """Exception for a worker startup_error response."""
+    error_type = response.get("error_type")
+    if error_type in GPU_ERROR_TYPES:
+        return WorkerGpuError(GPU_ERROR_TYPES[error_type])
+    return WorkerStartupError(response.get("message", "Whisper startup failed"))
+
+
+def inference_failure(response):
+    """Exception for a failed transcription response (ok false)."""
+    error_type = response.get("error_type")
+    if error_type in GPU_ERROR_TYPES:
+        return WorkerGpuError(GPU_ERROR_TYPES[error_type])
+    return WorkerInferenceError(response.get("message", "Whisper inference failed"))
+
+
 def available_system_memory():
     if os.name != "nt":
         raise OSError("the persistent Whisper worker requires Windows")
@@ -343,7 +480,22 @@ def _send_response(response):
     sys.stdout.buffer.flush()
 
 
-def _load_model(model_path):
+def _warm_up(model):
+    """One short pass on CUDA so missing cuDNN/cuBLAS or GPU memory fail at startup, not on the first question."""
+    import numpy as np
+
+    segments, _ = model.transcribe(
+        np.zeros(16000, dtype=np.float32),
+        language="es",
+        beam_size=1,
+        condition_on_previous_text=False,
+        vad_filter=False,
+    )
+    for _ in segments:
+        pass
+
+
+def _load_model(model_path, device="cpu", compute_type="int8"):
     if available_system_memory() < MIN_LOAD_RAM_BYTES:
         raise WorkerMemoryLimitError(
             "Whisper Small requires at least 3 GiB of available system RAM"
@@ -360,14 +512,22 @@ def _load_model(model_path):
             return original_open(*args, **kwargs)
 
         faster_whisper_audio.av.open = compatible_open
-    return WhisperModel(
+    if device == "cuda":
+        import ctranslate2
+
+        if ctranslate2.get_cuda_device_count() < 1:
+            raise CudaDeviceMissing("no CUDA device is visible to CTranslate2")
+    model = WhisperModel(
         str(model_path),
-        device="cpu",
-        compute_type="int8",
+        device=device,
+        compute_type=compute_type,
         cpu_threads=4,
         num_workers=1,
         local_files_only=True,
     )
+    if device == "cuda":
+        _warm_up(model)
+    return model
 
 
 def _fold_words(text):
@@ -478,22 +638,27 @@ def _transcribe(model, request_id, raw, hint=None, hint_mode=None):
     }
 
 
-def _worker_main(model_path):
+def _worker_main(model_path, device="cpu", compute_type="int8"):
     try:
         model_started = time.perf_counter()
-        model = _load_model(model_path)
-        _send_response(
-            {
-                "event": "ready",
-                "pid": os.getpid(),
-                "model_load_seconds": round(time.perf_counter() - model_started, 4),
-            }
-        )
+        model = _load_model(model_path, device, compute_type)
+        ready = {
+            "event": "ready",
+            "pid": os.getpid(),
+            "model_load_seconds": round(time.perf_counter() - model_started, 4),
+            "device": device,
+            "compute_type": compute_type,
+        }
+        if device == "cuda":
+            import ctranslate2
+
+            ready["cuda_devices"] = ctranslate2.get_cuda_device_count()
+        _send_response(ready)
     except Exception as error:
         _send_response(
             {
                 "event": "startup_error",
-                "error_type": type(error).__name__,
+                "error_type": _error_type(error, device),
                 "message": str(error)[:200],
             }
         )
@@ -539,8 +704,8 @@ def _worker_main(model_path):
                 {
                     "id": request_id,
                     "ok": False,
-                    "error_type": type(error).__name__,
-                    "message": f"Whisper inference failed ({type(error).__name__})",
+                    "error_type": _error_type(error, device),
+                    "message": f"Whisper inference failed ({_error_type(error, device)})",
                 }
             )
     return 0
@@ -549,12 +714,22 @@ def _worker_main(model_path):
 def main():
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--model", required=True)
+    parser.add_argument("--device", default="cpu")
+    parser.add_argument("--compute-type", default=None)
     args = parser.parse_args()
+    try:
+        device, compute_type = validate_runtime(args.device, args.compute_type)
+    except ValueError:
+        _send_response(
+            {
+                "event": "startup_error",
+                "error_type": "InvalidRuntime",
+                "message": "Whisper device or compute type is not supported",
+            }
+        )
+        return 1
     model_path = Path(args.model).resolve()
-    required = ("model.bin", "config.json", "tokenizer.json", "vocabulary.txt")
-    if not model_path.is_dir() or any(
-        not (model_path / name).is_file() for name in required
-    ):
+    if model_files(model_path) is None:
         _send_response(
             {
                 "event": "startup_error",
@@ -563,7 +738,19 @@ def main():
             }
         )
         return 1
-    return _worker_main(model_path)
+    if device == "cuda":
+        try:
+            enable_cuda_dlls()
+        except CudaLibrariesMissing as error:
+            _send_response(
+                {
+                    "event": "startup_error",
+                    "error_type": "CudaLibrariesMissing",
+                    "message": str(error)[:200],
+                }
+            )
+            return 1
+    return _worker_main(model_path, device, compute_type)
 
 
 if __name__ == "__main__":
@@ -577,14 +764,23 @@ class PersistentWhisperWorker:
         model_path,
         project_root,
         temporary_root,
-        startup_timeout=MODEL_START_TIMEOUT_SECONDS,
+        startup_timeout=None,
         request_timeout=REQUEST_TIMEOUT_SECONDS,
+        device="cpu",
+        compute_type=None,
     ):
         self.python_path = Path(python_path).resolve()
         self.model_path = Path(model_path).resolve()
         self.project_root = Path(project_root).resolve()
         self.temporary_root = Path(temporary_root).resolve()
         self.configuration = (str(self.python_path), str(self.model_path))
+        # Voz 3: device and compute type; a change of either restarts the worker (see VoiceService).
+        self.device, self.compute_type = validate_runtime(device, compute_type)
+        self.runtime = (self.device, self.compute_type)
+        if startup_timeout is None:
+            startup_timeout = (
+                GPU_STARTUP_TIMEOUT_SECONDS if self.device == "cuda" else MODEL_START_TIMEOUT_SECONDS
+            )
         self.startup_timeout = startup_timeout
         self.request_timeout = request_timeout
         self.process = None
@@ -603,6 +799,20 @@ class PersistentWhisperWorker:
         self.startup_seconds = None
         self.last_used = None
         self.closed = False
+
+    def command(self):
+        return [
+            str(self.python_path),
+            "-B",
+            "-m",
+            "backend.app.voice.persistent_worker",
+            "--model",
+            str(self.model_path),
+            "--device",
+            self.device,
+            "--compute-type",
+            self.compute_type,
+        ]
 
     def _attach_descendants(self):
         processes = process_snapshot()
@@ -738,10 +948,7 @@ class PersistentWhisperWorker:
             raise RuntimeError("Whisper worker has already started")
         if not self.python_path.is_file():
             raise WorkerStartupError("configured Whisper Python executable is missing")
-        required = ("model.bin", "config.json", "tokenizer.json", "vocabulary.txt")
-        if not self.model_path.is_dir() or any(
-            not (self.model_path / name).is_file() for name in required
-        ):
+        if model_files(self.model_path) is None:
             raise WorkerStartupError("configured Whisper Small model is incomplete")
         try:
             initial_ram = available_system_memory()
@@ -774,14 +981,7 @@ class PersistentWhisperWorker:
         try:
             self.job = _create_kill_on_close_job()
             self.process = subprocess.Popen(
-                [
-                    str(self.python_path),
-                    "-B",
-                    "-m",
-                    "backend.app.voice.persistent_worker",
-                    "--model",
-                    str(self.model_path),
-                ],
+                self.command(),
                 cwd=str(self.project_root),
                 env=environment,
                 stdin=subprocess.PIPE,
@@ -795,11 +995,11 @@ class PersistentWhisperWorker:
             self.reader.start()
             response = self._read_response(self.startup_timeout, "startup")
             if response.get("event") == "startup_error":
-                raise WorkerStartupError(response.get("message", "Whisper startup failed"))
+                raise startup_failure(response)
             if response.get("event") != "ready":
                 raise WorkerProtocolError("Whisper worker omitted startup handshake")
             self._adopt_worker_pid(response.get("pid"))
-            if self.peak_private_bytes < 500 * 1024**2:
+            if self.peak_private_bytes < MIN_LOADED_PRIVATE_BYTES[self.device]:
                 raise WorkerProtocolError(
                     "Whisper process memory reading is implausibly low after model load"
                 )
@@ -836,9 +1036,8 @@ class PersistentWhisperWorker:
                 if response.get("id") != request_id:
                     raise WorkerProtocolError("Whisper response ID did not match request")
                 if not response.get("ok"):
-                    raise WorkerInferenceError(
-                        response.get("message", "Whisper inference failed")
-                    )
+                    # A GPU memory failure is not a WorkerInferenceError: the worker is terminated below.
+                    raise inference_failure(response)
                 if not isinstance(response.get("text"), str):
                     raise WorkerProtocolError("Whisper response did not contain text")
                 response["elapsed_ms"] = round((time.perf_counter() - started) * 1000)

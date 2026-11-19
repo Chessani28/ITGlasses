@@ -16,9 +16,12 @@ import wave
 from backend.app.core.config import PROJECT_ROOT
 from backend.app.knowledge.models import KnowledgeError
 from .persistent_worker import (
+    COMPUTE_TYPES,
+    WHISPER_DEVICES,
     PersistentWhisperWorker,
     PersistentWorkerError,
     WorkerCrashedError,
+    WorkerGpuError,
     WorkerInferenceError,
     WorkerMemoryLimitError,
     WorkerProtocolError,
@@ -26,6 +29,7 @@ from .persistent_worker import (
     WorkerStartupError,
     WorkerTimeoutError,
     available_system_memory as _available_system_memory,
+    model_files as whisper_model_files,
 )
 from . import vocabulary as voice_vocabulary
 from .correction import apply_to_result as _correct_transcript
@@ -144,6 +148,184 @@ def stt_correction_enabled(value=None):
     return True
 
 
+# Voz 3: Whisper large-v3-turbo on the GPU, Small on the CPU as the fallback, then Vosk in the app (503).
+# "whisper" names the configured Whisper chain; "whisper-small" stays accepted and is what responses report.
+STT_ENGINE_ALIASES = {"whisper": "whisper-small"}
+WHISPER_MIN_VRAM_DEFAULT_MIB = 1000   # with Ollama loaded about 1249 MiB stay free on the RTX 2060
+WHISPER_ABORT_VRAM_DEFAULT_MIB = 256
+WHISPER_IDLE_CPU_SECONDS = 60
+WHISPER_IDLE_GPU_DEFAULT_SECONDS = 900
+WHISPER_IDLE_MIN_SECONDS = 30
+GPU_COOLDOWN_SECONDS = 300
+VRAM_CACHE_SECONDS = 1
+VRAM_IDLE_CHECK_SECONDS = 5
+GPU_MESSAGES = {
+    "voice_gpu_unavailable": "Whisper cannot use the GPU (CUDA libraries, device or a recent GPU failure) and no CPU "
+                             "fallback model is configured.",
+    "voice_vram_limit": "There is not enough free GPU memory for Whisper and no CPU fallback model is configured.",
+    "voice_worker_startup": "The local Whisper worker could not start on the GPU and no CPU fallback model is "
+                            "configured.",
+}
+
+
+def _setting(name, value):
+    return os.environ.get(name) if value is None else value
+
+
+def whisper_device(value=None):
+    """ITGLASSES_WHISPER_DEVICE: cpu (default) or cuda; anything else gives cpu."""
+    device = str(_setting("ITGLASSES_WHISPER_DEVICE", value) or "").strip().lower()
+    if not device:
+        return "cpu"
+    if device not in WHISPER_DEVICES:
+        logger.warning("ITGLASSES_WHISPER_DEVICE is not cpu or cuda; using cpu")
+        return "cpu"
+    return device
+
+
+def whisper_compute_type(device, value=None):
+    """ITGLASSES_WHISPER_COMPUTE_TYPE for the device: int8 on the CPU and int8_float16 on CUDA by default."""
+    allowed = COMPUTE_TYPES[device]
+    compute_type = str(_setting("ITGLASSES_WHISPER_COMPUTE_TYPE", value) or "").strip().lower()
+    if not compute_type:
+        return allowed[0]
+    if compute_type not in allowed:
+        logger.warning("ITGLASSES_WHISPER_COMPUTE_TYPE is not valid for device=%s; using %s", device, allowed[0])
+        return allowed[0]
+    return compute_type
+
+
+def _whole_number(name, value, default):
+    raw = _setting(name, value)
+    if raw is None or str(raw).strip() == "":
+        return default
+    try:
+        number = int(str(raw).strip())
+    except ValueError:
+        logger.warning("%s is not a whole number; using %d", name, default)
+        return default
+    if number < 0:
+        logger.warning("%s must not be negative; using %d", name, default)
+        return default
+    return number
+
+
+def whisper_min_vram_mib(value=None):
+    """Free GPU memory (MiB) needed to load Whisper on CUDA (ITGLASSES_WHISPER_MIN_VRAM_MIB, default 1000)."""
+    return _whole_number("ITGLASSES_WHISPER_MIN_VRAM_MIB", value, WHISPER_MIN_VRAM_DEFAULT_MIB)
+
+
+def whisper_abort_vram_mib(value=None):
+    """An idle GPU Whisper is unloaded below this free GPU memory (ITGLASSES_WHISPER_ABORT_VRAM_MIB, default 256)."""
+    return _whole_number("ITGLASSES_WHISPER_ABORT_VRAM_MIB", value, WHISPER_ABORT_VRAM_DEFAULT_MIB)
+
+
+def whisper_idle_seconds(device, value=None):
+    """Inactivity before unloading: 60 s on the CPU (fixed); on CUDA ITGLASSES_WHISPER_IDLE_SECONDS, default 900,
+    at least 30."""
+    if device != "cuda":
+        return WHISPER_IDLE_CPU_SECONDS
+    seconds = _whole_number("ITGLASSES_WHISPER_IDLE_SECONDS", value, WHISPER_IDLE_GPU_DEFAULT_SECONDS)
+    if seconds == 0:
+        return WHISPER_IDLE_GPU_DEFAULT_SECONDS
+    return max(seconds, WHISPER_IDLE_MIN_SECONDS)
+
+
+def whisper_preload_enabled(value=None):
+    """ITGLASSES_WHISPER_PRELOAD: load Whisper when the backend starts. Off by default."""
+    flag = str(_setting("ITGLASSES_WHISPER_PRELOAD", value) or "").strip().lower()
+    if not flag or flag in _FALSE:
+        return False
+    if flag in _TRUE:
+        return True
+    logger.warning("ITGLASSES_WHISPER_PRELOAD is not a boolean; preload stays off")
+    return False
+
+
+def whisper_fallback_model(value=None):
+    """ITGLASSES_WHISPER_FALLBACK_MODEL: absolute folder of the CPU fallback (Small); None when unset or incomplete."""
+    raw = str(_setting("ITGLASSES_WHISPER_FALLBACK_MODEL", value) or "").strip()
+    if not raw:
+        return None
+    path = Path(raw).expanduser()
+    if not path.is_absolute():
+        return None
+    path = path.resolve()
+    return path if whisper_model_files(path) is not None else None
+
+
+def whisper_model_label(path):
+    """Model name for responses and logs: the folder name without "faster-whisper-", never a path."""
+    name = Path(str(path)).name
+    if name.startswith("faster-whisper-"):
+        name = name[len("faster-whisper-"):]
+    return re.sub(r"[^a-zA-Z0-9._-]", "", name)[:64] or "unknown"
+
+
+def query_gpu_memory():
+    """Free, used and total MiB of GPU 0 from nvidia-smi; OSError when it cannot be read."""
+    try:
+        completed = subprocess.run(
+            ["nvidia-smi", "--query-gpu=memory.free,memory.used,memory.total",
+             "--format=csv,noheader,nounits", "--id=0"],
+            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            text=True, timeout=5, check=False,
+            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+        )
+    except subprocess.TimeoutExpired as error:
+        raise OSError("nvidia-smi timed out") from error
+    if completed.returncode:
+        raise OSError("nvidia-smi failed")
+    try:
+        free, used, total = (int(float(part)) for part in (completed.stdout or "").strip().splitlines()[0].split(","))
+    except (IndexError, ValueError) as error:
+        raise OSError("nvidia-smi output was not understood") from error
+    return {"free_mib": free, "used_mib": used, "total_mib": total}
+
+
+class _GpuFailure(Exception):
+    """Internal: the GPU worker could not start or failed; the request is retried once on the CPU fallback."""
+
+    def __init__(self, code):
+        super().__init__(code)
+        self.code = code
+
+
+def _whisper_targets(config):
+    """(primary, fallback) worker targets. The fallback (Small, CPU, int8) only exists for a CUDA primary."""
+    device = config.get("device", "cpu")
+    primary = {
+        "python": config["python"],
+        "model": config["model"],
+        "device": device,
+        "compute_type": config.get("compute_type") or COMPUTE_TYPES[device][0],
+    }
+    fallback = None
+    if device == "cuda" and config.get("fallback"):
+        fallback = {"python": config["python"], "model": config["fallback"], "device": "cpu", "compute_type": "int8"}
+    return primary, fallback
+
+
+def _target_key(target):
+    return ((str(target["python"]), str(target["model"])), (target["device"], target["compute_type"]))
+
+
+def _worker_key(worker):
+    # Workers without a runtime (built before Voz 3, test doubles) run on the CPU with int8.
+    return (tuple(worker.configuration), tuple(getattr(worker, "runtime", ("cpu", "int8"))))
+
+
+def _worker_device(worker):
+    return _worker_key(worker)[1][0]
+
+
+def _runtime_arguments(target):
+    # CPU with int8 is the worker's default; any other runtime is passed explicitly.
+    if (target["device"], target["compute_type"]) == ("cpu", "int8"):
+        return {}
+    return {"device": target["device"], "compute_type": target["compute_type"]}
+
+
 def _safe_label(value):
     return re.sub(r"[^a-zA-Z0-9_]", "", str(value or "unknown"))[:64]
 
@@ -164,6 +346,8 @@ class VoiceService:
         self._whisper_idle_task = None
         self._whisper_probe_cache = None
         self._whisper_lifecycle_lock = asyncio.Lock()
+        self._gpu_cooldown_until = 0.0
+        self._vram_cache = None
 
     def _vosk_available(self):
         return importlib.util.find_spec("vosk") is not None and (
@@ -194,10 +378,8 @@ class VoiceService:
         model_path = model_path.resolve()
         if not python_path.is_file():
             return None, "Configured Whisper Python executable was not found."
-        required_files = ("model.bin", "config.json", "tokenizer.json", "vocabulary.txt")
-        if not model_path.is_dir() or any(
-            not (model_path / name).is_file() for name in required_files
-        ):
+        required_files = whisper_model_files(model_path)
+        if required_files is None:
             return None, "Configured Whisper Small model is incomplete or missing."
         try:
             cache_signature = (
@@ -216,13 +398,21 @@ class VoiceService:
             )
         except OSError:
             return None, "Configured Whisper files could not be inspected."
+        device = whisper_device()
+        config = {
+            "python": python_path,
+            "model": model_path,
+            "device": device,
+            "compute_type": whisper_compute_type(device),
+            "fallback": whisper_fallback_model() if device == "cuda" else None,
+        }
         cached = self._whisper_probe_cache
         if (
             cached
             and cached[0] == cache_signature
             and time.monotonic() - cached[1] < 5
         ):
-            return {"python": python_path, "model": model_path}, None
+            return config, None
         environment = {
             **os.environ,
             "HF_HUB_OFFLINE": "1",
@@ -252,7 +442,7 @@ class VoiceService:
         if dependency_check.returncode:
             return None, "faster-whisper and PyAV are unavailable in the configured environment."
         self._whisper_probe_cache = (cache_signature, time.monotonic())
-        return {"python": python_path, "model": model_path}, None
+        return config, None
 
     def _tts_available(self):
         return importlib.util.find_spec("piper") is not None and all(
@@ -263,12 +453,24 @@ class VoiceService:
     def status(self):
         vosk_available = self._vosk_available()
         whisper_config, whisper_reason = self._whisper_configuration()
+        whisper_device_name = whisper_config["device"] if whisper_config else whisper_device()
+        fallback = whisper_config.get("fallback") if whisper_config else None
         return {"stt_available": vosk_available or whisper_config is not None,
                 "stt_engine": "vosk", "stt_engines": {
                     "vosk": {"available": vosk_available},
                     "whisper-small": {
                         "available": whisper_config is not None,
                         "reason": whisper_reason,
+                        # Voz 3: model names only, never paths.
+                        "model": whisper_model_label(whisper_config["model"]) if whisper_config else None,
+                        "device": whisper_device_name,
+                        "compute_type": (
+                            whisper_config["compute_type"] if whisper_config
+                            else whisper_compute_type(whisper_device_name)
+                        ),
+                        "fallback_available": fallback is not None,
+                        "fallback_model": whisper_model_label(fallback) if fallback else None,
+                        "gpu_paused": self._gpu_cooldown_active(),
                     },
                 },
                 "tts_available": self._tts_available(), "tts_engine": "piper",
@@ -288,6 +490,9 @@ class VoiceService:
         )
 
     async def _monitor_whisper_idle(self, worker):
+        device = _worker_device(worker)
+        idle_limit = whisper_idle_seconds(device)
+        last_vram_check = time.monotonic()
         try:
             while self._whisper_worker is worker and worker.alive:
                 await asyncio.sleep(0.25)
@@ -307,7 +512,18 @@ class VoiceService:
                     )
                     await self._stop_whisper_worker(worker, forced=True)
                     return
-                if time.monotonic() - worker.last_used >= 60:
+                if device == "cuda" and time.monotonic() - last_vram_check >= VRAM_IDLE_CHECK_SECONDS:
+                    last_vram_check = time.monotonic()
+                    memory = await asyncio.to_thread(self._gpu_memory)
+                    if self.busy:
+                        continue
+                    if memory is not None and memory["free_mib"] < whisper_abort_vram_mib():
+                        logger.warning(
+                            "Unloading persistent Whisper: free GPU memory fell below the abort threshold"
+                        )
+                        await self._stop_whisper_worker(worker)
+                        return
+                if time.monotonic() - worker.last_used >= idle_limit:
                     await self._stop_whisper_worker(worker)
                     return
         except asyncio.CancelledError:
@@ -356,8 +572,10 @@ class VoiceService:
     async def release_whisper(self):
         """Unload Whisper before chat or another speech engine, unless free RAM is above the keep threshold.
 
-        shutdown() and configuration changes always unload; the idle monitor still unloads after 60 s or below
-        1.5 GiB. If memory cannot be measured, Whisper is unloaded.
+        A Whisper on the GPU (Voz 3) is always kept: its weights are in VRAM, next to Ollama's. shutdown() and
+        configuration changes always unload; the idle monitor still unloads after its idle time, below 1.5 GiB of
+        RAM or, on the GPU, below the free-VRAM abort threshold. If memory cannot be measured, a CPU Whisper is
+        unloaded.
         """
         if self._whisper_active:
             raise KnowledgeError(
@@ -366,6 +584,9 @@ class VoiceService:
                 409,
             )
         worker = self._whisper_worker
+        if worker is not None and worker.alive and _worker_device(worker) == "cuda":
+            logger.info("Keeping persistent Whisper loaded on the GPU")
+            return
         if worker is not None and worker.alive:
             try:
                 available_ram = _available_system_memory()
@@ -378,6 +599,50 @@ class VoiceService:
 
     async def shutdown(self):
         await self._stop_whisper_worker()
+
+    async def preload_whisper(self):
+        """Voz 3 (ITGLASSES_WHISPER_PRELOAD, off by default): load the configured Whisper when the backend starts.
+
+        Never loads the CPU fallback and never raises: failures are logged as codes and the first question loads
+        Whisper as usual.
+        """
+        if self.busy or (self._whisper_worker and self._whisper_worker.alive):
+            return False
+        config, _ = await asyncio.to_thread(self._whisper_configuration)
+        if config is None:
+            logger.info("Whisper preload skipped: Whisper is not configured")
+            return False
+        if self.busy:
+            return False
+        primary, _ = _whisper_targets(config)
+        self.busy = True
+        self._whisper_active = True
+        try:
+            if primary["device"] == "cuda":
+                memory = None if self._gpu_cooldown_active() else await asyncio.to_thread(self._gpu_memory)
+                if memory is None or memory["free_mib"] < whisper_min_vram_mib():
+                    code = "voice_gpu_unavailable" if memory is None else "voice_vram_limit"
+                    logger.warning("Whisper preload skipped code=%s", code)
+                    return False
+            await self._whisper_worker_for(primary)
+            logger.info("Whisper preloaded model=%s device=%s", whisper_model_label(primary["model"]),
+                        primary["device"])
+            return True
+        except _GpuFailure as failure:
+            self._start_gpu_cooldown(failure.code)
+            return False
+        except KnowledgeError as error:
+            logger.warning("Whisper preload failed code=%s", _safe_label(error.code))
+            return False
+        except Exception as error:  # noqa: BLE001 - preload must never break the backend startup
+            logger.warning("Whisper preload failed error_type=%s", _safe_label(type(error).__name__))
+            return False
+        finally:
+            self._whisper_active = False
+            self.busy = False
+            worker = self._whisper_worker
+            if worker and worker.alive:
+                self._schedule_whisper_idle_shutdown(worker)
 
     async def _start_persistent_whisper(self, worker):
         startup = asyncio.create_task(asyncio.to_thread(worker.start))
@@ -441,6 +706,49 @@ class VoiceService:
             if worker and worker.alive:
                 self._schedule_whisper_idle_shutdown(worker)
 
+    def _start_gpu_cooldown(self, code):
+        self._gpu_cooldown_until = time.monotonic() + GPU_COOLDOWN_SECONDS
+        logger.warning("Whisper GPU paused seconds=%d code=%s", GPU_COOLDOWN_SECONDS, code)
+
+    def _gpu_cooldown_active(self):
+        return time.monotonic() < self._gpu_cooldown_until
+
+    def _gpu_memory(self):
+        """Free/used/total MiB of the GPU (nvidia-smi), cached for a second; None when it cannot be read."""
+        cached = self._vram_cache
+        if cached and time.monotonic() - cached[0] < VRAM_CACHE_SECONDS:
+            return cached[1]
+        try:
+            memory = query_gpu_memory()
+        except OSError as error:
+            logger.warning("GPU memory unavailable error_type=%s", _safe_label(type(error).__name__))
+            memory = None
+        self._vram_cache = (time.monotonic(), memory)
+        return memory
+
+    async def _choose_whisper_target(self, primary, fallback):
+        """(target, fallback_reason): the GPU model, or the CPU fallback while the GPU is paused, unreadable or
+        short of free VRAM. A loaded GPU worker is used without measuring again."""
+        if primary["device"] != "cuda":
+            return primary, None
+        worker = self._whisper_worker
+        if worker and worker.alive and _worker_key(worker) == _target_key(primary):
+            return primary, None
+        if self._gpu_cooldown_active():
+            reason = "voice_gpu_unavailable"
+        else:
+            memory = await asyncio.to_thread(self._gpu_memory)
+            if memory is None:
+                reason = "voice_gpu_unavailable"
+                self._start_gpu_cooldown(reason)
+            elif memory["free_mib"] < whisper_min_vram_mib():
+                reason = "voice_vram_limit"
+            else:
+                return primary, None
+        if fallback is None:
+            raise KnowledgeError(reason, GPU_MESSAGES[reason], 503)
+        return fallback, reason
+
     async def _run_persistent_whisper_request(self, payload, request, hint=None, hint_mode=None):
         config, reason = self._whisper_configuration()
         if config is None:
@@ -450,13 +758,31 @@ class VoiceService:
                     forced=not self._whisper_worker.alive,
                 )
             raise KnowledgeError("voice_engine_unavailable", reason, 503)
+        validate_audio(payload)
+        primary, fallback = _whisper_targets(config)
+        target, fallback_reason = await self._choose_whisper_target(primary, fallback)
         try:
-            validate_audio(payload)
-        except KnowledgeError:
-            raise
+            result = await self._whisper_attempt(target, payload, request, hint, hint_mode)
+        except _GpuFailure as failure:
+            # The GPU failed while starting or transcribing: pause it and retry this request once on the CPU.
+            self._start_gpu_cooldown(failure.code)
+            if fallback is None:
+                raise KnowledgeError(failure.code, GPU_MESSAGES[failure.code], 503) from None
+            target, fallback_reason = fallback, failure.code
+            result = await self._whisper_attempt(target, payload, request, hint, hint_mode)
+        result["whisper_model"] = whisper_model_label(target["model"])
+        result["device"] = target["device"]
+        result["compute_type"] = target["compute_type"]
+        result["fallback_reason"] = fallback_reason
+        if fallback_reason:
+            logger.warning("Whisper fallback used model=%s device=%s reason=%s",
+                           result["whisper_model"], target["device"], fallback_reason)
+        return result
+
+    async def _whisper_worker_for(self, target, request=None):
+        """(worker, startup) for the target: the loaded worker when it matches, otherwise a new one."""
         worker = self._whisper_worker
-        configuration = (str(config["python"]), str(config["model"]))
-        if worker and (worker.configuration != configuration or not worker.alive):
+        if worker and (_worker_key(worker) != _target_key(target) or not worker.alive):
             await self._stop_whisper_worker(worker, forced=not worker.alive)
             worker = None
         try:
@@ -483,42 +809,51 @@ class VoiceService:
             )
         if request is not None and await request.is_disconnected():
             raise KnowledgeError("voice_cancelled", "Speech request cancelled.", 499)
+        if worker:
+            return worker, None
+        worker = PersistentWhisperWorker(
+            target["python"],
+            target["model"],
+            PROJECT_ROOT,
+            self.temporary,
+            **_runtime_arguments(target),
+        )
+        try:
+            startup = await self._start_persistent_whisper(worker)
+        except WorkerMemoryLimitError as error:
+            raise KnowledgeError(
+                "voice_resource_limit", str(error), 503
+            ) from None
+        except WorkerResourceMonitorError as error:
+            logger.error("Persistent Whisper startup resource check failed")
+            raise KnowledgeError(
+                "voice_resource_monitor",
+                "Whisper resource safety could not be verified before startup.",
+                503,
+            ) from error
+        except PersistentWorkerError as error:
+            logger.error(
+                "Persistent Whisper startup failed error_type=%s device=%s",
+                _safe_label(type(error).__name__),
+                target["device"],
+            )
+            if target["device"] == "cuda":
+                raise _GpuFailure(
+                    error.code if isinstance(error, WorkerGpuError) else "voice_worker_startup"
+                ) from None
+            raise KnowledgeError(
+                "voice_worker_startup",
+                "The local Whisper worker could not start. Check its configuration and server log.",
+                503,
+            ) from None
+        self._whisper_worker = worker
+        return worker, startup
 
+    async def _whisper_attempt(self, target, payload, request, hint=None, hint_mode=None):
+        worker = None
         started = time.perf_counter()
         try:
-            if worker is None:
-                worker = PersistentWhisperWorker(
-                    config["python"],
-                    config["model"],
-                    PROJECT_ROOT,
-                    self.temporary,
-                )
-                try:
-                    startup = await self._start_persistent_whisper(worker)
-                except WorkerMemoryLimitError as error:
-                    raise KnowledgeError(
-                        "voice_resource_limit", str(error), 503
-                    ) from None
-                except WorkerResourceMonitorError as error:
-                    logger.error("Persistent Whisper startup resource check failed")
-                    raise KnowledgeError(
-                        "voice_resource_monitor",
-                        "Whisper resource safety could not be verified before startup.",
-                        503,
-                    ) from error
-                except PersistentWorkerError as error:
-                    logger.error(
-                        "Persistent Whisper startup failed error_type=%s",
-                        _safe_label(type(error).__name__),
-                    )
-                    raise KnowledgeError(
-                        "voice_worker_startup",
-                        "The local Whisper worker could not start. Check its configuration and server log.",
-                        503,
-                    ) from None
-                self._whisper_worker = worker
-            else:
-                startup = None
+            worker, startup = await self._whisper_worker_for(target, request)
 
             inference = asyncio.create_task(
                 asyncio.to_thread(worker.transcribe, payload, hint=hint, hint_mode=hint_mode)
@@ -569,6 +904,8 @@ class VoiceService:
                 result["worker_startup_seconds"] = 0
             result["worker_memory"] = memory
             return result
+        except _GpuFailure:
+            raise
         except KnowledgeError:
             if worker and not worker.alive:
                 self._whisper_worker = None
@@ -594,13 +931,27 @@ class VoiceService:
                 "Whisper resource safety could not be monitored.",
                 503,
             ) from error
+        except WorkerGpuError as error:
+            self._whisper_worker = None
+            await self._stop_whisper_worker(worker, forced=True)
+            logger.error("Persistent Whisper GPU failure reason=%s", _safe_label(error.reason))
+            if target["device"] == "cuda":
+                raise _GpuFailure(error.code) from None
+            raise KnowledgeError(
+                "voice_inference_failed",
+                "The local Whisper worker failed. No alternative engine was used.",
+                502,
+            ) from None
         except (WorkerCrashedError, WorkerProtocolError, WorkerStartupError) as error:
             self._whisper_worker = None
             await self._stop_whisper_worker(worker, forced=True)
             logger.error(
-                "Persistent Whisper worker failed error_type=%s",
+                "Persistent Whisper worker failed error_type=%s device=%s",
                 _safe_label(type(error).__name__),
+                target["device"],
             )
+            if target["device"] == "cuda" and isinstance(error, WorkerCrashedError):
+                raise _GpuFailure("voice_gpu_unavailable") from None
             raise KnowledgeError(
                 "voice_inference_failed",
                 "The local Whisper worker failed. No alternative engine was used.",
@@ -632,6 +983,7 @@ class VoiceService:
         """Speech operation. STT (Voz 2): Whisper gets the vocabulary hint (ITGLASSES_WHISPER_HINT_MODE) and every
         transcript, Whisper or Vosk, is corrected against known titles (ITGLASSES_STT_CORRECTION): ``text`` is the
         corrected transcript, ``raw_text`` the original. Logs carry counts only."""
+        engine = STT_ENGINE_ALIASES.get(engine, engine)
         if kind != "stt" or engine not in STT_ENGINES:
             return await self._run_engine(kind, payload, request, engine)
         vocabulary = self._vocabulary_for(request)

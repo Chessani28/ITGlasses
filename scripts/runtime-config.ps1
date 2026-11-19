@@ -1,5 +1,25 @@
 $ErrorActionPreference = 'Stop'
 
+# CTranslate2 Whisper folder: model.bin, config.json and tokenizer.json, plus vocabulary.txt (Small) or
+# vocabulary.json with preprocessor_config.json (large-v3 / turbo, 128 mel bands).
+function Test-ITGlassesWhisperModelDirectory {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$Path
+    )
+
+    foreach ($fileName in @('model.bin', 'config.json', 'tokenizer.json')) {
+        if (-not (Test-Path -LiteralPath (Join-Path $Path $fileName) -PathType Leaf)) {
+            return $false
+        }
+    }
+    if (Test-Path -LiteralPath (Join-Path $Path 'vocabulary.txt') -PathType Leaf) {
+        return $true
+    }
+    return (Test-Path -LiteralPath (Join-Path $Path 'vocabulary.json') -PathType Leaf) -and
+        (Test-Path -LiteralPath (Join-Path $Path 'preprocessor_config.json') -PathType Leaf)
+}
+
 function Set-ITGlassesRuntimeConfiguration {
     param(
         [Parameter(Mandatory = $true)]
@@ -15,7 +35,13 @@ function Set-ITGlassesRuntimeConfiguration {
         'ITGLASSES_PAIRING_ORIGIN',
         'ITGLASSES_WHISPER_KEEP_RAM_GIB',
         'ITGLASSES_WHISPER_HINT_MODE',
-        'ITGLASSES_STT_CORRECTION'
+        'ITGLASSES_STT_CORRECTION',
+        'ITGLASSES_WHISPER_DEVICE',
+        'ITGLASSES_WHISPER_COMPUTE_TYPE',
+        'ITGLASSES_WHISPER_FALLBACK_MODEL',
+        'ITGLASSES_WHISPER_PRELOAD',
+        'ITGLASSES_WHISPER_MIN_VRAM_MIB',
+        'ITGLASSES_WHISPER_IDLE_SECONDS'
     )
     $previous = @{}
     foreach ($name in $names) {
@@ -37,7 +63,9 @@ function Set-ITGlassesRuntimeConfiguration {
 
             $allowedKeys = @(
                 'WhisperPython', 'WhisperModel', 'RequireAuth', 'AllowLanBinding', 'PairingOrigin',
-                'WhisperKeepRamGiB', 'WhisperHintMode', 'SttCorrection'
+                'WhisperKeepRamGiB', 'WhisperHintMode', 'SttCorrection',
+                'WhisperDevice', 'WhisperComputeType', 'WhisperFallbackModel', 'WhisperPreload',
+                'WhisperMinVramMiB', 'WhisperIdleSeconds'
             )
             $unknownKeys = @($config.Keys | Where-Object { $_ -notin $allowedKeys })
             if ($unknownKeys.Count -gt 0) {
@@ -128,6 +156,73 @@ function Set-ITGlassesRuntimeConfiguration {
             )
         }
 
+        # Voz 3: Whisper on the GPU. Optional: the backend defaults to cpu with int8, no fallback, no preload,
+        # 1000 MiB of free VRAM to load and 900 s of inactivity on the GPU. Environment values win.
+        $deviceValue = [Environment]::GetEnvironmentVariable('ITGLASSES_WHISPER_DEVICE', 'Process')
+        if ([string]::IsNullOrWhiteSpace($deviceValue) -and $config.Contains('WhisperDevice')) {
+            if ($config.WhisperDevice -isnot [string] -or $config.WhisperDevice -cnotin @('cpu', 'cuda')) {
+                throw 'Runtime configuration value WhisperDevice must be cpu or cuda.'
+            }
+            $deviceValue = $config.WhisperDevice
+            [Environment]::SetEnvironmentVariable('ITGLASSES_WHISPER_DEVICE', $deviceValue, 'Process')
+        }
+        $device = 'cpu'
+        if (-not [string]::IsNullOrWhiteSpace($deviceValue)) {
+            $device = $deviceValue.Trim().ToLowerInvariant()
+        }
+        $computeValue = [Environment]::GetEnvironmentVariable('ITGLASSES_WHISPER_COMPUTE_TYPE', 'Process')
+        if ([string]::IsNullOrWhiteSpace($computeValue) -and $config.Contains('WhisperComputeType')) {
+            $allowedCompute = @('int8', 'int8_float32', 'float32')
+            if ($device -eq 'cuda') {
+                $allowedCompute = @('int8_float16', 'float16', 'int8')
+            }
+            if ($config.WhisperComputeType -isnot [string] -or $config.WhisperComputeType -cnotin $allowedCompute) {
+                throw "Runtime configuration value WhisperComputeType is not valid for the $device device."
+            }
+            [Environment]::SetEnvironmentVariable('ITGLASSES_WHISPER_COMPUTE_TYPE', $config.WhisperComputeType, 'Process')
+        }
+        foreach ($setting in @(
+            @{ Key = 'WhisperMinVramMiB'; Variable = 'ITGLASSES_WHISPER_MIN_VRAM_MIB'; Minimum = 0 },
+            @{ Key = 'WhisperIdleSeconds'; Variable = 'ITGLASSES_WHISPER_IDLE_SECONDS'; Minimum = 30 }
+        )) {
+            $environmentValue = [Environment]::GetEnvironmentVariable($setting.Variable, 'Process')
+            if ([string]::IsNullOrWhiteSpace($environmentValue) -and $config.Contains($setting.Key)) {
+                $number = $config[$setting.Key]
+                if (($number -isnot [int] -and $number -isnot [long]) -or $number -lt $setting.Minimum) {
+                    throw "Runtime configuration value $($setting.Key) must be a whole number of at least $($setting.Minimum)."
+                }
+                [Environment]::SetEnvironmentVariable(
+                    $setting.Variable, ([long]$number).ToString([Globalization.CultureInfo]::InvariantCulture), 'Process'
+                )
+            }
+        }
+        $preloadValue = [Environment]::GetEnvironmentVariable('ITGLASSES_WHISPER_PRELOAD', 'Process')
+        if ([string]::IsNullOrWhiteSpace($preloadValue) -and $config.Contains('WhisperPreload')) {
+            if ($config.WhisperPreload -isnot [bool]) {
+                throw 'Runtime configuration value WhisperPreload must be true or false.'
+            }
+            [Environment]::SetEnvironmentVariable(
+                'ITGLASSES_WHISPER_PRELOAD', ([string]$config.WhisperPreload).ToLowerInvariant(), 'Process'
+            )
+        }
+        $fallbackPath = [Environment]::GetEnvironmentVariable('ITGLASSES_WHISPER_FALLBACK_MODEL', 'Process')
+        if ([string]::IsNullOrWhiteSpace($fallbackPath) -and $config.Contains('WhisperFallbackModel')) {
+            if ($config.WhisperFallbackModel -isnot [string]) {
+                throw 'Runtime configuration value WhisperFallbackModel must be a string.'
+            }
+            $fallbackPath = $config.WhisperFallbackModel
+            if (-not [string]::IsNullOrWhiteSpace($fallbackPath)) {
+                [Environment]::SetEnvironmentVariable('ITGLASSES_WHISPER_FALLBACK_MODEL', $fallbackPath, 'Process')
+            }
+        }
+        if (-not [string]::IsNullOrWhiteSpace($fallbackPath)) {
+            if (-not [IO.Path]::IsPathRooted($fallbackPath) -or
+                -not (Test-Path -LiteralPath $fallbackPath -PathType Container) -or
+                -not (Test-ITGlassesWhisperModelDirectory -Path $fallbackPath)) {
+                throw 'Whisper fallback model directory is invalid or incomplete.'
+            }
+        }
+
         $pythonPath = [Environment]::GetEnvironmentVariable(
             'ITGLASSES_WHISPER_PYTHON', 'Process'
         )
@@ -149,10 +244,8 @@ function Set-ITGlassesRuntimeConfiguration {
                 -not (Test-Path -LiteralPath $modelPath -PathType Container)) {
                 throw 'Whisper Small model directory path is invalid.'
             }
-            foreach ($fileName in @('model.bin', 'config.json', 'tokenizer.json', 'vocabulary.txt')) {
-                if (-not (Test-Path -LiteralPath (Join-Path $modelPath $fileName) -PathType Leaf)) {
-                    throw 'Whisper Small model directory is incomplete.'
-                }
+            if (-not (Test-ITGlassesWhisperModelDirectory -Path $modelPath)) {
+                throw 'Whisper Small model directory is incomplete.'
             }
         }
 
