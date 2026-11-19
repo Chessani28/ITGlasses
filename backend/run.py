@@ -9,10 +9,12 @@ os.environ["TMP"] = str(temporary)
 
 import uvicorn
 
-from backend.app.core.config import settings
+from backend.app.core.config import PROJECT_ROOT, settings
+from backend.app.core.logging_setup import configure_logging
 
 
 if __name__ == "__main__":
+    configure_logging(PROJECT_ROOT)  # logs\backend.log and WARNING+ in this window
     uvicorn.run("backend.app.main:app", host=settings.host, port=settings.port,
                 access_log=False, log_level="critical",
                 # Behind Caddy: X-Forwarded-For/-Proto only from this PC. Caddy drops any value sent by the

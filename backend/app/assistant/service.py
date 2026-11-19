@@ -16,6 +16,7 @@ import uuid
 from urllib.parse import urlsplit
 
 from backend.app.assistant.memory import SessionStore
+from backend.app.providers.base import ModelUnavailableError, ProviderTimeoutError, ProviderUnavailableError
 from backend.app.assistant.procedures import flatten
 from backend.app.assistant import named as named_reference
 from backend.app.assistant.references import detect_reference, named_target
@@ -170,10 +171,16 @@ _DOCUMENTATION_REFUSAL = re.compile(
 )
 _NO_THANKS = re.compile(r"^(?:no|no gracias|no, gracias|ahora no|despues)[.! ]*$")
 
+# What the general chat says when the local model fails, by cause (other errors: GENERAL_UNAVAILABLE).
+GENERAL_TIMEOUT = "El modelo local tardó demasiado; puede estar cargándose. Inténtalo de nuevo."
+GENERAL_NOT_RUNNING = "Ollama no está en ejecución."
+GENERAL_NOT_INSTALLED = "El modelo local configurado no está instalado."
+
 GENERAL_UNAVAILABLE = (
     "El chat general no está disponible en este momento porque el modelo local "
     "no responde. No puedo responder esta pregunta en este momento."
 )
+GENERAL_FAILURES = frozenset({GENERAL_UNAVAILABLE, GENERAL_TIMEOUT, GENERAL_NOT_RUNNING, GENERAL_NOT_INSTALLED})
 
 
 def _tokens(text):
@@ -1312,11 +1319,11 @@ class UnifiedAssistantService:
         documentation is generated again once without the conversation; a second refusal becomes GENERAL_OFFER
         (the next "sí" answers in general)."""
         answer = await self._general_answer(state, message, documentation_missing=True, use_history=use_history)
-        if answer == GENERAL_UNAVAILABLE:
+        if answer in GENERAL_FAILURES:
             return answer
         if use_history and _DOCUMENTATION_REFUSAL.search(_fold(answer)):
             answer = await self._general_answer(state, message, documentation_missing=True, use_history=False)
-            if answer == GENERAL_UNAVAILABLE:
+            if answer in GENERAL_FAILURES:
                 return answer
         if _DOCUMENTATION_REFUSAL.search(_fold(answer)):
             if not use_history:
@@ -1482,10 +1489,19 @@ class UnifiedAssistantService:
             context + web_block
         )
         try:
-            answer = await self.provider.generate(prompt)
-        except Exception:  # noqa: BLE001
+            # The general chat may be longer than /api/v1/chat (OllamaProvider.generate_general: 768 tokens, and
+            # the text generated so far plus a note when it reaches the limit). Other providers: generate().
+            generate = getattr(self.provider, "generate_general", None) or self.provider.generate
+            answer = await generate(prompt)
+        except (ProviderTimeoutError, ProviderUnavailableError) as exc:
             import logging
-            logging.getLogger("assistant").error("general provider failed")
+            logging.getLogger("assistant").error("general provider failed error_type=%s", type(exc).__name__)
+            if isinstance(exc, ModelUnavailableError):
+                return GENERAL_NOT_INSTALLED
+            return GENERAL_TIMEOUT if isinstance(exc, ProviderTimeoutError) else GENERAL_NOT_RUNNING
+        except Exception as exc:  # noqa: BLE001
+            import logging
+            logging.getLogger("assistant").error("general provider failed error_type=%s", type(exc).__name__)
             if self._needs_web(message):
                 self._log_public_search_diagnostics(
                     self.web_search,

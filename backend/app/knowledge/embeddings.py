@@ -1,7 +1,13 @@
 import asyncio
+import logging
+import time
+
 import httpx
 import numpy as np
 from .models import KnowledgeError
+
+
+logger = logging.getLogger("ollama")
 
 
 class OllamaEmbeddings:
@@ -25,6 +31,7 @@ class OllamaEmbeddings:
 
     async def embed(self, texts, query=False):
         results = []
+        started = time.perf_counter()
         async with self.lock:
             try:
                 async with httpx.AsyncClient(trust_env=False, timeout=httpx.Timeout(120, connect=3)) as client:
@@ -45,9 +52,16 @@ class OllamaEmbeddings:
                         results.extend(vectors / lengths)
                 return np.asarray(results)
             except httpx.TimeoutException:
+                self._log_failure("TimeoutException", started)
                 raise KnowledgeError("embedding_timeout", "Local embedding generation timed out.", 504) from None
-            except (httpx.HTTPError, ValueError, KeyError, TypeError):
+            except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
+                self._log_failure(type(exc).__name__, started)
                 raise KnowledgeError("embedding_error", "Local embedding generation failed.", 503) from None
+
+    def _log_failure(self, error, started):
+        logger.warning("ollama_call component=embeddings phase=embed error=%s elapsed_ms=%d model=%s",
+                       "".join(c for c in error if c.isalnum() or c == "_")[:64],
+                       round((time.perf_counter() - started) * 1000), self.model)
 
     async def unload(self):
         try:

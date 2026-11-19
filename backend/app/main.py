@@ -33,19 +33,41 @@ def _start_whisper_preload(app):
     return asyncio.create_task(preload()) if preload else None
 
 
-def create_app(provider: LLMProvider | None = None, knowledge=None, voice=None) -> FastAPI:
+def ollama_warmup_enabled(value=None):
+    """ITGLASSES_OLLAMA_WARMUP: load the chat model at startup. On by default; 0/false/off/no turn it off."""
+    import os
+
+    raw = os.environ.get("ITGLASSES_OLLAMA_WARMUP") if value is None else value
+    return str(raw or "").strip().lower() not in {"0", "false", "off", "no"}
+
+
+def _start_ollama_warmup(app, enabled):
+    """Background warm-up of the chat model (never blocks or breaks the startup)."""
+    warm_up = getattr(app.state.provider, "warm_up", None)
+    if not enabled or warm_up is None or not ollama_warmup_enabled():
+        return None
+    return asyncio.create_task(warm_up())
+
+
+def create_app(provider: LLMProvider | None = None, knowledge=None, voice=None, warmup=None) -> FastAPI:
+    """``warmup``: warm the chat model up at startup; by default only for the backend's own provider (None), never
+    for a provider a test injects."""
     from backend.app.api.auth import require_auth
+    warm = provider is None if warmup is None else warmup
 
     @asynccontextmanager
     async def lifespan(app):
         preload_task = None
+        warmup_task = None
         try:
             preload_task = _start_whisper_preload(app)
+            warmup_task = _start_ollama_warmup(app, warm)
             yield
         finally:
-            if preload_task is not None and not preload_task.done():
-                preload_task.cancel()
-                await asyncio.gather(preload_task, return_exceptions=True)
+            for task in (preload_task, warmup_task):
+                if task is not None and not task.done():
+                    task.cancel()
+                    await asyncio.gather(task, return_exceptions=True)
             voice_service = getattr(app.state, "voice", None)
             shutdown = getattr(voice_service, "shutdown", None)
             if shutdown:

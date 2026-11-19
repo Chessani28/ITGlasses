@@ -17,7 +17,7 @@ def service(request: Request):
         from .service import KnowledgeService
         from .embeddings import OllamaEmbeddings
         from .grounding import EvidenceSelector
-        request.app.state.knowledge = KnowledgeService(PROJECT_ROOT, OllamaEmbeddings(settings.ollama_url), EvidenceSelector(settings.model, settings.ollama_url))
+        request.app.state.knowledge = KnowledgeService(PROJECT_ROOT, OllamaEmbeddings(settings.ollama_url), EvidenceSelector(settings.model, settings.ollama_url, settings.keep_alive))
     return request.app.state.knowledge
 
 

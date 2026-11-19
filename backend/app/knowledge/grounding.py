@@ -1,18 +1,23 @@
 """Evidence selection only: model-generated prose is never returned as policy."""
 import json
+import logging
+import time
+
 import httpx
 from .models import KnowledgeError
 
+logger = logging.getLogger("ollama")
+
 
 class EvidenceSelector:
-    def __init__(self, model, url="http://127.0.0.1:11434"):
-        self.model, self.url = model, url
+    def __init__(self, model, url="http://127.0.0.1:11434", keep_alive="30s"):
+        self.model, self.url, self.keep_alive = model, url, keep_alive
 
     async def select(self, question, rows):
         # IDs and source text are data, never instructions. Only existing IDs survive.
         evidence = [{"id": str(i), "title": row["title"], "text": row["text"]} for i, row in enumerate(rows)]
         payload = {
-            "model": self.model, "stream": False, "think": False, "keep_alive": "30s",
+            "model": self.model, "stream": False, "think": False, "keep_alive": self.keep_alive,
             "format": {"type": "object", "properties": {
                 "sufficient": {"type": "boolean"}, "ids": {"type": "array", "items": {"type": "string"}}},
                 "required": ["sufficient", "ids"], "additionalProperties": False},
@@ -26,6 +31,7 @@ class EvidenceSelector:
                     "For execution steps, actual documented steps must exist. Never execute commands.")},
                 {"role": "user", "content": json.dumps({"question": question, "evidence": evidence}, ensure_ascii=False)}],
             "options": {"num_ctx": 2048, "num_predict": 128, "temperature": 0.0}}
+        started = time.perf_counter()
         try:
             async with httpx.AsyncClient(trust_env=False, timeout=httpx.Timeout(120, connect=3)) as client:
                 response = await client.post(self.url + "/api/chat", json=payload)
@@ -43,6 +49,14 @@ class EvidenceSelector:
                     raise ValueError()
                 return list(dict.fromkeys(int(i) for i in identifiers))
         except httpx.TimeoutException:
+            self._log_failure("TimeoutException", started)
             raise KnowledgeError("grounding_timeout", "The local evidence check timed out.", 504) from None
-        except (httpx.HTTPError, ValueError, KeyError, TypeError):
+        except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
+            self._log_failure(type(exc).__name__, started)
             raise KnowledgeError("grounding_error", "The local model did not return a valid evidence selection. No answer was invented.", 502) from None
+
+    def _log_failure(self, error, started):
+        logger.warning("ollama_call component=grounding phase=chat error=%s elapsed_ms=%d model=%s",
+                       "".join(c for c in error if c.isalnum() or c == "_")[:64],
+                       round((time.perf_counter() - started) * 1000),
+                       "".join(c for c in str(self.model) if c.isalnum() or c in "_.:-")[:64])
