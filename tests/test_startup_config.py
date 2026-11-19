@@ -301,3 +301,47 @@ def test_invalid_pairing_origin_stops_startup(tmp_path):
         assert result.returncode == 2, value
         assert "Pairing origin" in result.stdout or "PairingOrigin" in result.stdout, value
         assert "ORIGIN=[" not in result.stdout, value
+
+
+def _run_and_print_keep(project_root, value, environment=None):
+    (project_root / "runtime-config.psd1").write_text(
+        "@{ WhisperPython = ''; WhisperModel = ''; RequireAuth = $false; AllowLanBinding = $false; "
+        f"PairingOrigin = ''; WhisperKeepRamGiB = {value} }}",
+        encoding="utf-8",
+    )
+    script = (
+        "$ErrorActionPreference='Stop'; "
+        f". {_quote_ps(ROOT / 'scripts' / 'runtime-config.ps1')}; "
+        f"try {{ $null=Set-ITGlassesRuntimeConfiguration -ProjectRoot {_quote_ps(project_root)}; "
+        "'KEEP=[' + $env:ITGLASSES_WHISPER_KEEP_RAM_GIB + ']' } "
+        "catch { 'CONFIG_ERROR:' + $_.Exception.Message; exit 2 }"
+    )
+    env = {**os.environ, "ITGLASSES_WHISPER_PYTHON": "", "ITGLASSES_WHISPER_MODEL": "",
+           "ITGLASSES_REQUIRE_AUTH": "", "ITGLASSES_ALLOW_LAN_BINDING": "", "ITGLASSES_API_TOKENS": "",
+           "ITGLASSES_PAIRING_ORIGIN": "", "ITGLASSES_WHISPER_KEEP_RAM_GIB": "", **(environment or {})}
+    return subprocess.run(
+        [POWERSHELL, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
+        capture_output=True, text=True, env=env, timeout=20, check=False,
+    )
+
+
+def test_whisper_keep_ram_from_configuration_is_exported_with_a_dot(tmp_path):
+    for value, expected in (("6", "6"), ("6.5", "6.5")):
+        result = _run_and_print_keep(tmp_path, value)
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert f"KEEP=[{expected}]" in result.stdout, value
+
+
+def test_environment_whisper_keep_ram_wins_over_configuration(tmp_path):
+    result = _run_and_print_keep(tmp_path, "6", {"ITGLASSES_WHISPER_KEEP_RAM_GIB": "10"})
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "KEEP=[10]" in result.stdout
+
+
+def test_invalid_whisper_keep_ram_stops_startup(tmp_path):
+    for value in ("0", "-2", "'6'", "$true"):
+        result = _run_and_print_keep(tmp_path, value)
+        assert result.returncode == 2, value
+        assert "WhisperKeepRamGiB" in result.stdout, value
+        assert "KEEP=[" not in result.stdout, value
+

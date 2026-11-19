@@ -35,6 +35,33 @@ VOICE_NAME = "es_ES-sharvard-medium"
 STT_ENGINES = {"vosk", "whisper-small"}
 WHISPER_MIN_LOAD_RAM = 3 * 1024**3
 WHISPER_ABORT_RAM = int(1.5 * 1024**3)
+# Keep the persistent Whisper loaded between voice questions only with plenty of free RAM (chat and speech
+# synthesis otherwise unload it so Ollama and Piper get the memory). Conservative default; never below the load
+# limit. ITGLASSES_WHISPER_KEEP_RAM_GIB overrides it.
+WHISPER_KEEP_RAM_DEFAULT = 8 * 1024**3
+
+
+def whisper_keep_ram_bytes(value=None):
+    """Free RAM (bytes) required to keep Whisper loaded: the environment value in GiB, at least 3 GiB.
+
+    Missing, invalid, zero or negative values give the conservative default (8 GiB).
+    """
+    raw = os.environ.get("ITGLASSES_WHISPER_KEEP_RAM_GIB") if value is None else value
+    if raw is None or str(raw).strip() == "":
+        return WHISPER_KEEP_RAM_DEFAULT
+    try:
+        gib = float(str(raw).strip())
+    except ValueError:
+        logger.warning("ITGLASSES_WHISPER_KEEP_RAM_GIB is not a number; using the 8 GiB default")
+        return WHISPER_KEEP_RAM_DEFAULT
+    if gib != gib or gib in (float("inf"), float("-inf")) or gib <= 0:
+        logger.warning("ITGLASSES_WHISPER_KEEP_RAM_GIB must be positive; using the 8 GiB default")
+        return WHISPER_KEEP_RAM_DEFAULT
+    requested = int(gib * 1024**3)
+    if requested < WHISPER_MIN_LOAD_RAM:
+        logger.warning("ITGLASSES_WHISPER_KEEP_RAM_GIB is below the 3 GiB load limit; using 3 GiB")
+        return WHISPER_MIN_LOAD_RAM
+    return requested
 
 
 def validate_audio(raw):
@@ -290,12 +317,26 @@ class VoiceService:
                     ) from error
 
     async def release_whisper(self):
+        """Unload Whisper before chat or another speech engine, unless free RAM is above the keep threshold.
+
+        shutdown() and configuration changes always unload; the idle monitor still unloads after 60 s or below
+        1.5 GiB. If memory cannot be measured, Whisper is unloaded.
+        """
         if self._whisper_active:
             raise KnowledgeError(
                 "voice_busy",
                 "Whisper transcription is active; retry the chat request when it finishes.",
                 409,
             )
+        worker = self._whisper_worker
+        if worker is not None and worker.alive:
+            try:
+                available_ram = _available_system_memory()
+            except OSError:
+                available_ram = None
+            if available_ram is not None and available_ram >= whisper_keep_ram_bytes():
+                logger.info("Keeping persistent Whisper loaded: available RAM is above the keep threshold")
+                return
         await self._stop_whisper_worker()
 
     async def shutdown(self):

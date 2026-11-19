@@ -12,7 +12,8 @@ function Set-ITGlassesRuntimeConfiguration {
         'ITGLASSES_REQUIRE_AUTH',
         'ITGLASSES_ALLOW_LAN_BINDING',
         'ITGLASSES_API_TOKENS',
-        'ITGLASSES_PAIRING_ORIGIN'
+        'ITGLASSES_PAIRING_ORIGIN',
+        'ITGLASSES_WHISPER_KEEP_RAM_GIB'
     )
     $previous = @{}
     foreach ($name in $names) {
@@ -33,7 +34,8 @@ function Set-ITGlassesRuntimeConfiguration {
             }
 
             $allowedKeys = @(
-                'WhisperPython', 'WhisperModel', 'RequireAuth', 'AllowLanBinding', 'PairingOrigin'
+                'WhisperPython', 'WhisperModel', 'RequireAuth', 'AllowLanBinding', 'PairingOrigin',
+                'WhisperKeepRamGiB'
             )
             $unknownKeys = @($config.Keys | Where-Object { $_ -notin $allowedKeys })
             if ($unknownKeys.Count -gt 0) {
@@ -86,6 +88,22 @@ function Set-ITGlassesRuntimeConfiguration {
                 throw 'Pairing origin must be a canonical HTTPS origin such as https://172.16.5.143:8443.'
             }
             [Environment]::SetEnvironmentVariable('ITGLASSES_PAIRING_ORIGIN', $originValue, 'Process')
+        }
+
+        # Free RAM (GiB) needed to keep Whisper loaded between voice questions. Optional: the backend uses 8 GiB
+        # by default and never less than its 3 GiB load limit.
+        $keepValue = [Environment]::GetEnvironmentVariable('ITGLASSES_WHISPER_KEEP_RAM_GIB', 'Process')
+        if ([string]::IsNullOrWhiteSpace($keepValue) -and $config.Contains('WhisperKeepRamGiB')) {
+            $keep = $config.WhisperKeepRamGiB
+            if (($keep -isnot [int] -and $keep -isnot [long] -and $keep -isnot [double] -and $keep -isnot [decimal]) -or
+                $keep -le 0) {
+                throw 'Runtime configuration value WhisperKeepRamGiB must be a positive number of GiB.'
+            }
+            [Environment]::SetEnvironmentVariable(
+                'ITGLASSES_WHISPER_KEEP_RAM_GIB',
+                ([double]$keep).ToString([Globalization.CultureInfo]::InvariantCulture),
+                'Process'
+            )
         }
 
         $pythonPath = [Environment]::GetEnvironmentVariable(
