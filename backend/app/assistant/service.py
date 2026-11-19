@@ -159,6 +159,17 @@ _PUBLIC_STOPWORDS = frozenset("""
 
 # Answer used when the general provider cannot be reached. It states that the
 # route is unavailable instead of inventing an explanation.
+# A general answer to an IT question the authorized manuals did not cover (added by the code, not the model).
+GENERAL_NOTICE = "Respuesta general (no proviene de los manuales autorizados):"
+GENERAL_OFFER = "No encontré esto en los manuales autorizados. ¿Quieres que te lo explique de forma general?"
+# A general answer that still refuses because documentation is missing.
+_DOCUMENTATION_REFUSAL = re.compile(
+    r"\bno (?:tengo|dispongo de|cuento con) acceso a (?:la |una |ninguna |los |las )?(?:documentacion|manual|document)"
+    r"|\bno puedo (?:explicar|responder|ayudar|dar)[^.]{0,120}\b(?:documentacion|manual(?:es)?|documentos?)\b"
+    r"|\bsin (?:acceso a )?(?:la )?documentacion oficial\b",
+)
+_NO_THANKS = re.compile(r"^(?:no|no gracias|no, gracias|ahora no|despues)[.! ]*$")
+
 GENERAL_UNAVAILABLE = (
     "El chat general no está disponible en este momento porque el modelo local "
     "no responde. No puedo responder esta pregunta en este momento."
@@ -1296,7 +1307,25 @@ class UnifiedAssistantService:
         text = _fold(message or "").lstrip("¿¡ \t")
         return bool(IT_CONTEXTUAL_FOLLOWUP.search(text))
 
-    async def _general_answer(self, state, message):
+    async def _general_fallback_answer(self, state, message, use_history=True):
+        """General answer to an IT question the manuals did not cover: GENERAL_NOTICE first. A refusal for lack of
+        documentation is generated again once without the conversation; a second refusal becomes GENERAL_OFFER
+        (the next "sí" answers in general)."""
+        answer = await self._general_answer(state, message, documentation_missing=True, use_history=use_history)
+        if answer == GENERAL_UNAVAILABLE:
+            return answer
+        if use_history and _DOCUMENTATION_REFUSAL.search(_fold(answer)):
+            answer = await self._general_answer(state, message, documentation_missing=True, use_history=False)
+            if answer == GENERAL_UNAVAILABLE:
+                return answer
+        if _DOCUMENTATION_REFUSAL.search(_fold(answer)):
+            if not use_history:
+                return GENERAL_NOTICE + "\n" + answer  # already asked once: never loop
+            state["pending_general"] = {"question": message[:4000]}
+            return GENERAL_OFFER
+        return GENERAL_NOTICE + "\n" + answer
+
+    async def _general_answer(self, state, message, documentation_missing=False, use_history=True):
         """Answer with the general provider, optionally enriched with public sources.
 
         Public sources are requested only when the message asks for a live fact
@@ -1427,19 +1456,28 @@ class UnifiedAssistantService:
             topic = _fold(message)[conceptual.end():].strip(" ¿?¡!.,:;") if conceptual else ""
             if topic and not re.search(r"\b(?:eso|esto|ello|ese|esa|este|esta|anterior|mismo|misma|su|sus)\b", topic):
                 state.pop("active_subject", None)
+        # Only general exchanges give context: document answers, "No encontré…" and section lists would make the
+        # model refuse for lack of documentation.
         history = state.get("history") or []
+        routes = list(state.get("history_routes") or [])
+        routes = [None] * (len(history) - len(routes)) + routes[-len(history):] if history else []
+        general = [entry for entry, route in zip(history, routes) if route == "general"] if use_history else []
         context = ""
-        if history:
-            recent = "\n".join(f"Usuario: {q}\nAsistente: {a}" for q, a in history[-4:])
+        if general:
+            recent = "\n".join(f"Usuario: {entry[0]}\nAsistente: {entry[1]}" for entry in general[-4:])
             context = (
                 "\n\nConversación previa:\n" + recent +
                 "\n\nResponde de forma coherente con la conversación previa."
             )
         if state.get("active_subject"):
             context += "\nTema explícito de soporte activo: " + state["active_subject"] + ". Mantén ese sujeto en seguimientos sin sujeto explícito; no conviertas el objeto de una conexión en el dispositivo averiado. Si hay ambigüedad, pregunta."
+        missing = (
+            "Los manuales autorizados no cubren esta pregunta. Respóndela con conocimiento general de TI; no te "
+            "niegues por falta de documentación.\n" if documentation_missing else ""
+        )
         prompt = (
             "Eres un asistente de soporte técnico. Responde en español, de forma "
-            "breve y clara, a la siguiente pregunta del usuario.\n"
+            "breve y clara, a la siguiente pregunta del usuario.\n" + missing +
             "Si no sabes la respuesta, dilo claramente.\n\n" + "Mensaje del usuario: " + message +
             context + web_block
         )
@@ -1482,6 +1520,20 @@ class UnifiedAssistantService:
 
         if not state.get("history") and re.fullmatch(r"(?:no se conecta|no funciona|no arranca)[.!?]*", message, re.I):
             return {"answer": "¿Qué dispositivo no funciona y qué sucede al intentarlo?", "session_id": session_id, "route": "general", "sources": []}
+
+        # A pending "¿Quieres que te lo explique de forma general?" is answered by the next message only.
+        pending_general = state.pop("pending_general", None)
+        if pending_general:
+            folded = _fold(message).strip(" .!?¡¿")
+            if _AFFIRMATION.fullmatch(folded) or _GENERAL_SELECTION.search(folded):
+                answer = await self._general_fallback_answer(state, pending_general["question"], use_history=False)
+                state["active_route"] = "general"
+                self.sessions.remember(state, message, answer)
+                return {"answer": answer, "session_id": session_id, "route": "general", "sources": []}
+            if _NO_THANKS.fullmatch(folded):
+                answer = "De acuerdo."
+                self.sessions.remember(state, message, answer)
+                return {"answer": answer, "session_id": session_id, "route": "general", "sources": []}
 
         # A pending "¿Te refieres a «X»?" is answered by the next message only ("sí" / "no"); anything else drops it.
         pending_section = state.pop("pending_section", None)
@@ -1877,8 +1929,8 @@ class UnifiedAssistantService:
                     "sources": state.get("web_sources") or []}
 
         # If authorized evidence was insufficient, ordinary IT support may use
-        # local general knowledge. No document sources are carried into it.
-        answer = await self._general_answer(state, message)
+        # local general knowledge, labelled as such. No document sources are carried into it.
+        answer = await self._general_fallback_answer(state, message)
         state["active_route"] = "general"
         self.sessions.remember(state, message, answer)
         return {"answer": answer, "session_id": session_id, "route": "general",

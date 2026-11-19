@@ -3,7 +3,7 @@ import asyncio
 
 import pytest
 
-from backend.app.assistant.service import UnifiedAssistantService, match_procedures
+from backend.app.assistant.service import GENERAL_NOTICE, UnifiedAssistantService, match_procedures
 from backend.app.assistant.procedures import flatten
 
 
@@ -365,7 +365,7 @@ def test_conceptual_question_uses_the_general_provider():
     service = build(provider=provider, knowledge=knowledge)
     result = ask(service, "¿Qué es un switch de red?")
     assert result["route"] == "general"
-    assert result["answer"] == "Un switch de red conecta dispositivos."
+    assert result["answer"] == GENERAL_NOTICE + "\n" + "Un switch de red conecta dispositivos."
     assert result["sources"] == []
     assert len(knowledge.queries) == 1
 
@@ -382,7 +382,7 @@ def test_conceptual_questions_are_routed_to_general(message):
     service = build(StubProvider("RESPUESTA GENERAL"), knowledge)
     result = ask(service, message)
     assert result["route"] == "general"
-    assert result["answer"] == "RESPUESTA GENERAL"
+    assert result["answer"] == GENERAL_NOTICE + "\n" + "RESPUESTA GENERAL"
     assert knowledge.queries
 
 
@@ -423,7 +423,7 @@ def test_vpn_concept_without_evidence_falls_back_to_local_general_knowledge():
     result = ask(service, "¿Qué es una VPN?")
 
     assert result["route"] == "general"
-    assert result["answer"] == provider.answer
+    assert result["answer"] == GENERAL_NOTICE + "\n" + provider.answer
     assert result["sources"] == []
     assert len(knowledge.queries) == 1
     assert len(provider.calls) == 1
@@ -465,7 +465,7 @@ def test_answered_but_insufficient_rag_result_does_not_leak_irrelevant_sources()
     result = ask(service, "¿Qué es una VPN?")
 
     assert result["route"] == "general"
-    assert result["answer"] == provider.answer
+    assert result["answer"] == GENERAL_NOTICE + "\n" + provider.answer
     assert result["sources"] == []
 
 
@@ -513,7 +513,7 @@ def test_vpn_without_sufficient_manual_evidence_uses_general_knowledge():
     result = ask(service, "¿Qué es una VPN?")
 
     assert result["route"] == "general"
-    assert result["answer"] == provider.answer
+    assert result["answer"] == GENERAL_NOTICE + "\n" + provider.answer
     assert result["sources"] == []
     assert len(knowledge.queries) == 1
     assert len(provider.calls) == 1
@@ -719,7 +719,7 @@ def test_insufficient_evidence_on_an_ordinary_question_falls_back_to_general():
     service = build(StubProvider("RESPUESTA GENERAL"), knowledge=knowledge)
     result = ask(service, "hablame sobre el protocolo BGP")
     assert result["route"] == "general"
-    assert result["answer"] == "RESPUESTA GENERAL"
+    assert result["answer"] == GENERAL_NOTICE + "\n" + "RESPUESTA GENERAL"
 
 
 def test_company_refusal_is_preserved_and_not_replaced_by_general():

@@ -38,6 +38,8 @@ class SessionStore:
             state = {
                 "time": now,
                 "history": [],
+                # Route of each history entry ("general", "knowledge", ...), aligned with history.
+                "history_routes": [],
                 "active_route": None,
                 "active_document": None,
                 "active_document_id": None,
@@ -53,9 +55,13 @@ class SessionStore:
         state["time"] = now
         return session_id, state
 
-    def remember(self, state, message, answer):
-        state["history"] = (state.get("history") or []) + [(message, answer)]
-        state["history"] = state["history"][-MAX_HISTORY:]
+    def remember(self, state, message, answer, route=None):
+        """Append an exchange and its route (by default the state's active route) to the history."""
+        history = state.get("history") or []
+        routes = list(state.get("history_routes") or [])[-len(history):] if history else []
+        routes = [None] * (len(history) - len(routes)) + routes  # older states had no routes
+        state["history"] = (history + [(message, answer)])[-MAX_HISTORY:]
+        state["history_routes"] = (routes + [route or state.get("active_route")])[-MAX_HISTORY:]
 
     def clear_procedure(self, state):
         state["document_steps"] = []
