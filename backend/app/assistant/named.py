@@ -12,6 +12,7 @@ import re
 import unicodedata
 
 MATCH_MIN = 0.80     # string similarity that still counts as the same name (misspellings, word order)
+ALIAS_MATCH_MIN = 0.98  # an alias or nickname matches only when it holds the whole name (or is the same name)
 NEAREST_MIN = 0.45   # below this nothing is offered as the closest one
 _TOKEN = re.compile(r"[a-z0-9]+")
 STOPWORDS = frozenset("de del la el los las a al y e en para por con sobre un una the of for and to on in".split())
@@ -218,7 +219,8 @@ def resolve(name, index, message=None):
     """
     entries, procedures = index
     scored = sorted(((score(name, entry.text), entry) for entry in entries), key=lambda item: -item[0])
-    matches = [(value, entry) for value, entry in scored if value >= MATCH_MIN]
+    matches = [(value, entry) for value, entry in scored
+               if value >= (ALIAS_MATCH_MIN if entry.alias else MATCH_MIN)]
     if not matches:
         mentioned = find_heading(message, [e.text for e in entries if e.procedure and not e.alias]) if message else None
         if mentioned:

@@ -151,10 +151,13 @@ def test_manual_without_de_and_a_capitalized_title_is_a_name():
     assert named_target("el procedimiento tiene tres pasos") is None
 
 
-def test_misheard_name_offers_the_document_of_the_heading_it_mentions():
+def test_misheard_name_answers_from_the_only_heading_it_mentions():
+    # Decision of the "heading in any document" stage: a reading question with the only heading answers from it,
+    # with a one-line notice first (before, it only offered the document as the closest name).
     message = "Según el manual de Terry D. Sarah Diamond, qué dice REQUIRED PERIPHERALS"
     result = ask(build(), message, session())
-    assert result["answer"] == "No encontré un manual llamado «Terry D»; lo más cercano es «Training Setup Guideline»."
+    assert result["answer"].startswith("No encontré un manual llamado «Terry D»; respondo desde «Training Setup "
+                                       "Guideline».\n«REQUIRED PERIPHERALS» (2 pasos):")
     other = ask(build(), "Según el manual de Server, Rack, Gally, cómo se monta", session())
     assert other["answer"] == "No encontré un manual llamado «Server» en los documentos autorizados."
 
@@ -277,7 +280,11 @@ def test_phone_questions_against_the_real_knowledge_base_read_only():
         pytest.skip("storage/knowledge/knowledge.sqlite3 is not the real knowledge base")
     service = UnifiedAssistantService(knowledge, StubProvider(), web_search=StubWebSearch())
     sid = session()
-    ask(service, "¿Cuáles son los pasos de COMPUTER PREPARATION?", sid)
+    # The heading is found in its document (any document, no retrieval): its 8 lettered checks, with its source.
+    preparation = ask(service, "¿Cuáles son los pasos de COMPUTER PREPARATION?", sid)
+    assert preparation["answer"].startswith("«COMPUTER PREPARATION» (8 pasos):\n1. All ports communication\n")
+    assert "8. Thermal paste replacement on processor" in preparation["answer"]
+    assert [(s["title"], s["page"]) for s in preparation["sources"]] == [("Training Setup Guideline", 3)]
     first = ask(service, "Según el procedimiento de reinicio, ¿qué hago primero?", sid)
     assert "Paso 1 de «Reinicio de servidor»" in first["answer"] and "Apagar el servidor" in first["answer"]
     assert {s["title"] for s in first["sources"]} == {"Procedimiento de Reinicio"}
@@ -286,5 +293,6 @@ def test_phone_questions_against_the_real_knowledge_base_read_only():
     assert "INDEX" not in peripherals["answer"] and "Page" not in peripherals["answer"]
     assert spoken_summary(peripherals["answer"]).endswith(REST)
     misheard = ask(service, "Según el manual de Terry D. Sarah Diamond, qué dice REQUIRED PERIPHERALS", sid)
-    assert misheard["answer"].endswith("lo más cercano es «Training Setup Guideline».")
-    assert len(knowledge.queries) == 1  # only the first question went to the retrieval
+    assert misheard["answer"].startswith("No encontré un manual llamado «Terry D»; respondo desde «Training Setup "
+                                         "Guideline».\n«REQUIRED PERIPHERALS» (5 pasos):")
+    assert len(knowledge.queries) == 0  # every question is read from the parsed procedures

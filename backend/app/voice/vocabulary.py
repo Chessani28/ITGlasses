@@ -47,7 +47,7 @@ def clean_term(value) -> str | None:
 @dataclass(frozen=True)
 class Term:
     text: str
-    kind: str  # "title", "heading", "fixed" or "alias" (Spanish name of an English heading)
+    kind: str  # "title", "heading", "fixed", "nickname" (Spanish name of a document) or "alias" (of a heading)
 
     @property
     def words(self) -> int:
@@ -60,14 +60,15 @@ class Vocabulary:
 
     @property
     def hint(self) -> str:
-        """Text for Whisper's hotwords / initial_prompt: titles, headings, acronyms, then the Spanish aliases (last,
-        so a token limit cuts them first)."""
-        order = {"title": 0, "heading": 1, "fixed": 2, "alias": 3}
+        """Text for Whisper's hotwords / initial_prompt: titles, headings, acronyms, then the Spanish document
+        nicknames and heading aliases (last, so a token limit cuts them first)."""
+        order = {"title": 0, "heading": 1, "fixed": 2, "nickname": 3, "alias": 4}
         return SEPARATOR.join(t.text for t in sorted(self.terms, key=lambda t: order[t.kind]))
 
     @property
     def candidates(self) -> tuple[Term, ...]:
-        """Correction targets: titles, headings and their aliases of two words or more (never single acronyms)."""
+        """Correction targets: titles, headings and their aliases of two words or more (never single acronyms, nor
+        the document nicknames: they are Spanish words Whisper hears well and would compete with the titles)."""
         return tuple(t for t in self.terms if t.kind in ("title", "heading", "alias") and t.words >= 2)
 
     @property
@@ -75,18 +76,26 @@ class Vocabulary:
         """Number of Spanish heading aliases (a count: safe to log)."""
         return sum(t.kind == "alias" for t in self.terms)
 
+    @property
+    def nicknames(self) -> int:
+        """Number of Spanish document nicknames (a count: safe to log)."""
+        return sum(t.kind == "nickname" for t in self.terms)
+
     def stats(self) -> dict:
         """Counts only: safe to log."""
         kinds = {kind: sum(t.kind == kind for t in self.terms) for kind in ("title", "heading", "fixed")}
         return {"terms": len(self.terms), "chars": len(self.hint), **kinds}
 
 
-def build(titles, headings, fixed=FIXED_TERMS, max_terms=MAX_TERMS, max_chars=MAX_CHARS, aliases=()) -> Vocabulary:
-    """Priority when the limits are reached: acronyms always stay, then titles, then headings, then aliases."""
+def build(titles, headings, fixed=FIXED_TERMS, max_terms=MAX_TERMS, max_chars=MAX_CHARS, aliases=(),
+          nicknames=()) -> Vocabulary:
+    """Priority when the limits are reached: acronyms always stay, then titles, headings, document nicknames and
+    heading aliases."""
     selected: list[Term] = []
     seen: set[str] = set()
     used = 0
-    for kind, values in (("fixed", fixed), ("title", titles), ("heading", headings), ("alias", aliases)):
+    for kind, values in (("fixed", fixed), ("title", titles), ("heading", headings), ("nickname", nicknames),
+                         ("alias", aliases)):
         for value in values:
             term = clean_term(value)
             if term is None or fold(term) in seen:
@@ -110,14 +119,14 @@ def _headings(procedures) -> list[str]:
     return [p.get("title") for p in procedures or [] if isinstance(p, dict) and p.get("title")]
 
 
-def _aliases(titles, headings, aliases, nicknames) -> list[str]:
-    """Low-priority Spanish names: document nicknames first, then the heading aliases (the last cut first)."""
+def _spanish_names(titles, headings, aliases, nicknames) -> dict:
+    """Low-priority Spanish names for build(): the document nicknames and the heading aliases that exist."""
     from backend.app.assistant.named import alias_of, nicknames_of
 
-    found = [nickname for title in titles for nickname in nicknames_of(title)] if nicknames else []
-    if aliases:
-        found.extend(alias for alias in (alias_of(heading) for heading in headings) if alias)
-    return found
+    return {
+        "nicknames": [nickname for title in titles for nickname in nicknames_of(title)] if nicknames else [],
+        "aliases": [alias for alias in (alias_of(heading) for heading in headings) if alias] if aliases else [],
+    }
 
 
 def from_knowledge(knowledge, aliases=False, nicknames=False) -> Vocabulary:
@@ -129,7 +138,7 @@ def from_knowledge(knowledge, aliases=False, nicknames=False) -> Vocabulary:
         catalog = knowledge.procedure_catalog(document["id"]) or {}
         headings.extend(_headings(catalog.get("procedures")))
     titles = [d["title"] for d in documents]
-    return build(titles, headings, aliases=_aliases(titles, headings, aliases, nicknames))
+    return build(titles, headings, **_spanish_names(titles, headings, aliases, nicknames))
 
 
 _ELIGIBLE = """SELECT d.id, d.title FROM documents d JOIN revisions r ON r.document_id=d.id
@@ -154,4 +163,4 @@ def from_database_readonly(path: Path, aliases=False, nicknames=False, max_chars
             chunks = [dict(row) for row in db.execute(_CHUNKS, (document["id"],))]
             headings.extend(_headings(parse_document(chunks)))
     titles = [d["title"] for d in documents]
-    return build(titles, headings, max_chars=max_chars, aliases=_aliases(titles, headings, aliases, nicknames))
+    return build(titles, headings, max_chars=max_chars, **_spanish_names(titles, headings, aliases, nicknames))

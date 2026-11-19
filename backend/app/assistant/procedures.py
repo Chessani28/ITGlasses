@@ -69,6 +69,20 @@ def is_index_page(text) -> bool:
     return index_rows / len(lines) >= INDEX_PAGE_SHARE
 
 
+COVER_MAX_LINES = 6
+COVER_MAX_CHARS = 200
+
+
+def is_cover_page(text, page=None) -> bool:
+    """True for a cover page: page 1 with a few short lines (title, department, a code), no sentence, no step."""
+    if page != 1:
+        return False
+    stripped = (text or "").strip()
+    lines = [line.strip() for line in stripped.splitlines() if line.strip()]
+    return (0 < len(lines) <= COVER_MAX_LINES and len(stripped) <= COVER_MAX_CHARS
+            and not any(line[-1] in ".:;" for line in lines) and not any(_STEP.match(line) for line in lines))
+
+
 def parse_document(chunks) -> list:
     """Return ordered procedures with ordered steps for a list of chunks.
 

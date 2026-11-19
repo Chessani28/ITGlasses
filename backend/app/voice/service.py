@@ -681,9 +681,9 @@ class VoiceService:
                 self._vocabulary = voice_vocabulary.from_knowledge(knowledge, aliases=True, nicknames=True)
                 self._vocabulary_signature = signature
                 stats = self._vocabulary.stats()
-                logger.info("Voice vocabulary rebuilt terms=%d chars=%d titles=%d headings=%d fixed=%d aliases=%d",
-                            stats["terms"], stats["chars"], stats["title"], stats["heading"], stats["fixed"],
-                            self._vocabulary.aliases)
+                logger.info("Voice vocabulary rebuilt terms=%d chars=%d titles=%d headings=%d fixed=%d aliases=%d "
+                            "nicknames=%d", stats["terms"], stats["chars"], stats["title"], stats["heading"],
+                            stats["fixed"], self._vocabulary.aliases, self._vocabulary.nicknames)
             return self._vocabulary
         except Exception as error:  # noqa: BLE001
             logger.warning("Voice vocabulary unavailable error_type=%s", _safe_label(type(error).__name__))

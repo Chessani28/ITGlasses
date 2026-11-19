@@ -17,14 +17,18 @@ from .store import Store
 
 
 def reserve_answer(evidence, reason):
-    """Answer when no grounded generation is available: the selected evidence, without table-of-contents pages
-    (unless every row is one). Only this text changes; the selection, ranking and sources do not."""
-    from backend.app.assistant.procedures import is_index_page
+    """Answer when no grounded generation is available: the selected evidence, without table-of-contents or cover
+    pages (unless every row is one). Only this text changes; the selection, ranking and sources do not."""
+    from backend.app.assistant.procedures import is_cover_page, is_index_page
 
-    rows = [row for row in evidence if not is_index_page(row.get("text"))] or list(evidence)
+    index_pages = [row for row in evidence if is_index_page(row.get("text"))]
+    covers = [row for row in evidence if row not in index_pages and is_cover_page(row.get("text"), row.get("page"))]
+    rows = [row for row in evidence if row not in index_pages and row not in covers]
+    if not rows:  # never an empty answer
+        rows, index_pages, covers = list(evidence), [], []
     logging.getLogger("knowledge").info(
-        "Knowledge reserve answer reason=%s rows=%d index_pages_dropped=%d",
-        re.sub(r"[^A-Za-z0-9_]", "", str(reason))[:64], len(rows), len(evidence) - len(rows),
+        "Knowledge reserve answer reason=%s rows=%d index_pages_dropped=%d cover_pages_dropped=%d",
+        re.sub(r"[^A-Za-z0-9_]", "", str(reason))[:64], len(rows), len(index_pages), len(covers),
     )
     return "Según la documentación autorizada:\n\n" + "\n\n".join(row["text"] for row in rows)
 
