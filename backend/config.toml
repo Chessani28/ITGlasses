@@ -9,7 +9,12 @@ max_output_tokens = 512
 thinking = false
 timeout_seconds = 120.0
 health_timeout_seconds = 5.0
-keep_alive = "30s"
+keep_alive = "10m"
 # Creatividad del modelo (0 = muy literal, 1.5 = muy creativo)
 general_temperature = 0.6
 grounded_temperature = 0.2
+
+# Muestreo recomendado por Qwen para Qwen3-4B-Instruct-2507
+top_p = 0.8
+top_k = 20
+min_p = 0.0

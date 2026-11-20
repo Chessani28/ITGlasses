@@ -20,6 +20,8 @@ class KnowledgeService:
         self.root = Path(root)
         self.store = Store(self.root / "storage/knowledge")
         self.embeddings, self.selector = embeddings, selector
+        # Proveedor que redacta la respuesta final a partir de la evidencia.
+        self.writer = None
         self.retriever = Retriever(self.store, embeddings)
         self.lock = asyncio.Lock()
         self.sessions = {}
@@ -288,10 +290,11 @@ class KnowledgeService:
             else:
                 if mode == "steps" and not any(re.search(r"(?:^|\n)\s*(?:\d+[.)]|[-*])\s|paso\s+\d", row["text"], re.I) for row in evidence):
                     return missing()
-                # Try grounded generation with Ollama first
+                # Redacta con el proveedor (lenguaje hablado); si falla, texto literal.
+                writer = self.writer if hasattr(self.writer, "generate_grounded_answer") else self.selector
                 try:
-                    if hasattr(self.selector, "generate_grounded_answer"):
-                        answer = await self.selector.generate_grounded_answer(request.message, evidence)
+                    if hasattr(writer, "generate_grounded_answer"):
+                        answer = await writer.generate_grounded_answer(request.message, evidence)
                     else:
                         answer = "Según la documentación autorizada:\n\n" + "\n\n".join(row["text"] for row in evidence)
                 except Exception:

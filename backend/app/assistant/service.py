@@ -641,11 +641,13 @@ class UnifiedAssistantService:
             # Translate each step's text naturally into Spanish, but sequentially
             # (not concurrently) to avoid overwhelming the model and to preserve
             # error handling per step.
-            for index, step in enumerate(steps, start=1):
-                original = (step.get("text") or "").strip()
-                # Preserve the exact authorized wording in complete procedure lists.
-                body = original
-                lines.append(f"{index}. {body}")
+            spoken = await self._narrate(title, steps)
+            if spoken:
+                lines = [f"«{title}» tiene {len(steps)} pasos. {spoken}"]
+            else:
+                for index, step in enumerate(steps, start=1):
+                    # Preserve the exact authorized wording in complete procedure lists.
+                    lines.append(f"{index}. {(step.get('text') or '').strip()}")
             # Cite the source document from the first step
             if steps:
                 lines.append(self._citation(steps[0], state.get("active_document")))
@@ -654,6 +656,24 @@ class UnifiedAssistantService:
         state["active_procedure"] = matched[0].get("title")
         state["current_step_index"] = 0
         return "\n\n".join(blocks)
+
+    async def _narrate(self, title, steps):
+        """Versión hablada de un procedimiento, o ``None`` para usar la lista literal.
+
+        Se descarta si el proveedor no la soporta, falla, o devuelve menos
+        oraciones que pasos (señal de que se saltó o fusionó alguno).
+        """
+        narrate = getattr(self.provider, "narrate_procedure", None)
+        texts = [(step.get("text") or "").strip() for step in steps]
+        if narrate is None or not texts or not all(texts):
+            return None
+        try:
+            spoken = (await narrate(title, texts) or "").strip()
+        except Exception:  # noqa: BLE001 - literal list is always a safe fallback
+            return None
+        if not spoken or _sentence_count(spoken) < len(texts):
+            return None
+        return spoken
 
     def _answer_document(self, state):
         sources = state.get("active_sources") or []
@@ -676,7 +696,7 @@ class UnifiedAssistantService:
                        f"cita {source['citation_id']}]")
         return answer
 
-    def _answer_procedure(self, state):
+    async def _answer_procedure(self, state):
         procedure = None
         for candidate in state.get("procedures") or []:
             if candidate.get("title") == state.get("active_procedure"):
@@ -691,8 +711,12 @@ class UnifiedAssistantService:
         steps = procedure.get("steps") or []
         answer = (f"El procedimiento «{procedure.get('title') or 'actual'}» "
                   f"tiene {len(steps)} pasos: ")
-        answer += " ".join(f"{index}) {step.get('text')}. "
-                           for index, step in enumerate(steps, start=1))
+        spoken = await self._narrate(procedure.get("title") or "actual", steps)
+        if spoken:
+            answer += spoken
+        else:
+            answer += " ".join(f"{index}) {step.get('text')}. "
+                               for index, step in enumerate(steps, start=1))
         if steps:
             answer += " " + self._citation(steps[0], state.get("active_document"))
         return answer.strip()
@@ -742,7 +766,6 @@ class UnifiedAssistantService:
         """
         state["web_sources"] = []
 
-        web_block = ""
         if self._needs_web(message) and self.web_search is not None:
             try:
                 web = await self.web_search.search(message, max_results=5)
@@ -753,6 +776,14 @@ class UnifiedAssistantService:
                     {"title": s2.title, "url": s2.url, "snippet": s2.snippet}
                     for s2 in web
                 ]
+                summarize = getattr(self.provider, "summarize_web", None)
+                if summarize is not None:
+                    try:
+                        spoken = (await summarize(message, state["web_sources"][:5]) or "").strip()
+                    except Exception:  # noqa: BLE001 - fall back to the raw list
+                        spoken = ""
+                    if spoken:
+                        return spoken
                 refs = "\n".join(
                     f"- [{w['title']}]({w['url']}): {w['snippet']}"
                     for w in state["web_sources"][:5]
@@ -771,23 +802,30 @@ class UnifiedAssistantService:
             if topic and not re.search(r"\b(?:eso|esto|ello|ese|esa|este|esta|anterior|mismo|misma|su|sus)\b", topic):
                 state.pop("active_subject", None)
         history = state.get("history") or []
-        context = ""
-        if history:
-            recent = "\n".join(f"Usuario: {q}\nAsistente: {a}" for q, a in history[-4:])
-            context = (
-                "\n\nConversación previa:\n" + recent +
-                "\n\nResponde de forma coherente con la conversación previa."
-            )
+        subject_note = ""
         if state.get("active_subject"):
-            context += "\nTema explícito de soporte activo: " + state["active_subject"] + ". Mantén ese sujeto en seguimientos sin sujeto explícito; no conviertas el objeto de una conexión en el dispositivo averiado. Si hay ambigüedad, pregunta."
-        prompt = (
-            "Eres un asistente de soporte técnico. Responde en español, de forma "
-            "breve y clara, a la siguiente pregunta del usuario.\n"
-            "Si no sabes la respuesta, dilo claramente.\n\n" + "Mensaje del usuario: " + message +
-            context + web_block
-        )
+            subject_note = (
+                "\n\n(Tema de soporte activo: " + state["active_subject"] + ". Mantén ese "
+                "sujeto en seguimientos sin sujeto explícito; no conviertas el objeto de una "
+                "conexión en el dispositivo averiado. Si hay ambigüedad, pregunta.)")
+        generate_chat = getattr(self.provider, "generate_chat", None)
+        if generate_chat is not None:
+            # Historial como turnos reales; el proveedor recorta los más viejos si
+            # no caben y la pregunta actual (al final) nunca se pierde.
+            messages = []
+            for q, a in history[-4:]:
+                messages.append({"role": "user", "content": q})
+                messages.append({"role": "assistant", "content": (a or "")[:1200]})
+            messages.append({"role": "user", "content": message + subject_note})
+            call = generate_chat(messages)
+        else:
+            context = ""
+            if history:
+                recent = "\n".join(f"Usuario: {q}\nAsistente: {a}" for q, a in history[-4:])
+                context = "Conversación previa:\n" + recent + "\n\n"
+            call = self.provider.generate(context + "Mensaje del usuario: " + message + subject_note)
         try:
-            answer = await self.provider.generate(prompt)
+            answer = await call
         except Exception as exc:  # noqa: BLE001
             import logging
             logging.getLogger("assistant").exception("general provider failed: %s", exc)
@@ -847,7 +885,7 @@ class UnifiedAssistantService:
                 return {"answer": answer, "session_id": session_id, "route": "knowledge",
                         "sources": state.get("active_sources") or []}
         if kind == "procedure":
-            answer = self._answer_procedure(state)
+            answer = await self._answer_procedure(state)
             if answer is not None:
                 state["active_route"] = "knowledge"
                 self.sessions.remember(state, message, answer)
@@ -928,7 +966,7 @@ class UnifiedAssistantService:
         if answer is None and kind == "document":
             answer = self._answer_document(state)
         if answer is None and kind == "procedure":
-            answer = self._answer_procedure(state)
+            answer = await self._answer_procedure(state)
         if answer is None:
             answer = result.answer
 

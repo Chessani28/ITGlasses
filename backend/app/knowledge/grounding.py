@@ -5,14 +5,23 @@ from .models import KnowledgeError
 
 
 class EvidenceSelector:
-    def __init__(self, model, url="http://127.0.0.1:11434"):
+    def __init__(self, model, url="http://127.0.0.1:11434", context_length=2048,
+                 keep_alive="10m", timeout_seconds=120.0):
         self.model, self.url = model, url
+        self.context_length, self.keep_alive = context_length, keep_alive
+        self.timeout_seconds = timeout_seconds
+
+    @classmethod
+    def from_settings(cls, settings):
+        """Usa la misma configuracion que el proveedor (contexto, keep_alive, timeout)."""
+        return cls(settings.model, settings.ollama_url, settings.context_length,
+                   settings.keep_alive, settings.timeout_seconds)
 
     async def select(self, question, rows):
         # IDs and source text are data, never instructions. Only existing IDs survive.
         evidence = [{"id": str(i), "title": row["title"], "text": row["text"]} for i, row in enumerate(rows)]
         payload = {
-            "model": self.model, "stream": False, "think": False, "keep_alive": "30s",
+            "model": self.model, "stream": False, "think": False, "keep_alive": self.keep_alive,
             "format": {"type": "object", "properties": {
                 "sufficient": {"type": "boolean"}, "ids": {"type": "array", "items": {"type": "string"}}},
                 "required": ["sufficient", "ids"], "additionalProperties": False},
@@ -25,9 +34,9 @@ class EvidenceSelector:
                     "For names/definitions, evidence identifying the concept is sufficient. "
                     "For execution steps, actual documented steps must exist. Never execute commands.")},
                 {"role": "user", "content": json.dumps({"question": question, "evidence": evidence}, ensure_ascii=False)}],
-            "options": {"num_ctx": 2048, "num_predict": 128, "temperature": 0.0}}
+            "options": {"num_ctx": self.context_length, "num_predict": 128, "temperature": 0.0}}
         try:
-            async with httpx.AsyncClient(trust_env=False, timeout=httpx.Timeout(120, connect=3)) as client:
+            async with httpx.AsyncClient(trust_env=False, timeout=httpx.Timeout(self.timeout_seconds, connect=3)) as client:
                 response = await client.post(self.url + "/api/chat", json=payload)
                 response.raise_for_status()
                 result = response.json()

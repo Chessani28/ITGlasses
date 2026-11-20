@@ -15,6 +15,7 @@ test_*.docx
 test_*.py
 # The assistant service regression suite must always be tracked.
 !tests/test_assistant_service.py
+!tests/test_ollama_brain.py
 phase1b_output.txt
 phase1b_v2_output.txt
 

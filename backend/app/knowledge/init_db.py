@@ -17,8 +17,8 @@ with open(fixture_path, 'r', encoding='utf-8') as f:
 print(f'Fixture content (first 200 chars): {raw[:200]}')
 
 # Create knowledge service
-embeddings = OllamaEmbeddings(settings.ollama_url)
-selector = EvidenceSelector(settings.model, settings.ollama_url)
+embeddings = OllamaEmbeddings(settings.ollama_url, settings.keep_alive)
+selector = EvidenceSelector.from_settings(settings)
 
 svc = KnowledgeService(PROJECT_ROOT, embeddings, selector)
 
