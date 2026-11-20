@@ -18,6 +18,9 @@ def service(request: Request):
         from .embeddings import OllamaEmbeddings
         from .grounding import EvidenceSelector
         request.app.state.knowledge = KnowledgeService(PROJECT_ROOT, OllamaEmbeddings(settings.ollama_url), EvidenceSelector(settings.model, settings.ollama_url, settings.keep_alive))
+    # El proveedor redacta las respuestas de manuales en lenguaje hablado (con respaldo literal si falla).
+    if getattr(request.app.state.knowledge, "writer", None) is None:
+        request.app.state.knowledge.writer = getattr(request.app.state, "provider", None)
     return request.app.state.knowledge
 
 

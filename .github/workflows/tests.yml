@@ -1,0 +1,39 @@
+name: Pruebas
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    name: Backend (Python)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+      - name: Instalar dependencias
+        run: pip install -r requirements-dev.txt
+      # Las pruebas smoke_* necesitan Ollama/Vosk/Piper locales y no se recolectan.
+      - name: Correr pruebas
+        run: python -m pytest -q
+
+  frontend:
+    name: Frontend (JavaScript)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Correr pruebas
+        run: node --test tests/*.test.mjs

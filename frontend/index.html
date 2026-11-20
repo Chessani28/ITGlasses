@@ -28,6 +28,12 @@
     <header class="topbar"><div><span class="breadcrumb">Workspace</span><span class="slash">/</span><span id="page-title">Conversaciones</span></div><div class="top-actions"><span id="connection" class="badge neutral">Comprobando conexión</span><button id="refresh-status" class="icon-button" title="Actualizar estado" aria-label="Actualizar estado">↻</button></div></header>
     <section id="chat-page" class="page chat-page" aria-label="Conversaciones">
       <div class="chat-toolbar"><button id="new-chat" class="text-button">＋ Nueva conversación</button></div>
+      <details id="history-panel" class="history-panel">
+        <summary>🕘 Chats guardados <span id="history-count" class="nav-count">0</span></summary>
+        <p class="history-note">Se guardan solo en este navegador. ITGlasses recuerda el contexto de un chat unos 30 minutos; después puedes releerlo, pero las preguntas nuevas empiezan sin ese contexto.</p>
+        <ul id="history-list" class="history-list"></ul>
+        <button id="history-clear" class="text-button" type="button">Borrar todo el historial</button>
+      </details>
 
       <details class="voice-panel" open>
         <summary>◉ Asistente de voz <span class="badge neutral">LOCAL · CPU</span></summary>
