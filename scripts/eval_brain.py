@@ -10,10 +10,10 @@ Uso (desde la raíz del repo, con Ollama corriendo):
     python scripts/eval_brain.py --label viejo          # en la otra rama
     python scripts/eval_brain.py --compare .cache/eval-brain/viejo.json .cache/eval-brain/nuevo.json
 
-Para correrlo en main (donde este archivo no existe), cópialo antes fuera del repo:
+Para correrlo en master (donde este archivo no existe), cópialo antes fuera del repo:
 
     git show claude/mejora-cerebro:scripts/eval_brain.py > %TEMP%\\eval_brain.py
-    git checkout main
+    git checkout master
     python %TEMP%\\eval_brain.py --label viejo --root .
 
 Preguntas propias: --questions mis_preguntas.json con el formato
