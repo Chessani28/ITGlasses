@@ -1,3 +1,84 @@
+# ITGlasses
+
+Asistente de soporte de TI que corre en local: chat web y app Android (con lentes
+Ray-Ban Meta) que responden con conocimiento general, **manuales de la empresa**
+(RAG con SQLite) y búsqueda en internet. Stack: Python + FastAPI, Ollama + Qwen3,
+Whisper/Vosk + Piper, Caddy + HTTPS. App Android:
+[ITGlasses-Android](https://github.com/Chessani28/ITGlasses-Android).
+
+## Qué hace hoy
+
+- **Asistente unificado** (`POST /api/v1/assistant/chat`): decide solo si responder
+  con manuales, conocimiento general o internet, y recuerda la conversación
+  (`session_id`, unos 30 minutos en memoria del servidor).
+- **Respuestas pensadas para voz**: los procedimientos se narran de forma natural
+  ("primero…, después…, por último…") sin saltarse pasos; si la narración pierde
+  algún paso, se usa la lista literal. Las búsquedas web se resumen en 2–4
+  oraciones. Antes de Piper, `normalize_for_speech` quita fuentes, enlaces,
+  comillas y tablas.
+- **Historial de chats en la web**: se guarda en el navegador (máx. 50 chats);
+  panel "Chats guardados" para reabrir o borrar.
+- **Voz en la web**: micrófono, transcripción local y respuesta hablada con Piper.
+
+## Arranque (PowerShell, desde la raíz del proyecto)
+
+```powershell
+# 1. Ollama local (otra terminal). Con RAM de sobra, -MaxLoadedModels 2 deja Qwen
+#    y el modelo de embeddings cargados a la vez (más rápido con manuales).
+.\scripts\start-ollama.ps1
+
+# 2. Backend
+.\scripts\start-backend.ps1 -Provider ollama
+```
+
+Abre http://127.0.0.1:8000/. Para la red local (celular), el backend exige token:
+ver `ITGLASSES_ALLOW_LAN_BINDING` / `ITGLASSES_API_TOKENS` y la guía de
+[interfaz](docs/interface.md).
+
+## Configuración: `config.toml`
+
+Es el **único** archivo de configuración (en la raíz). Las variables de entorno
+`ITGLASSES_*` y `OLLAMA_BASE_URL` tienen prioridad.
+
+| Clave | Para qué sirve |
+|---|---|
+| `model`, `ollama_url` | Modelo de Ollama y dirección local |
+| `context_length`, `max_output_tokens` | Contexto y largo máximo de respuesta |
+| `keep_alive` | Cuánto tiempo sigue cargado el modelo entre preguntas (`10m`) |
+| `general_temperature`, `grounded_temperature` | Creatividad general / con manuales |
+| `top_p`, `top_k`, `min_p` | Muestreo (valores recomendados por Qwen) |
+
+## Pruebas
+
+```powershell
+python -m pytest -q --ignore=tests/test_voice_recovery.py   # backend
+node --test tests/*.test.mjs                                # frontend
+```
+
+GitHub Actions corre ambas en cada push y PR (`.github/workflows/tests.yml`).
+`tests/test_voice_recovery.py` se excluye porque importa `tests/test_voice.py`,
+que el `.gitignore` deja fuera del repositorio.
+
+## Evaluar el cerebro con Ollama real
+
+```powershell
+python scripts/eval_brain.py --label nuevo
+python scripts/eval_brain.py --compare .cache/eval-brain/viejo.json .cache/eval-brain/nuevo.json
+```
+
+Lanza 27 preguntas típicas (manuales, generales, web, seguimientos), mide tiempos
+y guarda la respuesta y el texto hablado. Solo lee la base de conocimiento.
+Instrucciones para comparar con otra rama al inicio del script.
+
+## Documentación
+
+- [Interfaz web](docs/interface.md) · [Manuales / API de conocimiento](docs/knowledge.md)
+  · [Voz](docs/voice-assistant.md) · [Bitácora](docs/progress.md)
+
+---
+
+# Historial de fases (en inglés)
+
 # Phase 5 voice implementation — acceptance pending
 
 Local CPU speech adapters and a web voice panel have been added. Speech model
