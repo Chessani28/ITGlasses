@@ -17,6 +17,7 @@ test_*.py
 !tests/test_assistant_service.py
 !tests/test_ollama_brain.py
 !tests/test_voice_normalize.py
+!tests/chat-history.test.mjs
 phase1b_output.txt
 phase1b_v2_output.txt
 
