@@ -23,6 +23,8 @@ class Settings:
     timeout_seconds: float = 120.0
     health_timeout_seconds: float = 5.0
     keep_alive: str = "30s"
+    general_temperature: float = 0.6
+    grounded_temperature: float = 0.2
 
     def __post_init__(self):
         if self.provider not in {"mock", "ollama"}:
@@ -44,6 +46,9 @@ class Settings:
             raise ValueError("Output must be between 1 and 1024 tokens")
         if not 1 <= self.timeout_seconds <= 300 or not 1 <= self.health_timeout_seconds <= 10:
             raise ValueError("Timeout outside supported bounds")
+        for temp in (self.general_temperature, self.grounded_temperature):
+            if isinstance(temp, bool) or not isinstance(temp, (int, float)) or not 0 <= temp <= 1.5:
+                raise ValueError("Temperature must be a number between 0 and 1.5")
 
 
 def load_settings(path: Path = PROJECT_ROOT / "config.toml") -> Settings:

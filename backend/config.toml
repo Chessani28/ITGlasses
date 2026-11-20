@@ -10,3 +10,6 @@ thinking = false
 timeout_seconds = 120.0
 health_timeout_seconds = 5.0
 keep_alive = "30s"
+# Creatividad del modelo (0 = muy literal, 1.5 = muy creativo)
+general_temperature = 0.6
+grounded_temperature = 0.2
