@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 import os
+import re
 import tomllib
 from urllib.parse import urlsplit
 
@@ -22,7 +23,14 @@ class Settings:
     thinking: bool = False
     timeout_seconds: float = 120.0
     health_timeout_seconds: float = 5.0
+    # config.toml lo sube a "10m" para no recargar el modelo entre preguntas.
     keep_alive: str = "30s"
+    general_temperature: float = 0.6
+    grounded_temperature: float = 0.2
+    # Muestreo recomendado por Qwen para Qwen3-4B-Instruct-2507.
+    top_p: float = 0.8
+    top_k: int = 20
+    min_p: float = 0.0
 
     def __post_init__(self):
         if self.provider not in {"mock", "ollama"}:
@@ -44,6 +52,16 @@ class Settings:
             raise ValueError("Output must be between 1 and 1024 tokens")
         if not 1 <= self.timeout_seconds <= 300 or not 1 <= self.health_timeout_seconds <= 10:
             raise ValueError("Timeout outside supported bounds")
+        for temp in (self.general_temperature, self.grounded_temperature):
+            if isinstance(temp, bool) or not isinstance(temp, (int, float)) or not 0 <= temp <= 1.5:
+                raise ValueError("Temperature must be a number between 0 and 1.5")
+        for value in (self.top_p, self.min_p):
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 <= value <= 1:
+                raise ValueError("top_p and min_p must be numbers between 0 and 1")
+        if isinstance(self.top_k, bool) or not isinstance(self.top_k, int) or not 0 <= self.top_k <= 200:
+            raise ValueError("top_k must be an integer between 0 and 200")
+        if not re.fullmatch(r"-1|0|\d+(?:\.\d+)?[smh]", str(self.keep_alive)):
+            raise ValueError("keep_alive must look like 30s, 10m, 1h, 0 or -1")
 
 
 def load_settings(path: Path = PROJECT_ROOT / "config.toml") -> Settings:

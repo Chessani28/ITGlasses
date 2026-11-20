@@ -38,6 +38,8 @@ class KnowledgeService:
         self.root = Path(root)
         self.store = Store(self.root / "storage/knowledge")
         self.embeddings, self.selector = embeddings, selector
+        # Proveedor que redacta la respuesta final a partir de la evidencia seleccionada.
+        self.writer = None
         self.retriever = Retriever(self.store, embeddings)
         self.lock = asyncio.Lock()
         self.sessions = {}
@@ -308,8 +310,9 @@ class KnowledgeService:
                     return missing()
                 # Try grounded generation with Ollama first
                 try:
-                    if hasattr(self.selector, "generate_grounded_answer"):
-                        answer = await self.selector.generate_grounded_answer(request.message, evidence)
+                    writer = self.writer if hasattr(self.writer, "generate_grounded_answer") else self.selector
+                    if hasattr(writer, "generate_grounded_answer"):
+                        answer = await writer.generate_grounded_answer(request.message, evidence)
                     else:
                         answer = reserve_answer(evidence, "no_generator")
                 except Exception as exc:  # noqa: BLE001 - the reserve answer is the selected evidence itself

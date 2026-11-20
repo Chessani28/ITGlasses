@@ -1,3 +1,7 @@
+# -MaxLoadedModels 2 mantiene Qwen y el modelo de embeddings cargados a la vez
+# (unos 1 GB mas de RAM). Con 1, cada pregunta de manuales descarga Qwen para
+# calcular embeddings y luego lo vuelve a cargar.
+param([ValidateRange(1, 3)][int]$MaxLoadedModels = 1)
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot -Parent
 $binary = Join-Path $projectRoot 'storage\runtime\ollama-0.40.6\ollama.exe'
@@ -9,7 +13,7 @@ $settings = @{
     OLLAMA_NO_CLOUD = '1'
     OLLAMA_CONTEXT_LENGTH = '2048'
     OLLAMA_NUM_PARALLEL = '1'
-    OLLAMA_MAX_LOADED_MODELS = '1'
+    OLLAMA_MAX_LOADED_MODELS = "$MaxLoadedModels"
     OLLAMA_MAX_QUEUE = '1'
     OLLAMA_KEEP_ALIVE = '30s'
     OLLAMA_LOAD_TIMEOUT = '120s'

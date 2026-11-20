@@ -28,6 +28,16 @@ _MD_LINK = re.compile(r"\[([^\]]+)\]\(([^)]+)\)")
 _MD_LIST = re.compile(r"^\s*[-*+]\s+", re.MULTILINE)
 _MD_NUMBERED = re.compile(r"^\s*\d+\.\s+", re.MULTILINE)
 
+# Elementos que se ven bien en pantalla pero suenan mal en voz
+# Las fuentes ya se anuncian aparte ("Consulta las N fuentes en pantalla").
+_SOURCE_TAG = re.compile(r"\s*\[Fuente:[^\]]*\]", re.IGNORECASE)
+# Línea con el texto literal del manual (normalmente en inglés) tras la traducción.
+_DOCUMENT_TEXT_LINE = re.compile(r"^\s*Texto del documento:.*$", re.MULTILINE)
+_BARE_URL = re.compile(r"\(?\bhttps?://\S+?\)?(?=[\s,;]|[.!?](?:\s|$)|$)")
+_QUOTES = re.compile(r"[«»“”„\"]")
+_TABLE_PIPE = re.compile(r"[ \t]*\|[ \t]*")
+_TABLE_RULE = re.compile(r"^\s*\|?\s*:?-{3,}.*$", re.MULTILINE)
+
 
 def normalize_for_speech(text: str) -> str:
     """Normalize text for TTS: remove emojis, markdown, handle URLs/citations."""
@@ -57,6 +67,21 @@ def normalize_for_speech(text: str) -> str:
     # Handle citation brackets like [id] - keep as spoken reference
     # e.g. [b707569d-...] -> "referencia"
     text = re.sub(r"\[[a-f0-9-]{8,}\]", "referencia", text)
+
+    # Fuentes, texto literal duplicado, URLs sueltas, comillas y tablas
+    text = _SOURCE_TAG.sub("", text)
+    text = _DOCUMENT_TEXT_LINE.sub("", text)
+    text = _BARE_URL.sub("", text)
+    text = _QUOTES.sub("", text)
+    text = _TABLE_RULE.sub("", text)
+    text = _TABLE_PIPE.sub(", ", text)
+
+    # Cada línea de una lista se vuelve una oración, para que Piper haga pausa.
+    lines = [line.strip(" ,") for line in text.split("\n")]
+    lines = [line for line in lines if line]
+    text = " ".join(line if line[-1] in ".!?:;" else line + "." for line in lines)
+    text = re.sub(r"\s+([.,;:!?])", r"\1", text)
+    text = re.sub(r"([.!?])\.", r"\1", text)
 
     # Collapse multiple whitespace
     text = re.sub(r"\n{3,}", "\n\n", text)

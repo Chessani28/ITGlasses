@@ -1,10 +1,12 @@
 import {api, chatPayload, documentState, elapsed, jsonOptions, limits, sourcePath, validateFile} from "./core.mjs";
 
 import {initVoice} from "./voice-ui.mjs";
+import {createHistory, newChatId, relativeDate} from "./chat-history.mjs";
+const chatHistory = createHistory();
 let voiceActive = false;
 const $ = id => document.getElementById(id);
 const state = {mode: "assistant", busy: false, documentBusy: false, updating: null, withdrawing: null,
-  sourceRequest: 0, chats: {assistant: {messages: [], conversation: null}, knowledge: {messages: [], conversation: null}, general: {messages: [], conversation: null}}};
+  sourceRequest: 0, chats: {assistant: {id: newChatId(), messages: [], conversation: null}, knowledge: {messages: [], conversation: null}, general: {messages: [], conversation: null}}};
 const welcome = $("welcome");
 const modeText = {
   assistant: {eyebrow: "ASISTENTE UNIFICADO", title: "Asistente ITGlasses.", subtitle: "Una conversación.", description: "Conversación natural, conocimiento general y documentación autorizada en un solo modo.", context: "Asistente · contexto de sesión del backend.", prompt: "Escribe tu pregunta…", label: "Asistente ITGlasses · fuentes cuando aplique"},
@@ -47,6 +49,53 @@ function updateControls() {
     button.disabled = state.documentBusy || state.busy || button.dataset.withdrawn === "true";
   });
   document.querySelectorAll(".option-button").forEach(button => button.disabled = state.busy || state.documentBusy || button.dataset.stale === "true");
+  document.querySelectorAll(".history-open, .history-delete, #history-clear").forEach(button => button.disabled = state.busy || voiceActive);
+}
+// ---- Historial de chats (solo modo asistente, guardado en este navegador)
+function persistChat(mode) {
+  if (mode !== "assistant") return;
+  chatHistory.save(state.chats.assistant);
+  renderHistory();
+}
+function renderHistory() {
+  const chats = chatHistory.list();
+  $("history-count").textContent = String(chats.length);
+  $("history-clear").hidden = !chats.length;
+  if (!chats.length) { $("history-list").replaceChildren(node("li", "history-empty", "Aún no hay chats guardados.")); return; }
+  const current = state.mode === "assistant" ? state.chats.assistant.id : null;
+  $("history-list").replaceChildren(...chats.map(chat => {
+    const item = node("li", "history-item");
+    const open = action("", `history-open${chat.id === current ? " current" : ""}`, () => openChat(chat.id));
+    open.append(node("span", "", chat.title), node("small", "", relativeDate(chat.updated)));
+    open.title = chat.title;
+    if (chat.id === current) open.setAttribute("aria-current", "true");
+    const remove = action("×", "history-delete", () => deleteChat(chat.id, chat.title));
+    remove.setAttribute("aria-label", `Borrar el chat «${chat.title}»`);
+    remove.title = "Borrar chat";
+    item.append(open, remove);
+    return item;
+  }));
+  updateControls();
+}
+function openChat(id) {
+  if (state.busy || voiceActive) return;
+  const chat = chatHistory.get(id);
+  if (!chat) { renderHistory(); return; }
+  if (state.mode !== "assistant") setMode("assistant");
+  state.chats.assistant = {id: chat.id, messages: chat.messages.map(entry => ({...entry})), conversation: chat.conversation};
+  renderChat(); renderHistory();
+  $("history-panel").open = false;
+  pendingScroll();
+}
+function startNewChat(mode) {
+  state.chats[mode] = mode === "assistant" ? {id: newChatId(), messages: [], conversation: null} : {messages: [], conversation: null};
+}
+function deleteChat(id, title) {
+  if (state.busy || voiceActive) return;
+  if (!confirm(`¿Borrar el chat «${title}»? No se puede deshacer.`)) return;
+  chatHistory.remove(id);
+  if (state.chats.assistant.id === id) { startNewChat("assistant"); if (state.mode === "assistant") renderChat(); }
+  renderHistory();
 }
 function updateCounter() { $("character-count").textContent = `${$("message").value.length} / ${limits[state.mode]}`; }
 function setMode(mode) {
@@ -76,6 +125,7 @@ function setMode(mode) {
   }));
   updateCounter();
   renderChat();
+  renderHistory();
 }
 function renderChat() {
   const messages = state.chats[state.mode].messages;
@@ -163,6 +213,7 @@ async function sendMessage(message, choiceId, signal) {
     if (signal) throw error;
   } finally {
     pending.pending = false; state.busy = false; renderChat(); updateControls(); pendingScroll();
+    persistChat(mode);
   }
   return result;
 }
@@ -329,7 +380,14 @@ $("message").addEventListener("keydown", event => {
   if (event.key === "Enter" && !event.shiftKey && !event.isComposing) { event.preventDefault(); $("chat-form").requestSubmit(); }
 });
 $("new-chat").addEventListener("click", () => {
-  state.chats[state.mode] = {messages: [], conversation: null}; renderChat(); $("message").focus();
+  startNewChat(state.mode); renderChat(); renderHistory(); $("message").focus();
+});
+$("history-clear").addEventListener("click", () => {
+  if (state.busy || voiceActive) return;
+  if (!confirm("¿Borrar todos los chats guardados en este navegador? No se puede deshacer.")) return;
+  chatHistory.clear(); startNewChat("assistant");
+  if (state.mode === "assistant") renderChat();
+  renderHistory();
 });
 $("refresh-status").addEventListener("click", refreshStatus);
 $("refresh-documents").addEventListener("click", refreshDocuments);

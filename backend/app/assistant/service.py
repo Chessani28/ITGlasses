@@ -1204,11 +1204,12 @@ class UnifiedAssistantService:
             steps = self._scope_steps({"active_steps": procedure.get("steps") or []})
             title = procedure.get("title") or "Procedimiento"
             lines = [f"«{title}» ({_pasos(len(steps))}):"]
-            # Use steps from the catalog directly - format deterministically.
-            # Translate each step's text naturally into Spanish, but sequentially
-            # (not concurrently) to avoid overwhelming the model and to preserve
-            # error handling per step.
-            for index, step in enumerate(steps, start=1):
+            # Narración hablada de todos los pasos; si no hay narración válida,
+            # la lista literal del catálogo como antes.
+            spoken = await self._narrate(title, steps)
+            if spoken:
+                lines = [f"«{title}» tiene {_pasos(len(steps))}. {spoken}"]
+            for index, step in enumerate(steps if not spoken else [], start=1):
                 original = (step.get("text") or "").strip()
                 # Preserve the exact authorized wording in complete procedure lists.
                 body = original
@@ -1243,7 +1244,31 @@ class UnifiedAssistantService:
                        f"cita {source['citation_id']}]")
         return answer
 
-    def _answer_procedure(self, state):
+    async def _narrate(self, title, steps):
+        """Versión hablada de un procedimiento completo, o ``None`` para usar la lista literal.
+
+        Se descarta si el proveedor no la soporta, falla, o devuelve menos oraciones que pasos (señal de que se
+        saltó o fusionó alguno).
+        """
+        narrate = getattr(self.provider, "narrate_procedure", None)
+        texts = []
+        for step in steps:
+            text = (step.get("text") or "").strip()
+            substeps = [item.strip().rstrip(".") for item in step.get("substeps") or [] if item.strip()]
+            if substeps:
+                text = text.rstrip(".") + " (incluye: " + "; ".join(substeps) + ")"
+            texts.append(text)
+        if narrate is None or not texts or not all(texts):
+            return None
+        try:
+            spoken = (await narrate(title, texts) or "").strip()
+        except Exception:  # noqa: BLE001 - the literal list is always a safe fallback
+            return None
+        if not spoken or _sentence_count(spoken) < len(texts):
+            return None
+        return spoken
+
+    async def _answer_procedure(self, state):
         procedure = None
         for candidate in state.get("procedures") or []:
             if candidate.get("title") == state.get("active_procedure"):
@@ -1258,6 +1283,12 @@ class UnifiedAssistantService:
         steps = procedure.get("steps") or []
         answer = (f"El procedimiento «{procedure.get('title') or 'actual'}» "
                   f"tiene {_pasos(len(steps))}: ")
+        spoken = await self._narrate(procedure.get("title") or "actual", steps)
+        if spoken:
+            answer += spoken
+            if steps:
+                answer += " " + self._citation(steps[0], state.get("active_document"))
+            return answer
         parts = []
         for index, step in enumerate(steps, start=1):
             text = (step.get("text") or "").strip().rstrip(".")
@@ -1488,11 +1519,24 @@ class UnifiedAssistantService:
             "Si no sabes la respuesta, dilo claramente.\n\n" + "Mensaje del usuario: " + message +
             context + web_block
         )
+        subject_note = ("\nTema explícito de soporte activo: " + state["active_subject"] + ". Mantén ese sujeto "
+                        "en seguimientos sin sujeto explícito; no conviertas el objeto de una conexión en el "
+                        "dispositivo averiado. Si hay ambigüedad, pregunta.") if state.get("active_subject") else ""
+        prompt_without_history = (
+            "Responde en español, de forma breve y clara.\n" + missing +
+            "Si no sabes la respuesta, dilo claramente. Sé coherente con la conversación previa.\n\n"
+            "Mensaje del usuario: " + message + subject_note + web_block
+        )
         try:
             # The general chat may be longer than /api/v1/chat (OllamaProvider.generate_general: 768 tokens, and
             # the text generated so far plus a note when it reaches the limit). Other providers: generate().
             generate = getattr(self.provider, "generate_general", None) or self.provider.generate
-            answer = await generate(prompt)
+            if general and getattr(self.provider, "supports_history", False):
+                # Historial como turnos reales y la pregunta al final: el proveedor recorta los turnos viejos si
+                # no caben en el contexto, en vez de que Ollama corte el principio del prompt (la pregunta).
+                answer = await generate(prompt_without_history, history=general[-4:])
+            else:
+                answer = await generate(prompt)
         except (ProviderTimeoutError, ProviderUnavailableError) as exc:
             import logging
             logging.getLogger("assistant").error("general provider failed error_type=%s", type(exc).__name__)
@@ -1777,7 +1821,7 @@ class UnifiedAssistantService:
                 return {"answer": answer, "session_id": session_id, "route": "knowledge",
                         "sources": state.get("active_sources") or []}
         if use_session and kind == "procedure":
-            answer = self._answer_procedure(state)
+            answer = await self._answer_procedure(state)
             if answer is not None:
                 state["active_route"] = "knowledge"
                 self.sessions.remember(state, message, answer)
@@ -1879,7 +1923,7 @@ class UnifiedAssistantService:
             if answer is None and kind == "document":
                 answer = self._answer_document(state)
             if answer is None and kind == "procedure":
-                answer = self._answer_procedure(state)
+                answer = await self._answer_procedure(state)
             if answer is None:
                 answer = result.answer
             self.sessions.remember(state, message, answer)

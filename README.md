@@ -1,3 +1,40 @@
+# ITGlasses
+
+Asistente de soporte de TI que corre en local: chat web y app Android (con lentes
+Ray-Ban Meta) que responden con conocimiento general, **manuales de la empresa**
+(RAG con SQLite) y búsqueda en internet. Stack: Python + FastAPI, Ollama + Qwen3,
+Whisper/Vosk + Piper, Caddy + HTTPS. App:
+[ITGlasses-Android](https://github.com/Chessani28/ITGlasses-Android).
+
+## Respuestas pensadas para voz
+
+- Los procedimientos completos se **narran** ("primero…, después…, por último…")
+  sin saltarse pasos; si la narración pierde algún paso, se usa la lista literal.
+- Las respuestas de manuales las redacta Qwen solo con la evidencia seleccionada;
+  si falla, se muestra la evidencia tal cual.
+- En el chat general, el historial va como turnos reales y la pregunta al final;
+  si no cabe en el contexto se descartan los turnos más viejos, nunca la pregunta.
+- Antes de Piper, `normalize_for_speech` quita fuentes, enlaces, comillas y tablas.
+- La web guarda el **historial de chats** en el navegador (panel "Chats guardados").
+
+## Ollama: uno o dos modelos cargados
+
+`.\scripts\start-ollama.ps1 -MaxLoadedModels 2` deja Qwen y el modelo de embeddings
+cargados a la vez (aprox. 1 GB más de RAM). Con el valor por defecto (1), cada
+pregunta de manuales descarga Qwen para calcular embeddings y luego lo recarga.
+
+## Pruebas y evaluación
+
+```powershell
+python -m pytest -q
+node --test tests/*.test.mjs
+python scripts/eval_brain.py --label nuevo        # con Ollama real; ver el inicio del script
+```
+
+GitHub Actions corre las pruebas en cada push y PR (`.github/workflows/tests.yml`).
+
+---
+
 # Phase 5 voice implementation — acceptance pending
 
 Local CPU speech adapters and a web voice panel have been added. Speech model
