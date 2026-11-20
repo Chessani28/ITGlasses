@@ -1,2 +1,0 @@
-provider = "ollama"
-model = "qwen3:4b"

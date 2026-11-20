@@ -34,7 +34,7 @@ build/
 # Exclude work directories containing audit data, benchmarks, and temporary products
 work/
 # Exclude PowerShell activation scripts with encoded tokens
-"s -ExecutionPolicy RemoteSigned) *"
+s -ExecutionPolicy*
 # Exclude DPAPI-protected token files
 .runtime/
 
@@ -62,3 +62,8 @@ work/whisper-eval/model/
 
 !tests/test_auth_recovery.py
 !tests/test_startup_config.py
+
+# IDE, respaldos y scripts de depuracion locales
+.idea/
+*.bak
+debug_*.py
