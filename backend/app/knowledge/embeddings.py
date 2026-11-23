@@ -41,7 +41,7 @@ class OllamaEmbeddings:
                             inputs = ["Instruct: Retrieve the company IT procedure relevant to the user's question.\nQuery: " + text for text in inputs]
                         response = await client.post(self.url + "/api/embed", json={
                             "model": self.model, "input": inputs, "truncate": False,
-                            "keep_alive": "30s", "options": {"num_gpu": 0, "num_ctx": 2048, "num_thread": 4}})
+                            "keep_alive": "15m", "options": {"num_gpu": 0, "num_ctx": 2048, "num_thread": 4}})
                         response.raise_for_status()
                         vectors = np.asarray(response.json()["embeddings"], dtype=np.float32)
                         if vectors.ndim != 2 or vectors.shape[0] != len(inputs) or not np.isfinite(vectors).all():
