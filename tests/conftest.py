@@ -9,6 +9,8 @@ created in fixtures of any scope, or at import, get the same default.
 import inspect
 import os
 
+import pytest
+
 # Tests fake the per-request speech worker; the persistent Piper (on by default) has its own tests with fake
 # processes (test_piper_persistent.py) and must never start a real Piper here.
 os.environ.setdefault("ITGLASSES_PIPER_PERSISTENT", "0")
@@ -32,3 +34,11 @@ def pytest_configure(config):
 
 def pytest_unconfigure(config):
     TestClient.__init__ = _original_init
+
+
+@pytest.fixture(autouse=True)
+def _isolated_device_database(tmp_path_factory, monkeypatch):
+    """Never write the real storage/pairing/devices.sqlite3 from a test: since stage "usuarios" 5 every manual
+    change writes an audit entry there. A test that sets ITGLASSES_PAIRING_DB itself still wins."""
+    if not os.environ.get("ITGLASSES_PAIRING_DB"):
+        monkeypatch.setenv("ITGLASSES_PAIRING_DB", str(tmp_path_factory.mktemp("pairing") / "devices.sqlite3"))

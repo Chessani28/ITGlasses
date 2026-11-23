@@ -123,7 +123,9 @@ def test_approve_block_unblock_delete_lifecycle(setup):
     rid = register(a)
     row = listed(c)[rid]
     assert set(row) == {"id", "variant", "name", "model", "state", "code", "created_at",
-                        "approved_at", "last_seen", "last_ip", "expires"}
+                        "approved_at", "last_seen", "last_ip", "expires",
+                        # stage "usuarios" 5: the owner, never a token or a key
+                        "user_id", "assigned_at", "owner_username", "owner_display_name"}
     assert row["state"] == "pending" and row["code"] and row["approved_at"] is None
     assert int(time.time()) < row["expires"] <= int(time.time()) + 300
     assert act(c, rid, "approve").json() == {"id": rid, "state": "approved"}

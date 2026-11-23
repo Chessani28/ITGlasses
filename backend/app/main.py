@@ -161,6 +161,11 @@ def create_app(provider: LLMProvider | None = None, knowledge=None, voice=None, 
     # Web login (stage "usuarios" 3): its own gates (local page, Origin, CSRF), never require_auth or Caddy.
     from backend.app.users.routes import router as auth_router
     app.include_router(auth_router)
+    # Web administration (stage "usuarios" 5): users, read-only audit log and "my devices"; login session only.
+    from backend.app.users.admin_routes import audit_router, me_router, users_router
+    app.include_router(users_router)
+    app.include_router(audit_router)
+    app.include_router(me_router)
 
     @app.middleware("http")
     async def upload_limit(request: Request, call_next):

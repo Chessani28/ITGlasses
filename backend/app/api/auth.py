@@ -40,12 +40,14 @@ def require_auth(request: Request, authorization: str | None = Header(default=No
     if authorization and authorization.lower().startswith("dpop "):
         from backend.app.pairing.routes import mobile_auth
         mobile_auth(request, authorization[5:])
+        request.state.auth_kind = "device"
         return
     needed = access.capability(request)
     session = optional_session(request, write=request.method not in ("GET", "HEAD"))
     if session is not None:
         if access.role_allows(session.role, needed):
             request.state.user_id = session.user_id
+            request.state.auth_kind = "session"
             return
         raise KnowledgeError("forbidden_role", "Tu rol no permite esta accion.", 403)
     # Credential-free local mode: direct loopback requests only, never via a proxy. With a pairing origin
@@ -55,9 +57,11 @@ def require_auth(request: Request, authorization: str | None = Header(default=No
     local = (not required and local_request.is_direct_local(request)
              and (not pairing or local_request.has_local_host(request)))
     if local and access.loopback_allows(needed):
+        request.state.auth_kind = "local"
         return
     if authorization and authorization.lower().startswith("bearer ") and _valid_bearer(authorization):
         if access.bearer_allows(request):
+            request.state.auth_kind = "token"
             return
         raise HTTPException(status_code=403, detail="bearer_scope")
     if local:

@@ -35,37 +35,59 @@ async def read_upload(file, metadata):
     return raw, parsed
 
 
+def _audited(request, action, document_id, detail=None):
+    """Stage "usuarios" 5: every manual change in the audit log (who, what, when); never blocks the change."""
+    from backend.app.users.audit_web import record_after
+    record_after(request, action, "document", document_id, detail)
+
+
+def _document_id(result, fallback=None):
+    return (result.get("id") if isinstance(result, dict) else None) or fallback
+
+
 @router.post("/documents", status_code=201)
-async def upload_document(file: UploadFile = File(...), metadata: str = Form(...), svc=Depends(service)):
+async def upload_document(request: Request, file: UploadFile = File(...), metadata: str = Form(...), svc=Depends(service)):
     raw, parsed = await read_upload(file, metadata)
-    return await svc.ingest(file.filename or "document", raw, parsed)
+    result = await svc.ingest(file.filename or "document", raw, parsed)
+    _audited(request, "document.upload", _document_id(result), {"title": parsed.title, "version": parsed.version})
+    return result
 
 
 @router.put("/documents/{document_id}")
-async def update_document(document_id: str, file: UploadFile = File(...), metadata: str = Form(...), svc=Depends(service)):
+async def update_document(document_id: str, request: Request, file: UploadFile = File(...), metadata: str = Form(...), svc=Depends(service)):
     raw, parsed = await read_upload(file, metadata)
-    return await svc.ingest(file.filename or "document", raw, parsed, document_id)
+    result = await svc.ingest(file.filename or "document", raw, parsed, document_id)
+    _audited(request, "document.replace", document_id, {"title": parsed.title, "version": parsed.version})
+    return result
 
 
 @router.patch("/documents/{document_id}/authorization")
-async def authorize_document(document_id: str, update: AccessUpdate, svc=Depends(service)):
-    return await svc.access(document_id, authorized=update.authorized)
+async def authorize_document(document_id: str, update: AccessUpdate, request: Request, svc=Depends(service)):
+    result = await svc.access(document_id, authorized=update.authorized)
+    _audited(request, "document.authorize", document_id, {"authorized": update.authorized})
+    return result
 
 
 @router.post("/documents/{document_id}/withdraw")
-async def withdraw_document(document_id: str, svc=Depends(service)):
-    return await svc.access(document_id, withdrawn=True)
+async def withdraw_document(document_id: str, request: Request, svc=Depends(service)):
+    result = await svc.access(document_id, withdrawn=True)
+    _audited(request, "document.withdraw", document_id)
+    return result
 
 
 @router.delete("/documents/{document_id}")
-async def remove_from_index(document_id: str, svc=Depends(service)):
+async def remove_from_index(document_id: str, request: Request, svc=Depends(service)):
     # Logical removal only: originals and prior revisions are retained.
-    return await svc.access(document_id, withdrawn=True)
+    result = await svc.access(document_id, withdrawn=True)
+    _audited(request, "document.delete", document_id)
+    return result
 
 
 @router.post("/documents/{document_id}/reindex")
-async def reindex_document(document_id: str, svc=Depends(service)):
-    return await svc.reindex(document_id)
+async def reindex_document(document_id: str, request: Request, svc=Depends(service)):
+    result = await svc.reindex(document_id)
+    _audited(request, "document.reindex", document_id)
+    return result
 
 
 @router.post("/knowledge/chat")

@@ -3,6 +3,7 @@
 Every function takes an open connection inside a transaction: pairing.store.transaction() in the API, connect()
 in the local scripts. Nothing here prints, logs or returns a password or a hash."""
 import re
+import secrets
 import sqlite3
 import time
 import unicodedata
@@ -155,3 +156,51 @@ def assign_unowned_devices(db, user_id, assigned_by, now=None):
     return db.execute(f"UPDATE installs SET user_id=?,assigned_at=?,assigned_by=? "
                       f"WHERE user_id IS NULL AND state IN ({marks})",
                       (user_id, _now(now), assigned_by, *OWNED_STATES)).rowcount
+
+
+# --- web administration (stage 5) ---------------------------------------------------------------------------
+
+# Roles an admin page may give. superadmin accounts are created and recovered only by the local scripts.
+WEB_ROLES = ("user", "admin")
+TEMPORARY_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"  # no 0/o, 1/l/i: read aloud or copied by hand
+
+
+def temporary_password():
+    """A one-time password shown once to the admin; the user must change it at the first login."""
+    length = max(passwords.min_length(), 12)
+    chars = "".join(secrets.choice(TEMPORARY_ALPHABET) for _ in range(length))
+    return "-".join(chars[i:i + 4] for i in range(0, length, 4))  # hyphens only make it longer
+
+
+def can_manage(actor_role, actor_id, target):
+    """An admin manages users; a superadmin manages users and admins. Nobody manages a superadmin or themself
+    from the web (own password: /auth/password; superadmin accounts: scripts\reset-access.ps1)."""
+    if target is None or target["id"] == actor_id or target["role"] == "superadmin":
+        return False
+    if actor_role == "superadmin":
+        return target["role"] in ("user", "admin")
+    return actor_role == "admin" and target["role"] == "user"
+
+
+def set_display_name(db, user_id, display_name, now=None):
+    row = _require(db, user_id)
+    value = clean_display_name(display_name, row["username"])
+    db.execute("UPDATE users SET display_name=?,updated_at=? WHERE id=?", (value, _now(now), user_id))
+    return value
+
+
+def set_role(db, user_id, role, now=None):
+    """Change between user and admin (never to or from superadmin); closes the user's sessions."""
+    if role not in WEB_ROLES:
+        raise AccountError("role_invalid", "Rol no valido.")
+    row = _require(db, user_id)
+    if row["role"] == "superadmin":
+        raise AccountError("role_invalid", "El rol de un superadmin no se cambia desde la web.")
+    now = _now(now)
+    db.execute("UPDATE users SET role=?,updated_at=? WHERE id=?", (role, now, user_id))
+    revoke_sessions(db, user_id, now)
+    return row["role"]
+
+
+def devices_per_user(db):
+    return dict(db.execute("SELECT user_id, COUNT(*) FROM installs WHERE user_id IS NOT NULL GROUP BY user_id"))
