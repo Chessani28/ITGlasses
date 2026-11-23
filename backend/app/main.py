@@ -47,12 +47,16 @@ def _start_piper_preload(app):
 
 
 def _check_password_settings():
-    """Refuse to start with an invalid ITGLASSES_PASSWORD_MIN_LENGTH instead of silently using the default."""
+    """Refuse to start with an invalid ITGLASSES_PASSWORD_MIN_LENGTH or session lifetime instead of silently using
+    the defaults."""
     from backend.app.users.passwords import PasswordConfigError, min_length
+    from backend.app.users.sessions import SessionConfigError, lifetimes
 
     try:
-        logger.info("password_policy min_length=%d", min_length())
-    except PasswordConfigError as error:
+        idle, absolute = lifetimes()
+        logger.info("password_policy min_length=%d session_idle_min=%d session_max_h=%d", min_length(),
+                    idle // 60, absolute // 3600)
+    except (PasswordConfigError, SessionConfigError) as error:
         logger.error("Invalid configuration: %s", error)
         raise
 
@@ -152,6 +156,9 @@ def create_app(provider: LLMProvider | None = None, knowledge=None, voice=None, 
     from backend.app.voice.routes import router as voice_router
     app.state.voice = voice
     app.include_router(voice_router, dependencies=[Depends(require_auth)])
+    # Web login (stage "usuarios" 3): its own gates (local page, Origin, CSRF), never require_auth or Caddy.
+    from backend.app.users.routes import router as auth_router
+    app.include_router(auth_router)
 
     @app.middleware("http")
     async def upload_limit(request: Request, call_next):
@@ -174,6 +181,8 @@ def create_app(provider: LLMProvider | None = None, knowledge=None, voice=None, 
     async def validation_error(request: Request, exc: RequestValidationError):
         if request.url.path.startswith("/api/v1/voice"):
             return error_response(422, "voice_validation", "Invalid voice request. Check documented field and size limits.")
+        if request.url.path.startswith("/api/v1/auth"):
+            return error_response(422, "validation_error", "Solicitud no valida: revisa los campos del formulario.")
         if request.url.path.startswith(("/api/v1/knowledge", "/api/v1/documents")):
             return error_response(422, "validation_error", "Invalid knowledge request. Check field types and documented limits.")
         # Never reflect request contents, which can contain private information.
