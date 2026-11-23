@@ -49,6 +49,7 @@ def _start_piper_preload(app):
 def _check_password_settings():
     """Refuse to start with an invalid ITGLASSES_PASSWORD_MIN_LENGTH or session lifetime instead of silently using
     the defaults."""
+    from backend.app.backups import BackupConfigError, check_settings as backup_settings
     from backend.app.users.access import AccessConfigError, bearer_scope, loopback_mode
     from backend.app.users.passwords import PasswordConfigError, min_length
     from backend.app.users.sessions import SessionConfigError, lifetimes
@@ -58,7 +59,9 @@ def _check_password_settings():
         logger.info("password_policy min_length=%d session_idle_min=%d session_max_h=%d", min_length(),
                     idle // 60, absolute // 3600)
         logger.info("access loopback_mode=%s bearer_scope=%s", loopback_mode(), bearer_scope())
-    except (PasswordConfigError, SessionConfigError, AccessConfigError) as error:
+        enabled, keep = backup_settings()
+        logger.info("daily_backup enabled=%s keep=%d", enabled, keep)
+    except (PasswordConfigError, SessionConfigError, AccessConfigError, BackupConfigError) as error:
         logger.error("Invalid configuration: %s", error)
         raise
 
@@ -112,6 +115,14 @@ def _start_ollama_warmup(app, enabled):
     return asyncio.create_task(_warm_up_with_retries(warm_up))
 
 
+def _start_daily_backups():
+    """Stage "historial" 1: daily backup set of the device database and the chat history (7 kept), checked at
+    startup and every hour in the background; never blocks or breaks the startup. ITGLASSES_DAILY_BACKUP=off."""
+    from backend.app.backups import daily_enabled, run_daily_backups
+
+    return asyncio.create_task(run_daily_backups()) if daily_enabled() else None
+
+
 def create_app(provider: LLMProvider | None = None, knowledge=None, voice=None, warmup=None) -> FastAPI:
     """``warmup``: warm the chat model up at startup; by default only for the backend's own provider (None), never
     for a provider a test injects."""
@@ -124,13 +135,15 @@ def create_app(provider: LLMProvider | None = None, knowledge=None, voice=None, 
         preload_task = None
         warmup_task = None
         piper_task = None
+        backup_task = None
         try:
             preload_task = _start_whisper_preload(app)
             warmup_task = _start_ollama_warmup(app, warm)
             piper_task = _start_piper_preload(app)
+            backup_task = _start_daily_backups()
             yield
         finally:
-            for task in (preload_task, warmup_task, piper_task):
+            for task in (preload_task, warmup_task, piper_task, backup_task):
                 if task is not None and not task.done():
                     task.cancel()
                     await asyncio.gather(task, return_exceptions=True)

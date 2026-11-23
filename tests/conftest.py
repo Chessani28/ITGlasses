@@ -18,6 +18,9 @@ os.environ.setdefault("ITGLASSES_PIPER_PERSISTENT", "0")
 # need a login). The older tests exercise those features credential-free from this PC, so they run in legacy
 # mode; the access tests (test_users_*.py) clear this and set every mode they check explicitly.
 os.environ.setdefault("ITGLASSES_LOOPBACK_MODE", "legacy")
+# Stage "historial" 1: no test starts the daily backup of the real databases; the backup tests turn it on with
+# temporary folders.
+os.environ.setdefault("ITGLASSES_DAILY_BACKUP", "off")
 
 from starlette.testclient import TestClient
 
@@ -46,3 +49,8 @@ def _isolated_device_database(tmp_path_factory, monkeypatch):
     change writes an audit entry there. A test that sets ITGLASSES_PAIRING_DB itself still wins."""
     if not os.environ.get("ITGLASSES_PAIRING_DB"):
         monkeypatch.setenv("ITGLASSES_PAIRING_DB", str(tmp_path_factory.mktemp("pairing") / "devices.sqlite3"))
+    # Same for the chat history and the backup sets (stage "historial").
+    if not os.environ.get("ITGLASSES_HISTORY_DB"):
+        monkeypatch.setenv("ITGLASSES_HISTORY_DB", str(tmp_path_factory.mktemp("history") / "history.sqlite3"))
+    if not os.environ.get("ITGLASSES_BACKUP_DIR"):
+        monkeypatch.setenv("ITGLASSES_BACKUP_DIR", str(tmp_path_factory.mktemp("backups")))
