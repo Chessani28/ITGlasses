@@ -1,15 +1,14 @@
 """What the voice reads of a long assistant answer (the ``speech`` field of /api/v1/assistant/chat).
 
-A procedure list is read as its title, its number of steps and its first steps; any other long answer as its first
-sentences. Both end with "El resto está en el chat." when something is left out. Sources, links and markdown are
-never read. Short answers get no ``speech`` (None): the app reads the answer itself. Pure and deterministic.
+A procedure list is read whole: its title, its number of steps and EVERY step, in order and with its full text
+(decision: by voice no step is ever skipped or cut, and nothing is left "for the chat"). Any other long answer is
+read as its first sentences and ends with "El resto está en el chat.". Sources, links and markdown are never read.
+Short answers get no ``speech`` (None): the app reads the answer itself. Pure and deterministic.
 """
 import re
 
-MAX_SPEECH = 450      # characters read for a list (all its steps when they fit)
+MAX_SPEECH = 450      # other (non-list) answers longer than this are summarized
 SUMMARY_CHARS = 300   # first sentences of any other long answer
-LIST_STEPS = 2        # steps read when the whole list does not fit
-STEP_CHARS = 160
 REST = "El resto está en el chat."
 
 _CITATION = re.compile(r"[ \t]*\[Fuente:[^\]]*\]")
@@ -45,20 +44,31 @@ def _pasos(count):
 
 
 def _sentence(text):
-    text = _INCLUDES.sub("", text).strip()
-    if len(text) > STEP_CHARS:
-        text = text[:STEP_CHARS].rsplit(" ", 1)[0].rstrip(",;:")
+    """One step as a spoken sentence: its whole text (never cut), without the "(incluye: …)" sub-list."""
+    text = re.sub(r"\s+", " ", _INCLUDES.sub("", text)).strip()
     text = text.rstrip(".:;")
     return text + "."
 
 
 def _list_speech(title, count, items):
+    """The title, the number of steps and every step of the answer, in order. No length limit."""
     head = f"«{title}» tiene {_pasos(count)}."
-    every = " ".join([head, *(f"Paso {n}: {_sentence(t)}" for n, t in enumerate(items, start=1))])
-    if len(items) >= count and len(every) <= MAX_SPEECH:
-        return every
-    shown = " ".join(f"Paso {n}: {_sentence(t)}" for n, t in enumerate(items[:LIST_STEPS], start=1))
-    return " ".join(part for part in (head, shown, REST) if part)
+    return " ".join([head, *(f"Paso {n}: {_sentence(t)}" for n, t in enumerate(items, start=1))])
+
+
+def _list_items(lines):
+    """The numbered steps after the header. A line that does not start with a number continues the step above
+    it (a step written on several lines is never cut); lines after the last step (a question, a note) are not
+    steps."""
+    last = max((i for i, line in enumerate(lines) if _ITEM.match(line)), default=-1)
+    items = []
+    for line in lines[:last + 1]:
+        item = _ITEM.match(line)
+        if item:
+            items.append(item.group(2))
+        elif items:
+            items[-1] += " " + line
+    return items
 
 
 def _first_sentences(text, limit):
@@ -94,13 +104,7 @@ def spoken_summary(answer):
         return f"{sections.group('lead')}{question} Las {count} secciones están en el chat."
     header = _LIST_HEADER.match(lines[0])
     if header:
-        items = []
-        for line in lines[1:]:
-            item = _ITEM.match(line)
-            if not item:
-                break  # first block only
-            items.append(item.group(2))
-        return _list_speech(header.group("title"), int(header.group("count")), items)
+        return _list_speech(header.group("title"), int(header.group("count")), _list_items(lines[1:]))
     procedure = _PROCEDURE.match(" ".join(lines))
     if procedure:
         items = [part for part in _PROCEDURE_ITEM.split(procedure.group("body")) if part.strip()]

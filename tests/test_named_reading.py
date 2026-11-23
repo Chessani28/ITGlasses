@@ -180,7 +180,7 @@ def test_reserve_answer_skips_index_pages_and_logs_counts_only(caplog):
 
 # --- speech ----------------------------------------------------------------------------------------------------
 
-def test_speech_reads_a_short_list_whole_and_a_long_one_in_part():
+def test_speech_reads_a_short_list_whole_and_a_long_one_whole_too():
     short = "«Reinicio de servidor» (3 pasos):\n1. Apagar el servidor.\n2. Esperar 30 segundos.\n" \
             "3. Encender el servidor.\n[Fuente: Procedimiento de Reinicio, procedimiento Reinicio de servidor]"
     assert spoken_summary(short) == ("«Reinicio de servidor» tiene 3 pasos. Paso 1: Apagar el servidor. "
@@ -189,7 +189,9 @@ def test_speech_reads_a_short_list_whole_and_a_long_one_in_part():
         f"{n}. Step number {n} with a long explanation of what to do on the computer at this point." for n in range(1, 11))
     speech = spoken_summary(long_list)
     assert speech.startswith("«WINDOWS DEPLOYMENT PROCEDURE» tiene 10 pasos. Paso 1: Step number 1")
-    assert "Paso 2:" in speech and "Paso 3:" not in speech and speech.endswith(REST) and len(speech) <= 450
+    # Decision (23/11): by voice every step is narrated, whatever the length; nothing is left for the chat.
+    assert all(f"Paso {n}: Step number {n} with a long explanation" in speech for n in range(1, 11))
+    assert REST not in speech and "Paso 11" not in speech
 
 
 def test_speech_of_a_procedure_summary_drops_substeps_and_uses_the_singular():
