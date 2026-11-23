@@ -293,7 +293,11 @@ def test_phone_questions_against_the_real_knowledge_base_read_only():
     peripherals = ask(service, "Según el manual Training Setup Guideline, que dice Require Peripherals", sid)
     assert peripherals["answer"].startswith("«REQUIRED PERIPHERALS» (5 pasos):")
     assert "INDEX" not in peripherals["answer"] and "Page" not in peripherals["answer"]
-    assert spoken_summary(peripherals["answer"]).endswith(REST)
+    # By voice every step is narrated (decision of 23/11): Paso 1 to Paso 5 in order, no "El resto...".
+    speech = spoken_summary(peripherals["answer"])
+    assert speech is not None and speech.startswith("«REQUIRED PERIPHERALS» tiene 5 pasos. Paso 1: ")
+    positions = [speech.index(f"Paso {n}: ") for n in range(1, 6)]
+    assert positions == sorted(positions) and "Paso 6" not in speech and REST not in speech
     misheard = ask(service, "Según el manual de Terry D. Sarah Diamond, qué dice REQUIRED PERIPHERALS", sid)
     assert misheard["answer"].startswith("No encontré un manual llamado «Terry D»; respondo desde «Training Setup "
                                          "Guideline».\n«REQUIRED PERIPHERALS» (5 pasos):")
