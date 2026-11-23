@@ -1,4 +1,5 @@
 import asyncio
+import time
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Depends
 from fastapi.exceptions import RequestValidationError
@@ -53,12 +54,45 @@ def ollama_warmup_enabled(value=None):
     return str(raw or "").strip().lower() not in {"0", "false", "off", "no"}
 
 
+# After a reboot Ollama may start after the backend: the warm-up is retried in the background.
+OLLAMA_WARMUP_RETRY_SECONDS = 5
+OLLAMA_WARMUP_RETRY_WINDOW_SECONDS = 120
+
+
+async def _warm_up_with_retries(warm_up, interval=None, window=None):
+    """Retry the warm-up every ``interval`` seconds until it succeeds or ``window`` seconds have passed.
+
+    Never raises (each failed attempt is already logged by the provider); cancelled with the app. Logs when a
+    retried warm-up finally succeeds and when it gives up (the first question then loads the model)."""
+    interval = OLLAMA_WARMUP_RETRY_SECONDS if interval is None else interval
+    window = OLLAMA_WARMUP_RETRY_WINDOW_SECONDS if window is None else window
+    started = time.monotonic()
+    attempt = 0
+    while True:
+        attempt += 1
+        try:
+            ready = await warm_up()
+        except Exception as exc:  # noqa: BLE001 - warming up is best effort
+            logger.warning("ollama_warmup attempt=%d error=%s", attempt, type(exc).__name__)
+            ready = False
+        if ready:
+            if attempt > 1:
+                logger.info("ollama_warmup ready attempts=%d elapsed_s=%d", attempt,
+                            round(time.monotonic() - started))
+            return True
+        if time.monotonic() - started + interval > window:
+            logger.warning("ollama_warmup gave up attempts=%d window_s=%d; the first question loads the model",
+                           attempt, window)
+            return False
+        await asyncio.sleep(interval)
+
+
 def _start_ollama_warmup(app, enabled):
-    """Background warm-up of the chat model (never blocks or breaks the startup)."""
+    """Background warm-up of the chat model with retries (never blocks or breaks the startup)."""
     warm_up = getattr(app.state.provider, "warm_up", None)
     if not enabled or warm_up is None or not ollama_warmup_enabled():
         return None
-    return asyncio.create_task(warm_up())
+    return asyncio.create_task(_warm_up_with_retries(warm_up))
 
 
 def create_app(provider: LLMProvider | None = None, knowledge=None, voice=None, warmup=None) -> FastAPI:
