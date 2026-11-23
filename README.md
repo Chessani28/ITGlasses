@@ -194,6 +194,14 @@ keep-alive. Health checks read metadata without loading the model. Check resourc
 before first inference; initially target at least 6 GiB free RAM and 3500 MiB free
 VRAM. Model fit depends on current workload, context and runtime version.
 
+## Users and roles
+
+The web has logins with three roles (superadmin, admin, user), server-side sessions, a login lockout, an
+audit log and device owners. The first superadmin is created on this PC with
+`.\scripts\create-superadmin.ps1`; access is recovered with `.\scripts\reset-access.ps1`. Without a login,
+this PC may only chat (`LoopbackMode = 'chat'`; `'legacy'` restores the previous behaviour). Phones are
+unchanged. Operation guide (Spanish): [docs/users.md](docs/users.md).
+
 ## Test
 
 ```powershell
@@ -203,6 +211,7 @@ $env:TMP = $env:TEMP
 $env:PIP_CACHE_DIR = 'D:\ITGlasses\.cache\pip'
 .\.venv\Scripts\python.exe -m pytest -q -o cache_dir=.cache/pytest
 .\.venv\Scripts\python.exe -m pip check
+node --test "tests/*.test.mjs"
 Invoke-RestMethod http://127.0.0.1:8000/health
 Invoke-RestMethod http://127.0.0.1:8000/api/v1/status
 $body = @{ message = 'Explain DNS briefly.' } | ConvertTo-Json

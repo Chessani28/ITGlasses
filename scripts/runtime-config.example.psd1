@@ -18,4 +18,8 @@
     # WhisperPreload = $false
     # WhisperMinVramMiB = 1000
     # WhisperIdleSeconds = 900
+    # Optional (users and roles, docs/users.md). Defaults: 5, 'chat' and 'mobile'.
+    # PasswordMinLength = 5          # 5 to 256; raise it before publishing the web to other PCs
+    # LoopbackMode = 'chat'          # this PC without a login: 'legacy' (everything, rollback), 'chat' or 'off'
+    # BearerScope = 'mobile'         # shared tokens (app v1): 'mobile' (phone routes) or 'full' (rollback)
 }

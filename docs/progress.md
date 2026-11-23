@@ -358,3 +358,26 @@ resources and latency, verify physical microphone/audio playback, and evaluate w
 phrase/technical Spanish accuracy. Limitations: half-duplex; general chat stateless;
 prototype wake matching; no real glasses integration. Published DAT capabilities
 are documented separately from unverified device/firmware/audio-routing assumptions.
+
+## Users and roles — branch feature/users, 2026-11-23
+
+Seven stages on top of the tag voz-rapida-v3, each committed after its tests:
+
+1. Device database schema v2 (users, web_sessions, audit_log, device owner) with a verified backup
+   before any migration and `scripts/restore-pairing-backup.ps1`.
+2. Accounts with scrypt, audit log, local scripts `create-superadmin.ps1` and `reset-access.ps1`;
+   2b: configurable password minimum (`ITGLASSES_PASSWORD_MIN_LENGTH`, default 5).
+3. Server-side sessions, login/logout/me/password change, lockout, Origin and CSRF checks.
+4. Permissions by role, `ITGLASSES_LOOPBACK_MODE` and `ITGLASSES_BEARER_SCOPE`; S1 closed.
+5. User administration, device owners, "my devices", read-only audit log; device and manual actions audited.
+6. Login screen, user menu and administration pages; `LoopbackMode` defaults to `chat`.
+7. Documentation (`docs/users.md`), end-to-end acceptance test, footer text.
+
+Verified by the user on the real system: migration of the real database with backup, superadmin created
+with its 4 approved devices assigned, phone v3 (DPoP) with glasses and locked phone after stages 2, 4, 5
+and 6, the web flows of stage 6 (login, roles, users, temporary password with forced change, device owners,
+audit). Rollback without code: `LoopbackMode = 'legacy'`, `BearerScope = 'full'`.
+
+Next: chat history per user and device (then `LoopbackMode = 'off'`); afterwards, the web over HTTPS in
+Caddy for other PCs, raising the password minimum first.
+
