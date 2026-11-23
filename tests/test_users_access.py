@@ -115,10 +115,10 @@ def results(client, headers=None):
 
 # --- defaults and settings --------------------------------------------------------------------------------
 
-def test_defaults_keep_this_pc_as_before_and_limit_shared_tokens(monkeypatch):
+def test_defaults_need_a_login_for_administration_and_limit_shared_tokens(monkeypatch):
     for name in (access.LOOPBACK_VARIABLE, access.BEARER_VARIABLE):
         monkeypatch.delenv(name, raising=False)
-    assert (access.loopback_mode(), access.bearer_scope()) == ("legacy", "mobile")
+    assert (access.loopback_mode(), access.bearer_scope()) == ("chat", "mobile")
 
 
 @pytest.mark.parametrize(("variable", "value"), [(access.LOOPBACK_VARIABLE, "abierto"),

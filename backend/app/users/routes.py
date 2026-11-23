@@ -82,6 +82,16 @@ def logout(request: Request, response: Response):
     return {"logged_out": True}
 
 
+@router.get("/config")
+def config(request: Request, response: Response):
+    """What the login screen needs to know: whether this PC may continue without a login, and the password
+    minimum. No secrets; local page only."""
+    from .access import loopback_mode
+    require_local_page(request, write=False)
+    response.headers["Cache-Control"] = "no-store"
+    return {"loopback_mode": loopback_mode(), "password_min_length": passwords.min_length()}
+
+
 @router.get("/me")
 def me(request: Request, response: Response):
     session = current_session(request, allow_must_change=True)

@@ -19,16 +19,25 @@ const CONFIRM = {
   delete: {title: "¿Eliminar este dispositivo?", button: "Eliminar",
     consequence: "Tendrá que emparejarse y aprobarse de nuevo desde la app."},
 };
-const FORBIDDEN = "Abre el panel desde la PC del servidor: http://127.0.0.1:8000";
+const FORBIDDEN = "Para administrar dispositivos inicia sesión como administrador en la PC del servidor: http://127.0.0.1:8000";
 const OFFLINE = "No se puede contactar con el servidor. Reintentando en ";
 
 const $ = id => document.getElementById(id);
 const state = {timer: null, loading: false, again: false, failures: 0, forbidden: false, devices: [],
   known: null, lastSuccess: 0, buttons: new Map(), closed: new Set(), confirming: null, toastTimer: null};
 
+// Stage "usuarios" 6: the login session cookie goes with every request (same origin) and every change carries
+// the session's CSRF token (session.mjs keeps it in globalThis.itgSession). The custom header stays: without a
+// login it is what the old local mode (ITGLASSES_LOOPBACK_MODE=legacy) accepts.
+function csrfHeader(method) {
+  const shared = typeof globalThis !== "undefined" ? globalThis.itgSession : null;
+  return method !== "GET" && shared && shared.csrf ? {"X-CSRF-Token": shared.csrf} : {};
+}
+
 async function api(path, method = "GET") {
   const response = await fetch("/api/v1/admin/" + path, {
-    method, cache: "no-store", credentials: "omit", redirect: "error", headers: {"X-ITGlasses-Admin": "1"},
+    method, cache: "no-store", credentials: "same-origin", redirect: "error",
+    headers: {"X-ITGlasses-Admin": "1", ...csrfHeader(method)},
   });
   if (!response.ok) throw Object.assign(new Error("HTTP " + response.status), {status: response.status});
   return response.json();
@@ -79,6 +88,11 @@ function row(device) {
     code.setAttribute("aria-label", "Código " + device.code.split("").join(" "));
     info.append(code);
     if (device.expires) info.append(el("span", "device-expiry", "Caduca en " + remaining(device.expires)));
+  }
+  if (device.state !== "pending" && device.state !== "denied") {
+    info.append(el("span", "device-owner", device.owner_username
+      ? "Usuario: " + (device.owner_display_name || device.owner_username)
+      : "Sin usuario asignado"));
   }
   const seen = el("span", "device-seen", "Última conexión: " + relative(device.last_seen));
   if (device.last_seen) seen.setAttribute("title", new Date(device.last_seen * 1000).toLocaleString("es-MX"));
@@ -266,6 +280,8 @@ function start() {
     if (document.hidden) { clearTimeout(state.timer); state.timer = null; }
     else if (!state.forbidden) refresh();
   });
+  // After a login or logout the page asks the panel to try again (accounts.mjs).
+  globalThis.itgDevicesRefresh = () => { state.forbidden = false; state.failures = 0; setAlert(""); return refresh(); };
   refresh();
 }
 

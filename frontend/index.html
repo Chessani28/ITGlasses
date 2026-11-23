@@ -18,10 +18,19 @@
     <div class="workspace-label">ESPACIO DE PRUEBAS</div>
     <nav aria-label="Navegación principal">
       <button class="nav-button active" data-page="chat" aria-current="page"><span aria-hidden="true">◈</span> Conversaciones</button>
-      <button class="nav-button" data-page="documents"><span aria-hidden="true">▤</span> Documentos <span id="document-count" class="nav-count">—</span></button>
+      <button class="nav-button" data-page="documents" data-needs="documents"><span aria-hidden="true">▤</span> Documentos <span id="document-count" class="nav-count">—</span></button>
       <button class="nav-button" data-page="system"><span aria-hidden="true">◉</span> Estado del sistema</button>
+      <button class="nav-button" data-page="my-devices" data-needs="login" hidden><span aria-hidden="true">◎</span> Mis dispositivos</button>
+      <div class="nav-section" data-needs="admin" hidden>ADMINISTRACIÓN</div>
+      <button class="nav-button" data-page="users" data-needs="admin" hidden><span aria-hidden="true">◍</span> Usuarios</button>
+      <button class="nav-button" data-page="owners" data-needs="admin" hidden><span aria-hidden="true">⌁</span> Dispositivos y usuarios</button>
+      <button class="nav-button" data-page="audit" data-needs="admin" hidden><span aria-hidden="true">☰</span> Auditoría</button>
     </nav>
     <div class="sidebar-note"><span class="small-mark">↳</span><p>Tu conocimiento,<br>en tu equipo.</p><small>Documentos y consultas se procesan localmente.</small></div>
+    <div id="user-box" class="user-box">
+      <div class="user-info"><span id="user-avatar" class="user-avatar" aria-hidden="true">?</span><div><strong id="user-name">Sin sesión</strong><small id="user-role">Comprobando…</small></div></div>
+      <div class="user-actions"><button id="user-login" class="secondary-button" type="button">Iniciar sesión</button><button id="user-password" class="text-button" type="button" hidden>Cambiar contraseña</button><button id="user-logout" class="text-button" type="button" hidden>Cerrar sesión</button></div>
+    </div>
     <div class="local-footer"><span class="dot"></span><div>Entorno local<small>127.0.0.1 · Fase 5</small></div><span class="lock-icon" aria-hidden="true">⌂</span></div>
   </aside>
   <main id="main" tabindex="-1">
@@ -156,11 +165,72 @@
       </section>
       <div class="panel system-note"><h2>Cómo interpretar el estado</h2><p id="provider-note">Esperando la respuesta del proveedor.</p><p>La disponibilidad del modelo de embeddings no garantiza una respuesta: también se necesita documentación autorizada y evidencia suficiente. El modelo de respuestas de Conocimiento se verifica al realizar la consulta.</p><p>La latencia de cada petición aparece junto a su resultado. El backend no expone aquí consumo de CPU, RAM ni VRAM.</p><small id="status-updated">Sin comprobaciones todavía.</small></div>
     </section>
+    <section id="my-devices-page" class="page content-page" hidden aria-label="Mis dispositivos">
+      <div class="section-heading"><div><span class="eyebrow">TU CUENTA</span><h1>Mis dispositivos</h1><p>Celulares y lentes asignados a tu cuenta. Si falta alguno, pídeselo a un administrador.</p></div><button id="mine-refresh" class="secondary-button" type="button">↻ Actualizar</button></div>
+      <p id="mine-feedback" class="feedback" role="status"></p>
+      <div id="mine-list" class="document-list"><div class="empty-panel">Cargando…</div></div>
+    </section>
+    <section id="users-page" class="page content-page" hidden aria-label="Usuarios">
+      <div class="section-heading"><div><span class="eyebrow">ADMINISTRACIÓN</span><h1>Usuarios</h1><p>Crea cuentas, restablece contraseñas y desactiva accesos. Cada acción queda en la auditoría.</p></div><button id="users-refresh" class="secondary-button" type="button">↻ Actualizar</button></div>
+      <form id="user-create" class="panel user-create" autocomplete="off">
+        <div class="panel-heading"><div><h2>Nuevo usuario</h2><p>Se genera una contraseña temporal que verás una sola vez; el usuario la cambia al entrar.</p></div></div>
+        <div class="metadata-grid three">
+          <label>Usuario<input id="new-username" maxlength="64" required placeholder="ej. ana.lopez"></label>
+          <label>Nombre a mostrar <span class="optional">opcional</span><input id="new-display" maxlength="64" placeholder="Ana López"></label>
+          <label>Rol<select id="new-role"><option value="user" selected>Usuario</option><option id="new-role-admin" value="admin" hidden disabled>Administrador</option></select></label>
+        </div>
+        <div class="upload-footer"><small class="field-help">Usuario: de 3 a 64 caracteres (letras a-z, números, punto, guion o guion bajo).</small><button id="new-submit" class="primary-button" type="submit">Crear usuario</button></div>
+        <p id="users-feedback" class="feedback" role="status"></p>
+      </form>
+      <div class="list-heading"><h2>Cuentas <span id="users-count" class="badge neutral">—</span></h2><small>Un administrador gestiona usuarios; el superadmin, también administradores.</small></div>
+      <div class="table-wrap"><table class="data-table"><thead><tr><th>Usuario</th><th>Rol</th><th>Estado</th><th>Dispositivos</th><th>Último acceso</th><th><span class="sr-only">Acciones</span></th></tr></thead><tbody id="users-body"></tbody></table></div>
+    </section>
+    <section id="owners-page" class="page content-page" hidden aria-label="Dispositivos y usuarios">
+      <div class="section-heading"><div><span class="eyebrow">ADMINISTRACIÓN</span><h1>Dispositivos y usuarios</h1><p>Asigna cada celular o par de lentes a la persona que lo usa. Asignar no cambia su estado ni lo desconecta.</p></div><button id="owners-refresh" class="secondary-button" type="button">↻ Actualizar</button></div>
+      <p class="field-help">Un pendiente se aprueba y asigna en un paso: compara antes el código con el que muestra el celular.</p>
+      <p id="owners-feedback" class="feedback" role="status"></p>
+      <div class="table-wrap"><table class="data-table"><thead><tr><th>Dispositivo</th><th>Estado</th><th>Usuario</th><th>Última conexión</th><th><span class="sr-only">Acciones</span></th></tr></thead><tbody id="owners-body"></tbody></table></div>
+    </section>
+    <section id="audit-page" class="page content-page" hidden aria-label="Auditoría">
+      <div class="section-heading"><div><span class="eyebrow">SOLO LECTURA</span><h1>Auditoría</h1><p id="audit-scope">Quién hizo qué y cuándo.</p></div><button id="audit-refresh" class="secondary-button" type="button">↻ Actualizar</button></div>
+      <p id="audit-feedback" class="feedback" role="status"></p>
+      <div class="table-wrap"><table class="data-table"><thead><tr><th>Fecha</th><th>Quién</th><th>Acción</th><th>Sobre</th><th>Detalle</th><th>Resultado</th></tr></thead><tbody id="audit-body"></tbody></table></div>
+      <div class="list-footer"><button id="audit-more" class="secondary-button" type="button" hidden>Ver más antiguas</button></div>
+    </section>
     <footer class="page-footer"><span>ITGlasses / Local AI assistant</span><span>Diseñado para explorar. Respaldado por tus fuentes.</span></footer>
   </main>
   <dialog id="source-dialog" aria-labelledby="source-title"><div class="dialog-heading"><div><span class="eyebrow">EVIDENCIA DOCUMENTAL</span><h2 id="source-title">Fuente</h2></div><button id="close-source" class="icon-button" aria-label="Cerrar fuente">×</button></div><p id="source-meta"></p><pre id="source-text"></pre><p id="source-feedback" role="status"></p></dialog>
   <dialog id="device-dialog" aria-labelledby="device-dialog-title"><h2 id="device-dialog-title"></h2><dl id="device-dialog-details" class="device-details"></dl><p id="device-dialog-consequence"></p><div class="dialog-actions"><button id="device-dialog-cancel" type="button" class="secondary-button">Cancelar</button><button id="device-dialog-confirm" type="button" class="danger-button"></button></div></dialog>
   <dialog id="withdraw-dialog" aria-labelledby="withdraw-title"><h2 id="withdraw-title">¿Retirar este documento?</h2><p id="withdraw-description"></p><p>Dejará de utilizarse en nuevas respuestas y aclaraciones pendientes. El archivo original se conserva.</p><div class="dialog-actions"><button id="cancel-withdraw" class="secondary-button">Cancelar</button><button id="confirm-withdraw" class="danger-button">Retirar documento</button></div></dialog>
+  <div id="login-screen" class="login-screen" hidden>
+    <form id="login-form" class="login-card" aria-labelledby="login-title">
+      <span class="brand-icon" aria-hidden="true">it<span>g</span></span>
+      <span class="eyebrow">ACCESO LOCAL</span>
+      <h1 id="login-title">Inicia sesión</h1>
+      <p>Usa la cuenta que te dio el administrador de ITGlasses.</p>
+      <label>Usuario<input id="login-username" autocomplete="username" maxlength="64" required autocapitalize="none" spellcheck="false"></label>
+      <label>Contraseña<input id="login-password" type="password" autocomplete="current-password" maxlength="256" required></label>
+      <p id="login-feedback" class="feedback error" role="alert"></p>
+      <button id="login-submit" class="primary-button" type="submit">Entrar</button>
+      <button id="login-anonymous" class="text-button" type="button" hidden>Continuar sin iniciar sesión</button>
+      <small id="login-anonymous-note" class="login-note"></small>
+    </form>
+  </div>
+  <dialog id="password-dialog" aria-labelledby="password-title">
+    <form id="password-form">
+      <h2 id="password-title">Cambiar contraseña</h2>
+      <p id="password-reason"></p>
+      <div class="dialog-fields">
+        <label id="password-current-label">Contraseña actual <input id="password-current" type="password" autocomplete="current-password" maxlength="256" required></label>
+        <label>Nueva contraseña <input id="password-new" type="password" autocomplete="new-password" maxlength="256" required></label>
+        <label>Repite la nueva contraseña <input id="password-repeat" type="password" autocomplete="new-password" maxlength="256" required></label>
+      </div>
+      <p id="password-feedback" class="feedback" role="status"></p>
+      <div class="dialog-actions"><button id="password-cancel" type="button" class="secondary-button">Cancelar</button><button id="password-submit" type="submit" class="primary-button">Guardar contraseña</button></div>
+    </form>
+  </dialog>
+  <dialog id="secret-dialog" aria-labelledby="secret-title"><h2 id="secret-title">Contraseña temporal</h2><p id="secret-description"></p><pre id="secret-value" class="secret-value"></pre><p>Se muestra solo esta vez. Entrégala en persona o por un canal seguro; tendrá que cambiarla al entrar.</p><div class="dialog-actions"><button id="secret-copy" type="button" class="secondary-button">Copiar</button><button id="secret-close" type="button" class="primary-button">Ya la entregué</button></div></dialog>
+  <dialog id="confirm-dialog" aria-labelledby="confirm-title"><h2 id="confirm-title"></h2><p id="confirm-text"></p><div class="dialog-actions"><button id="confirm-cancel" type="button" class="secondary-button">Cancelar</button><button id="confirm-ok" type="button" class="danger-button"></button></div></dialog>
   <noscript>Activa JavaScript para utilizar esta interfaz local.</noscript>
 </body>
 </html>

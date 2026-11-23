@@ -1,4 +1,5 @@
 /** Shared request contracts. No browser state or model behavior is simulated. */
+import {AUTH_CODES, emit, sessionHeaders} from "./session.mjs";
 export const MAX_FILE_BYTES = 10 * 1024 * 1024;
 export const limits = {assistant: 4000, general: 4000, knowledge: 16000};
 export function validateFile(file) {
@@ -38,7 +39,10 @@ export async function api(path, options = {}, timeout = 150000) {
   if (options.signal?.aborted) cancel();
   const timer = setTimeout(() => controller.abort(), timeout);
   try {
-    const response = await fetch(path, {...options, signal: controller.signal, cache: "no-store"});
+    // Same-origin cookie (the login session) and, for a change, the CSRF token of that session.
+    const headers = {...(options.headers || {}), ...sessionHeaders(options.method)};
+    const response = await fetch(path, {...options, headers, signal: controller.signal, cache: "no-store",
+      credentials: "same-origin"});
     let data;
     try { data = await response.json(); }
     catch { throw new Error("El servidor devolvió una respuesta no válida."); }
@@ -46,6 +50,7 @@ export async function api(path, options = {}, timeout = 150000) {
       const error = new Error(data?.error?.message || `La petición falló (HTTP ${response.status}).`);
       error.code = data?.error?.code;
       error.status = response.status;
+      if (AUTH_CODES.has(error.code)) emit("required", error.code);
       throw error;
     }
     return {data, ms: performance.now() - start};

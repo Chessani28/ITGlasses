@@ -6,15 +6,16 @@ DPoP devices keep their own MOBILE list (pairing/routes.py) and the shared Beare
 read-only voice status (ITGLASSES_BEARER_SCOPE=mobile, the default) or everything as before (=full).
 
 Credential-free requests from this PC (ITGLASSES_LOOPBACK_MODE):
-  legacy  everything, as before stage 4 (default until the login screen exists; also the rollback value)
-  chat    chat and voice only; documents, settings and the device panel need a login session
+  legacy  everything, as before stage 4 (the rollback value: LoopbackMode = 'legacy' in runtime-config.psd1)
+  chat    chat and voice only; documents, settings and the device panel need a login session (default since
+          stage 6, the login screen)
   off     nothing without a login session (planned when chat history arrives)
 """
 import os
 
 from backend.app.pairing.routes import MOBILE
 
-LOOPBACK_VARIABLE, LOOPBACK_MODES, LOOPBACK_DEFAULT = "ITGLASSES_LOOPBACK_MODE", ("legacy", "chat", "off"), "legacy"
+LOOPBACK_VARIABLE, LOOPBACK_MODES, LOOPBACK_DEFAULT = "ITGLASSES_LOOPBACK_MODE", ("legacy", "chat", "off"), "chat"
 BEARER_VARIABLE, BEARER_SCOPES, BEARER_DEFAULT = "ITGLASSES_BEARER_SCOPE", ("mobile", "full"), "mobile"
 
 CHAT = "chat"

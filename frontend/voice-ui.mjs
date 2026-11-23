@@ -1,5 +1,6 @@
 ﻿import {api, jsonOptions, sourcePath, elapsed} from "./core.mjs";
 import {VoiceController, spokenAnswer} from "./voice-core.mjs";
+import {sessionHeaders} from "./session.mjs";
 import {captureMicrophone} from "./microphone.mjs";
 
 export function initVoice(chat) {
@@ -55,8 +56,10 @@ export function initVoice(chat) {
   async function speak(answer, preferences, signal) {
     const started = performance.now();
     const citationIds = (answer.sources || []).map(source => source.citation_id);
-    const response = await fetch("/api/v1/voice/synthesize", {...jsonOptions({text: spokenAnswer(answer),
-      speaker: preferences.speaker, speed: preferences.speed, citation_ids: citationIds}), signal, cache: "no-store"});
+    const request = jsonOptions({text: spokenAnswer(answer), speaker: preferences.speaker, speed: preferences.speed,
+      citation_ids: citationIds});
+    const response = await fetch("/api/v1/voice/synthesize", {...request, headers: {...request.headers,
+      ...sessionHeaders("POST")}, signal, cache: "no-store", credentials: "same-origin"});
     if (!response.ok) { const data = await response.json(); throw new Error(data.error?.message || "No se pudo generar la voz."); }
     const blob = await response.blob();
     // Recheck immediately before playback. Cached audio is never reused for replay.

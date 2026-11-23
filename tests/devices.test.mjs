@@ -54,7 +54,7 @@ function walk(node, out = []) {
 async function settle() { for (let i = 0; i < 20; i++) await new Promise(resolve => setImmediate(resolve)); }
 
 // devices: array or function(call) -> array; server: optional override(path, options) -> response or throw.
-async function boot({devices = [], server} = {}) {
+async function boot({devices = [], server, session} = {}) {
   const doc = makeDocument();
   const calls = [];
   const timers = [];
@@ -71,6 +71,7 @@ async function boot({devices = [], server} = {}) {
     setTimeout: (fn, delay) => { const timer = {fn, delay, active: true}; timers.push(timer); return timer; },
     clearTimeout: timer => { if (timer) timer.active = false; },
   };
+  if (session) context.itgSession = session;  // what session.mjs publishes after a login
   vm.runInNewContext(source, context);
   await settle();
   const panel = {
@@ -224,7 +225,8 @@ test("se refresca solo cada 5 s y se pausa con la pestaña oculta", async () => 
 test("un 403 muestra cómo abrir el panel, sin acciones ni reintentos automáticos", async () => {
   const panel = await boot({devices: [device()], server: async () => ({ok: false, status: 403, json: async () => ({})})});
   assert.equal(panel.get("device-alert").hidden, false);
-  assert.equal(panel.get("device-alert-text").textContent, "Abre el panel desde la PC del servidor: http://127.0.0.1:8000");
+  assert.equal(panel.get("device-alert-text").textContent,
+    "Para administrar dispositivos inicia sesión como administrador en la PC del servidor: http://127.0.0.1:8000");
   assert.equal(panel.rows().length, 0);
   assert.equal(panel.pending().length, 0);
   assert.equal(panel.calls.length, 1);
@@ -267,7 +269,7 @@ test("estado vacío", async () => {
   assert.equal(panel.get("device-alert").hidden, true);
 });
 
-test("todas las peticiones llevan la cabecera propia y no envían cookies", async () => {
+test("todas las peticiones llevan la cabecera propia y solo la cookie del navegador (sin cabecera Cookie)", async () => {
   const panel = await boot({devices: [device({state: "pending", code: "555666"})]});
   await panel.button(panel.rows()[0], "Aprobar").click();
   await panel.button(panel.rows()[0], "Eliminar").click();
@@ -276,8 +278,41 @@ test("todas las peticiones llevan la cabecera propia y no envían cookies", asyn
   assert.ok(panel.calls.length >= 4);
   for (const call of panel.calls) {
     assert.equal(call.headers["X-ITGlasses-Admin"], "1");
-    assert.equal(call.credentials, "omit");
+    assert.equal(call.credentials, "same-origin");
     assert.equal(call.redirect, "error");
     assert.equal(Object.keys(call.headers).some(name => name.toLowerCase() === "cookie"), false);
   }
+});
+
+test("con sesión, solo los cambios llevan el token CSRF", async () => {
+  const panel = await boot({devices: [device({state: "active"})], session: {csrf: "c".repeat(64)}});
+  await panel.button(panel.rows()[0], "Bloquear").click();
+  await panel.get("device-dialog-confirm").click();
+  await settle();
+  const gets = panel.calls.filter(call => call.method === "GET");
+  const posts = panel.calls.filter(call => call.method === "POST");
+  assert.ok(gets.length >= 1 && posts.length === 1);
+  for (const call of gets) assert.equal(call.headers["X-CSRF-Token"], undefined);
+  assert.equal(posts[0].headers["X-CSRF-Token"], "c".repeat(64));
+  assert.equal(posts[0].credentials, "same-origin");
+});
+
+test("sin sesión no se envía token CSRF", async () => {
+  const panel = await boot({devices: [device({state: "active"})]});
+  await panel.button(panel.rows()[0], "Bloquear").click();
+  await panel.get("device-dialog-confirm").click();
+  await settle();
+  for (const call of panel.calls) assert.equal(call.headers["X-CSRF-Token"], undefined);
+});
+
+test("muestra a qué usuario pertenece cada dispositivo aprobado", async () => {
+  const panel = await boot({devices: [
+    device({id: "a", owner_username: "ana", owner_display_name: "Ana López"}),
+    device({id: "b", last_seen: 1, owner_username: null}),
+    device({id: "p", state: "pending", code: "123456", approved_at: null}),
+  ]});
+  const text = panel.rows().map(row => row.textContent);
+  assert.match(text.find(t => t.includes("Ana López")), /Usuario: Ana López/);
+  assert.ok(text.some(t => t.includes("Sin usuario asignado")));
+  assert.ok(!text.find(t => t.includes("123 456")).includes("Usuario"));
 });

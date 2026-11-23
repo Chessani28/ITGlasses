@@ -1,7 +1,12 @@
 import {api, chatPayload, documentState, elapsed, jsonOptions, limits, sourcePath, validateFile} from "./core.mjs";
 
 import {initVoice} from "./voice-ui.mjs";
+import {initAccounts} from "./accounts.mjs";
 let voiceActive = false;
+let accounts = null;
+let currentPage = "chat";
+const PAGE_TITLES = {chat: "Conversaciones", documents: "Documentos", system: "Estado del sistema",
+  "my-devices": "Mis dispositivos", users: "Usuarios", owners: "Dispositivos y usuarios", audit: "Auditoría"};
 const $ = id => document.getElementById(id);
 const state = {mode: "assistant", busy: false, documentBusy: false, updating: null, withdrawing: null,
   sourceRequest: 0, chats: {assistant: {messages: [], conversation: null}, knowledge: {messages: [], conversation: null}, general: {messages: [], conversation: null}}};
@@ -310,16 +315,19 @@ async function mutateDocument(doc, operation) {
   finally { state.documentBusy = false; updateControls(); }
 }
 function showPage(page) {
+  if (!(page in PAGE_TITLES)) page = "chat";
   voice.stop();
-  for (const name of ["chat", "documents", "system"]) $(`${name}-page`).hidden = name !== page;
+  currentPage = page;
+  for (const name of Object.keys(PAGE_TITLES)) $(`${name}-page`).hidden = name !== page;
   document.querySelectorAll("[data-page]").forEach(button => {
     button.classList.toggle("active", button.dataset.page === page);
     if (button.dataset.page === page) button.setAttribute("aria-current", "page");
     else button.removeAttribute("aria-current");
   });
-  $("page-title").textContent = {chat: "Conversaciones", documents: "Documentos", system: "Estado del sistema"}[page];
+  $("page-title").textContent = PAGE_TITLES[page];
   if (page === "documents") refreshDocuments();
   if (page === "system") refreshStatus();
+  accounts?.opened(page);
 }
 document.querySelectorAll("[data-page]").forEach(button => button.addEventListener("click", () => showPage(button.dataset.page)));
 document.querySelectorAll("[data-mode]").forEach(button => button.addEventListener("click", () => setMode(button.dataset.mode)));
@@ -352,3 +360,10 @@ $("confirm-withdraw").addEventListener("click", () => {
 const voice = initVoice({send: (text, signal) => sendMessage(text, undefined, signal), lock: active => {voiceActive = active; updateControls();}});
 setMode("assistant");
 refreshStatus();
+// Stage "usuarios" 6: login screen, user menu and administration pages. After a login or logout the status, the
+// document list (when it may be seen) and the device panel are reloaded.
+accounts = initAccounts({showPage, currentPage: () => currentPage, onChange: async () => {
+  await refreshStatus();
+  if (!$("documents-page").hidden) await refreshDocuments();
+  globalThis.itgDevicesRefresh?.();
+}});
