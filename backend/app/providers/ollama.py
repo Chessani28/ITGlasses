@@ -147,17 +147,22 @@ class OllamaProvider:
 
     async def warm_up(self) -> bool:
         """Load the chat model in Ollama (empty prompt: nothing is generated) so the first question does not pay it.
-        Never raises; logs the outcome."""
+        Loaded with the same num_ctx as every chat call: Ollama reloads a model whose context differs, so a warm-up
+        with its default context would not help the first question. Never raises; logs the outcome."""
         started = time.perf_counter()
         try:
-            await self._post("/api/generate", {"model": self.model, "keep_alive": self.config.keep_alive},
-                             self.config.timeout_seconds)
+            data = await self._post("/api/generate", {"model": self.model, "keep_alive": self.config.keep_alive,
+                                                      "options": {"num_ctx": self.config.context_length}},
+                                    self.config.timeout_seconds)
         except Exception as exc:  # noqa: BLE001 - warming up is best effort
             logger.warning("ollama_warmup model=%s error=%s elapsed_ms=%d", _label(self.model),
                            _label(type(exc).__name__), round((time.perf_counter() - started) * 1000))
             return False
-        logger.info("ollama_warmup model=%s elapsed_ms=%d", _label(self.model),
-                    round((time.perf_counter() - started) * 1000))
+        load = data.get("load_duration") if isinstance(data, dict) else None
+        # load_ms near 0 means the model was already loaded with this context; a large one, that it was (re)loaded.
+        logger.info("ollama_warmup model=%s num_ctx=%d elapsed_ms=%d load_ms=%s", _label(self.model),
+                    self.config.context_length, round((time.perf_counter() - started) * 1000),
+                    round(load / 1e6) if isinstance(load, (int, float)) else "none")
         return True
 
     async def generate_grounded_answer(self, question: str, evidence: list, language: str = "es") -> str:

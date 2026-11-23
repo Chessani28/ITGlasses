@@ -134,9 +134,10 @@ def test_selector_and_embedding_failures_leave_one_line(caplog, monkeypatch):
 # --- Warm-up and keep_alive -------------------------------------------------------------------------------------
 
 def test_warm_up_loads_the_model_without_a_prompt():
+    """With the same num_ctx as the chat calls: Ollama reloads a model whose context differs."""
     seen = []
     assert asyncio.run(adapter(seen=seen).warm_up()) is True
-    assert seen == [("/api/generate", {"model": "qwen3:4b-instruct-2507-q4_K_M", "keep_alive": "30s"})]
+    assert seen == [("/api/generate", {"model": "qwen3:4b-instruct-2507-q4_K_M", "keep_alive": "30s", "options": {"num_ctx": 2048}})]
     failing = adapter(generate=lambda payload: httpx.Response(500, json={"error": "x"}))
     assert asyncio.run(failing.warm_up()) is False  # never raises
 
@@ -146,10 +147,10 @@ def test_backend_startup_warms_up_only_its_own_provider_and_can_be_turned_off(mo
     provider = adapter(lambda p: httpx.Response(200, json={"done": True, "message": {"content": "ok"}}), seen=seen)
     with TestClient(create_app(provider)):
         pass
-    assert ("/api/generate", {"model": provider.model, "keep_alive": "30s"}) not in seen  # injected provider
+    assert ("/api/generate", {"model": provider.model, "keep_alive": "30s", "options": {"num_ctx": provider.config.context_length}}) not in seen  # injected provider
     with TestClient(create_app(provider, warmup=True)) as client:
         client.get("/health")
-    assert seen.count(("/api/generate", {"model": provider.model, "keep_alive": "30s"})) == 1
+    assert seen.count(("/api/generate", {"model": provider.model, "keep_alive": "30s", "options": {"num_ctx": provider.config.context_length}})) == 1
     seen.clear()
     monkeypatch.setenv("ITGLASSES_OLLAMA_WARMUP", "false")
     with TestClient(create_app(provider, warmup=True)) as client:
