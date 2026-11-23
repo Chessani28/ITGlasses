@@ -1,5 +1,6 @@
 """Bounded CPU speech workers with project-local transient files."""
 import asyncio
+import contextlib
 import importlib.util
 import io
 import json
@@ -28,6 +29,9 @@ from .persistent_worker import (
     WorkerResourceMonitorError,
     WorkerStartupError,
     WorkerTimeoutError,
+    GPU_STARTUP_TIMEOUT_SECONDS,
+    MODEL_START_TIMEOUT_SECONDS,
+    REQUEST_TIMEOUT_SECONDS,
     available_system_memory as _available_system_memory,
     model_files as whisper_model_files,
 )
@@ -157,6 +161,10 @@ WHISPER_IDLE_CPU_SECONDS = 60
 WHISPER_IDLE_GPU_DEFAULT_SECONDS = 900
 WHISPER_IDLE_MIN_SECONDS = 30
 GPU_COOLDOWN_SECONDS = 300
+# Worst case of one Whisper operation: GPU start + request, then the CPU fallback start + request, plus margin.
+# An operation older than this is stuck: release_whisper() cancels it so chat is not refused forever.
+WHISPER_WATCHDOG_SECONDS = (GPU_STARTUP_TIMEOUT_SECONDS + MODEL_START_TIMEOUT_SECONDS
+                            + 2 * REQUEST_TIMEOUT_SECONDS + 30)
 VRAM_CACHE_SECONDS = 1
 VRAM_IDLE_CHECK_SECONDS = 5
 GPU_MESSAGES = {
@@ -341,13 +349,72 @@ class VoiceService:
         self.models = self.root / "storage/voice/models"
         self.temporary = self.root / ".cache/voice"
         self.busy = False
-        self._whisper_active = False
+        # Whisper operation in progress (preload or STT): start time (monotonic), owning task and label.
+        self._whisper_active_since = None
+        self._whisper_active_task = None
+        self._whisper_active_op = None
         self._whisper_worker = None
         self._whisper_idle_task = None
         self._whisper_probe_cache = None
         self._whisper_lifecycle_lock = asyncio.Lock()
         self._gpu_cooldown_until = 0.0
         self._vram_cache = None
+
+    @property
+    def _whisper_active(self):
+        return self._whisper_active_since is not None
+
+    @_whisper_active.setter
+    def _whisper_active(self, value):
+        # Kept for tests that force the state; a forced state has no owning task.
+        self._whisper_active_since = time.monotonic() if value else None
+        self._whisper_active_task = None
+        self._whisper_active_op = "forced" if value else None
+
+    @contextlib.asynccontextmanager
+    async def _whisper_operation(self, op):
+        """Mark a Whisper operation (busy + active) and always clear it; logs start/end with outcome and time."""
+        started = time.monotonic()
+        self.busy = True
+        self._whisper_active_since = started
+        self._whisper_active_task = asyncio.current_task()
+        self._whisper_active_op = op
+        outcome = "error"
+        logger.info("Whisper op start op=%s", op)
+        try:
+            yield
+            outcome = "ok"
+        except asyncio.CancelledError:
+            outcome = "cancelled"
+            raise
+        except KnowledgeError as error:
+            outcome = _safe_label(error.code)
+            raise
+        finally:
+            self._whisper_active_since = None
+            self._whisper_active_task = None
+            self._whisper_active_op = None
+            self.busy = False
+            logger.info("Whisper op end op=%s outcome=%s elapsed_ms=%d", op, outcome,
+                        round((time.monotonic() - started) * 1000))
+            worker = self._whisper_worker
+            if worker and worker.alive:
+                self._schedule_whisper_idle_shutdown(worker)
+
+    def _check_whisper_watchdog(self):
+        """Clear an orphaned flag (its task finished without clearing it) or cancel an operation stuck past
+        WHISPER_WATCHDOG_SECONDS; the cancelled task's finally clears the flag."""
+        since = self._whisper_active_since
+        if since is None:
+            return
+        task, op, age = self._whisper_active_task, self._whisper_active_op, time.monotonic() - since
+        if task is not None and task.done():
+            logger.error("Whisper flag orphaned op=%s age_s=%d; clearing", op, age)
+            self._whisper_active_since = self._whisper_active_task = self._whisper_active_op = None
+            self.busy = False
+        elif task is not None and age > WHISPER_WATCHDOG_SECONDS:
+            logger.error("Whisper op exceeded the watchdog op=%s age_s=%d; cancelling", op, age)
+            task.cancel()
 
     def _vosk_available(self):
         return importlib.util.find_spec("vosk") is not None and (
@@ -476,6 +543,10 @@ class VoiceService:
                 "tts_available": self._tts_available(), "tts_engine": "piper",
                 "device": "cpu", "voices": [{"id": VOICE_NAME, "name": "Español · Sharvard", "speakers": [0, 1]}],
                 "wake_detection": "experimental_transcription_matching", "busy": self.busy,
+                "whisper_active_seconds": (
+                    round(time.monotonic() - self._whisper_active_since)
+                    if self._whisper_active_since is not None else None
+                ),
                 "whisper_worker_loaded": bool(
                     self._whisper_worker and self._whisper_worker.alive
                 ),
@@ -577,6 +648,7 @@ class VoiceService:
         RAM or, on the GPU, below the free-VRAM abort threshold. If memory cannot be measured, a CPU Whisper is
         unloaded.
         """
+        self._check_whisper_watchdog()
         if self._whisper_active:
             raise KnowledgeError(
                 "voice_busy",
@@ -615,8 +687,10 @@ class VoiceService:
         if self.busy:
             return False
         primary, _ = _whisper_targets(config)
-        self.busy = True
-        self._whisper_active = True
+        async with self._whisper_operation("preload"):
+            return await self._preload_whisper_target(primary)
+
+    async def _preload_whisper_target(self, primary):
         try:
             if primary["device"] == "cuda":
                 memory = None if self._gpu_cooldown_active() else await asyncio.to_thread(self._gpu_memory)
@@ -637,12 +711,6 @@ class VoiceService:
         except Exception as error:  # noqa: BLE001 - preload must never break the backend startup
             logger.warning("Whisper preload failed error_type=%s", _safe_label(type(error).__name__))
             return False
-        finally:
-            self._whisper_active = False
-            self.busy = False
-            worker = self._whisper_worker
-            if worker and worker.alive:
-                self._schedule_whisper_idle_shutdown(worker)
 
     async def _start_persistent_whisper(self, worker):
         startup = asyncio.create_task(asyncio.to_thread(worker.start))
@@ -696,16 +764,8 @@ class VoiceService:
                 "A local speech operation is already running. Try again after it finishes.",
                 409,
             )
-        self.busy = True
-        self._whisper_active = True
-        try:
+        async with self._whisper_operation("stt"):
             return await self._run_persistent_whisper_request(payload, request, hint, hint_mode)
-        finally:
-            self._whisper_active = False
-            self.busy = False
-            worker = self._whisper_worker
-            if worker and worker.alive:
-                self._schedule_whisper_idle_shutdown(worker)
 
     def _start_gpu_cooldown(self, code):
         self._gpu_cooldown_until = time.monotonic() + GPU_COOLDOWN_SECONDS
