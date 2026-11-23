@@ -49,6 +49,7 @@ def _start_piper_preload(app):
 def _check_password_settings():
     """Refuse to start with an invalid ITGLASSES_PASSWORD_MIN_LENGTH or session lifetime instead of silently using
     the defaults."""
+    from backend.app.users.access import AccessConfigError, bearer_scope, loopback_mode
     from backend.app.users.passwords import PasswordConfigError, min_length
     from backend.app.users.sessions import SessionConfigError, lifetimes
 
@@ -56,7 +57,8 @@ def _check_password_settings():
         idle, absolute = lifetimes()
         logger.info("password_policy min_length=%d session_idle_min=%d session_max_h=%d", min_length(),
                     idle // 60, absolute // 3600)
-    except (PasswordConfigError, SessionConfigError) as error:
+        logger.info("access loopback_mode=%s bearer_scope=%s", loopback_mode(), bearer_scope())
+    except (PasswordConfigError, SessionConfigError, AccessConfigError) as error:
         logger.error("Invalid configuration: %s", error)
         raise
 

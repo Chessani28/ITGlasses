@@ -1,7 +1,7 @@
 """Device administration for the local beta.
 
-Every admin route depends on require_admin(), the ONLY admin gate in the code.
-To add a real administrator login later (pro version), change that function.
+Every admin route depends on require_admin(), the ONLY admin gate in the code: a login session with the
+admin or superadmin role, or the original local-browser check while ITGLASSES_LOOPBACK_MODE=legacy.
 This router is independent from the phone router: no pairing origin, no HTTPS.
 """
 import time
@@ -20,6 +20,23 @@ FIELDS = "id,variant,name,model,state,code,created_at,approved_at,last_seen,last
 
 
 def require_admin(request: Request) -> None:
+    """Stage "usuarios" 4: a login session of an admin or superadmin from this PC (changes need the page Origin
+    and the CSRF token), or, only with ITGLASSES_LOOPBACK_MODE=legacy, the original local-browser check below."""
+    from backend.app.users import access
+    from backend.app.users.web import optional_session
+
+    session = optional_session(request, write=request.method not in ("GET", "HEAD"))
+    if session is not None:
+        if access.role_allows(session.role, access.DEVICES):
+            request.state.user_id = session.user_id
+            return
+        raise HTTPException(403)
+    if access.loopback_mode() != "legacy":
+        raise HTTPException(403)
+    _legacy_local_browser(request)
+
+
+def _legacy_local_browser(request: Request) -> None:
     """Accept only a browser on this PC talking directly to the backend."""
     hosts = local_request.local_hosts()
     headers = request.headers

@@ -42,7 +42,9 @@ function Set-ITGlassesRuntimeConfiguration {
         'ITGLASSES_WHISPER_PRELOAD',
         'ITGLASSES_WHISPER_MIN_VRAM_MIB',
         'ITGLASSES_WHISPER_IDLE_SECONDS',
-        'ITGLASSES_PASSWORD_MIN_LENGTH'
+        'ITGLASSES_PASSWORD_MIN_LENGTH',
+        'ITGLASSES_LOOPBACK_MODE',
+        'ITGLASSES_BEARER_SCOPE'
     )
     $previous = @{}
     foreach ($name in $names) {
@@ -66,7 +68,7 @@ function Set-ITGlassesRuntimeConfiguration {
                 'WhisperPython', 'WhisperModel', 'RequireAuth', 'AllowLanBinding', 'PairingOrigin',
                 'WhisperKeepRamGiB', 'WhisperHintMode', 'SttCorrection',
                 'WhisperDevice', 'WhisperComputeType', 'WhisperFallbackModel', 'WhisperPreload',
-                'WhisperMinVramMiB', 'WhisperIdleSeconds', 'PasswordMinLength'
+                'WhisperMinVramMiB', 'WhisperIdleSeconds', 'PasswordMinLength', 'LoopbackMode', 'BearerScope'
             )
             $unknownKeys = @($config.Keys | Where-Object { $_ -notin $allowedKeys })
             if ($unknownKeys.Count -gt 0) {
@@ -119,6 +121,21 @@ function Set-ITGlassesRuntimeConfiguration {
                 throw 'Pairing origin must be a canonical HTTPS origin such as https://172.16.5.143:8443.'
             }
             [Environment]::SetEnvironmentVariable('ITGLASSES_PAIRING_ORIGIN', $originValue, 'Process')
+        }
+
+        # Access modes (stage usuarios 4): what this PC may do without a login, and what shared tokens reach.
+        foreach ($setting in @(
+            @{ Key = 'LoopbackMode'; Variable = 'ITGLASSES_LOOPBACK_MODE'; Allowed = @('legacy', 'chat', 'off') },
+            @{ Key = 'BearerScope'; Variable = 'ITGLASSES_BEARER_SCOPE'; Allowed = @('mobile', 'full') }
+        )) {
+            $environmentValue = [Environment]::GetEnvironmentVariable($setting.Variable, 'Process')
+            if ([string]::IsNullOrWhiteSpace($environmentValue) -and $config.Contains($setting.Key)) {
+                $choice = $config[$setting.Key]
+                if ($choice -isnot [string] -or $choice -cnotin $setting.Allowed) {
+                    throw "Runtime configuration value $($setting.Key) must be one of: $($setting.Allowed -join ', ')."
+                }
+                [Environment]::SetEnvironmentVariable($setting.Variable, $choice, 'Process')
+            }
         }
 
         # Free RAM (GiB) needed to keep Whisper loaded between voice questions. Optional: the backend uses 8 GiB

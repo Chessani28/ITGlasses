@@ -512,3 +512,46 @@ def test_password_minimum_from_configuration_is_exported(tmp_path):
 def test_invalid_password_minimum_stops_startup(tmp_path, entry):
     result = _run_and_print_password_minimum(tmp_path, entry)
     assert result.returncode == 2 and "PasswordMinLength" in result.stdout
+
+
+def _run_and_print_access(project_root, entries, environment=None):
+    (project_root / "runtime-config.psd1").write_text(
+        "@{ WhisperPython = ''; WhisperModel = ''; RequireAuth = $false; AllowLanBinding = $false; "
+        f"PairingOrigin = ''; {entries} }}",
+        encoding="utf-8",
+    )
+    script = (
+        "$ErrorActionPreference='Stop'; "
+        f". {_quote_ps(ROOT / 'scripts' / 'runtime-config.ps1')}; "
+        f"try {{ $null=Set-ITGlassesRuntimeConfiguration -ProjectRoot {_quote_ps(project_root)}; "
+        "'LOOPBACK=[' + $env:ITGLASSES_LOOPBACK_MODE + '] BEARER=[' + $env:ITGLASSES_BEARER_SCOPE + ']' } "
+        "catch { 'CONFIG_ERROR:' + $_.Exception.Message; exit 2 }"
+    )
+    env = {**os.environ, "ITGLASSES_WHISPER_PYTHON": "", "ITGLASSES_WHISPER_MODEL": "",
+           "ITGLASSES_REQUIRE_AUTH": "", "ITGLASSES_ALLOW_LAN_BINDING": "", "ITGLASSES_API_TOKENS": "",
+           "ITGLASSES_PAIRING_ORIGIN": "", "ITGLASSES_LOOPBACK_MODE": "", "ITGLASSES_BEARER_SCOPE": "",
+           **(environment or {})}
+    return subprocess.run(
+        [POWERSHELL, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
+        capture_output=True, text=True, env=env, timeout=20, check=False,
+    )
+
+
+def test_access_modes_from_configuration_are_exported(tmp_path):
+    result = _run_and_print_access(tmp_path, "LoopbackMode = 'chat'; BearerScope = 'full'")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "LOOPBACK=[chat] BEARER=[full]" in result.stdout
+    result = _run_and_print_access(tmp_path, "LoopbackMode = 'chat'", {"ITGLASSES_LOOPBACK_MODE": "legacy"})
+    assert "LOOPBACK=[legacy]" in result.stdout  # the environment wins
+    result = _run_and_print_access(tmp_path, "WhisperIdleSeconds = 900")
+    assert "LOOPBACK=[] BEARER=[]" in result.stdout  # absent: the backend defaults (legacy, mobile)
+
+
+@pytest.mark.parametrize(("entry", "key"), [("LoopbackMode = 'abierto'", "LoopbackMode"),
+                                            ("LoopbackMode = 'CHAT'", "LoopbackMode"),
+                                            ("BearerScope = 'todo'", "BearerScope"),
+                                            ("BearerScope = 1", "BearerScope")])
+def test_invalid_access_modes_stop_startup(tmp_path, entry, key):
+    result = _run_and_print_access(tmp_path, entry)
+    assert result.returncode == 2 and key in result.stdout
+
