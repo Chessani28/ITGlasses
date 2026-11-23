@@ -46,6 +46,17 @@ def _start_piper_preload(app):
     return asyncio.create_task(preload()) if preload else None
 
 
+def _check_password_settings():
+    """Refuse to start with an invalid ITGLASSES_PASSWORD_MIN_LENGTH instead of silently using the default."""
+    from backend.app.users.passwords import PasswordConfigError, min_length
+
+    try:
+        logger.info("password_policy min_length=%d", min_length())
+    except PasswordConfigError as error:
+        logger.error("Invalid configuration: %s", error)
+        raise
+
+
 def ollama_warmup_enabled(value=None):
     """ITGLASSES_OLLAMA_WARMUP: load the chat model at startup. On by default; 0/false/off/no turn it off."""
     import os
@@ -103,6 +114,7 @@ def create_app(provider: LLMProvider | None = None, knowledge=None, voice=None, 
 
     @asynccontextmanager
     async def lifespan(app):
+        _check_password_settings()
         preload_task = None
         warmup_task = None
         piper_task = None

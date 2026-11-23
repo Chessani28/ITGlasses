@@ -65,7 +65,7 @@ def create_user(db, username, password, role, display_name=None, created_by=None
         raise AccountError("role_invalid", "Rol no valido.")
     username = normalize_username(username)
     display = clean_display_name(display_name, username)
-    passwords.check_policy(password, username)
+    passwords.check_policy(password)
     salt, digest, params = passwords.hash_password(password)
     now = _now(now)
     user_id = str(uuid.uuid4())
@@ -121,7 +121,7 @@ def revoke_sessions(db, user_id, now=None):
 def set_password(db, user_id, password, must_change=False, now=None):
     """New password (policy checked); also clears the lockout and closes every session of the user."""
     row = _require(db, user_id)
-    passwords.check_policy(password, row["username"])
+    passwords.check_policy(password)
     salt, digest, params = passwords.hash_password(password)
     now = _now(now)
     db.execute("UPDATE users SET pw_salt=?,pw_hash=?,pw_params=?,must_change_pw=?,pw_changed_at=?,updated_at=?,"

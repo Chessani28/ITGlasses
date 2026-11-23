@@ -41,7 +41,8 @@ function Set-ITGlassesRuntimeConfiguration {
         'ITGLASSES_WHISPER_FALLBACK_MODEL',
         'ITGLASSES_WHISPER_PRELOAD',
         'ITGLASSES_WHISPER_MIN_VRAM_MIB',
-        'ITGLASSES_WHISPER_IDLE_SECONDS'
+        'ITGLASSES_WHISPER_IDLE_SECONDS',
+        'ITGLASSES_PASSWORD_MIN_LENGTH'
     )
     $previous = @{}
     foreach ($name in $names) {
@@ -65,7 +66,7 @@ function Set-ITGlassesRuntimeConfiguration {
                 'WhisperPython', 'WhisperModel', 'RequireAuth', 'AllowLanBinding', 'PairingOrigin',
                 'WhisperKeepRamGiB', 'WhisperHintMode', 'SttCorrection',
                 'WhisperDevice', 'WhisperComputeType', 'WhisperFallbackModel', 'WhisperPreload',
-                'WhisperMinVramMiB', 'WhisperIdleSeconds'
+                'WhisperMinVramMiB', 'WhisperIdleSeconds', 'PasswordMinLength'
             )
             $unknownKeys = @($config.Keys | Where-Object { $_ -notin $allowedKeys })
             if ($unknownKeys.Count -gt 0) {
@@ -183,7 +184,9 @@ function Set-ITGlassesRuntimeConfiguration {
         }
         foreach ($setting in @(
             @{ Key = 'WhisperMinVramMiB'; Variable = 'ITGLASSES_WHISPER_MIN_VRAM_MIB'; Minimum = 0 },
-            @{ Key = 'WhisperIdleSeconds'; Variable = 'ITGLASSES_WHISPER_IDLE_SECONDS'; Minimum = 30 }
+            @{ Key = 'WhisperIdleSeconds'; Variable = 'ITGLASSES_WHISPER_IDLE_SECONDS'; Minimum = 30 },
+            # Web password minimum (5 to 256; the backend refuses to start above 256).
+            @{ Key = 'PasswordMinLength'; Variable = 'ITGLASSES_PASSWORD_MIN_LENGTH'; Minimum = 5 }
         )) {
             $environmentValue = [Environment]::GetEnvironmentVariable($setting.Variable, 'Process')
             if ([string]::IsNullOrWhiteSpace($environmentValue) -and $config.Contains($setting.Key)) {

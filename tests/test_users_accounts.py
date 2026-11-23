@@ -14,6 +14,7 @@ OTHER = "otra-frase-bastante-larga"
 @pytest.fixture(autouse=True)
 def fresh_process(monkeypatch):
     monkeypatch.setattr(store, "_ready", set())
+    monkeypatch.delenv(passwords.MIN_LENGTH_VARIABLE, raising=False)  # the PC's own setting never leaks in
 
 
 @pytest.fixture
@@ -62,13 +63,54 @@ def test_unreadable_stored_parameters_never_verify(params):
     assert passwords.verify_password(GOOD, salt, digest, params) is False
 
 
-@pytest.mark.parametrize(("password", "code"), [("corta", "password_length"), ("x" * 257, "password_length"),
-                                                (" " * 20, "password_blank"),
-                                                ("mi-usuario-ana-es-largo", "password_contains_username")])
+@pytest.mark.parametrize(("password", "code"), [("abcd", "password_length"), ("x" * 257, "password_length"),
+                                                (" " * 5, "password_blank"), ("", "password_length")])
 def test_password_policy(password, code):
     with pytest.raises(passwords.PasswordPolicyError) as error:
-        passwords.check_policy(password, "ana")
+        passwords.check_policy(password)
     assert error.value.code == code
+
+
+@pytest.mark.parametrize("password", ["abcde", "ana12", "x" * 256, " ab c", "contiene-ana-el-usuario"])
+def test_default_minimum_is_5_without_composition_or_username_rules(password):
+    passwords.check_policy(password)
+
+
+def test_the_error_states_the_current_minimum(monkeypatch):
+    with pytest.raises(passwords.PasswordPolicyError) as default:
+        passwords.check_policy("abcd")
+    assert "entre 5 y 256" in str(default.value)
+    monkeypatch.setenv(passwords.MIN_LENGTH_VARIABLE, "12")
+    with pytest.raises(passwords.PasswordPolicyError) as raised:
+        passwords.check_policy("abcdefghijk")
+    assert "entre 12 y 256" in str(raised.value)
+    passwords.check_policy("abcdefghijkl")
+
+
+@pytest.mark.parametrize(("value", "expected"), [(None, 5), ("", 5), ("  ", 5), ("5", 5), (" 14 ", 14),
+                                                 ("256", 256)])
+def test_minimum_setting(value, expected):
+    assert passwords.min_length(value) == expected
+
+
+@pytest.mark.parametrize("value", ["4", "0", "257", "-5", "5.5", "abc", "1e2", "\u0661\u0662"])
+def test_invalid_minimum_setting_is_reported_clearly(value):
+    with pytest.raises(passwords.PasswordConfigError) as error:
+        passwords.min_length(value)
+    assert "ITGLASSES_PASSWORD_MIN_LENGTH" in str(error.value) and "entre 5 y 256" in str(error.value)
+
+
+def test_backend_refuses_to_start_with_an_invalid_minimum(monkeypatch):
+    from fastapi.testclient import TestClient
+    from backend.app.main import create_app
+    from backend.app.providers.mock import MockLLM
+    monkeypatch.setenv(passwords.MIN_LENGTH_VARIABLE, "3")
+    with pytest.raises(passwords.PasswordConfigError):
+        with TestClient(create_app(MockLLM())):
+            pass
+    monkeypatch.setenv(passwords.MIN_LENGTH_VARIABLE, "8")
+    with TestClient(create_app(MockLLM())) as client:
+        assert client.get("/health").status_code == 200
 
 
 # --- accounts ---------------------------------------------------------------------------------------------
@@ -206,7 +248,7 @@ def test_a_second_superadmin_is_refused(path, capsys):
     assert "Ya existe un superadmin" in capsys.readouterr().out
 
 
-@pytest.mark.parametrize("typed", [(GOOD, OTHER), ("corta", "corta"), ("root-root-root-root", "root-root-root-root")])
+@pytest.mark.parametrize("typed", [(GOOD, OTHER), ("cort", "cort"), ("     ", "     ")])
 def test_create_superadmin_with_a_bad_password_changes_nothing(path, typed, capsys):
     assert run(path, "create-superadmin", "--username", "root", "--name", "", read=answers(*typed)) == 1
     with accounts.connect(path) as db:
@@ -260,3 +302,38 @@ def test_ctrl_c_cancels_without_changes(path, capsys):
     assert run(path, "create-superadmin", "--username", "root", "--name", "", read=interrupted) == 1
     with accounts.connect(path) as db:
         assert accounts.list_users(db) == []
+
+
+def test_scripts_apply_the_configured_minimum_and_say_it(path, monkeypatch, capsys):
+    monkeypatch.setenv(passwords.MIN_LENGTH_VARIABLE, "8")
+    prompts = []
+
+    def read(prompt=""):
+        prompts.append(prompt)
+        return "seis66"
+
+    assert run(path, "create-superadmin", "--username", "root", "--name", "", read=read) == 1
+    assert "minimo 8 caracteres" in prompts[0]
+    assert "entre 8 y 256" in capsys.readouterr().out
+    assert run(path, "create-superadmin", "--username", "root", "--name", "", read=answers("ocho8888", "ocho8888")) == 0
+    assert run(path, "reset-password", "--username", "root", read=answers("siete77", "siete77")) == 1
+    assert run(path, "reset-password", "--username", "root", read=answers("nueve9999", "nueve9999")) == 0
+
+
+def test_scripts_report_an_invalid_minimum_and_change_nothing(path, monkeypatch, capsys):
+    monkeypatch.setenv(passwords.MIN_LENGTH_VARIABLE, "cuatro")
+    assert run(path, "create-superadmin", "--username", "root", "--name", "", read=answers(GOOD, GOOD)) == 1
+    assert "ITGLASSES_PASSWORD_MIN_LENGTH" in capsys.readouterr().out
+    with accounts.connect(path) as db:
+        assert accounts.list_users(db) == []
+
+
+def test_accounts_apply_the_same_minimum(path, monkeypatch):
+    with accounts.connect(path) as db:
+        user_id = accounts.create_user(db, "ana", "cinco", "user")  # 5 characters: the default minimum
+        monkeypatch.setenv(passwords.MIN_LENGTH_VARIABLE, "10")
+        with pytest.raises(passwords.PasswordPolicyError):
+            accounts.create_user(db, "beto", "nueve9999", "user")
+        with pytest.raises(passwords.PasswordPolicyError):
+            accounts.set_password(db, user_id, "nueve9999")
+        accounts.set_password(db, user_id, "diez-10-10")

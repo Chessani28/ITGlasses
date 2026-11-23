@@ -19,10 +19,10 @@ from . import accounts, audit, passwords
 
 
 def _password(read, username):
-    first = read("Nueva contrasena: ")
+    first = read(f"Nueva contrasena para '{username}' (minimo {passwords.min_length()} caracteres): ")
     if first != read("Repite la contrasena: "):
         raise accounts.AccountError("password_mismatch", "Las contrasenas no coinciden.")
-    passwords.check_policy(first, username)
+    passwords.check_policy(first)
     return first
 
 
@@ -138,7 +138,7 @@ def main(argv=None, ask=input, read=getpass.getpass):
     args = parser.parse_args(argv)
     try:
         return COMMANDS[args.command](args, ask, read)
-    except (accounts.AccountError, passwords.PasswordPolicyError) as error:
+    except (accounts.AccountError, passwords.PasswordPolicyError, passwords.PasswordConfigError) as error:
         print(f"No se hizo ningun cambio: {error}")
         return 1
     except (KeyboardInterrupt, EOFError):

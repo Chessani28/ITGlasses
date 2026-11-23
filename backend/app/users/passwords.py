@@ -1,14 +1,22 @@
 """Password hashing with the standard library (hashlib.scrypt): no extra dependency.
 
 The parameters are stored with every hash (users.pw_params), so the cost can be raised later and old hashes keep
-verifying; needs_rehash() tells when a stored hash uses older parameters."""
+verifying; needs_rehash() tells when a stored hash uses older parameters.
+
+Policy: from ITGLASSES_PASSWORD_MIN_LENGTH (5 to 256, default 5) up to 256 characters, not only spaces, no
+composition rules. The same minimum applies to the local scripts and to the web; raise it before publishing the
+web to other PCs. Brute force is limited by the login lockout, not by this rule."""
 import hashlib
 import hmac
+import os
 import secrets
 
 N, R, P, DKLEN = 2 ** 15, 8, 1, 64
 SALT_BYTES = 16
-MIN_LENGTH, MAX_LENGTH = 14, 256
+MAX_LENGTH = 256
+MIN_LENGTH_VARIABLE = "ITGLASSES_PASSWORD_MIN_LENGTH"
+MIN_LENGTH_DEFAULT = 5
+MIN_LENGTH_RANGE = (5, MAX_LENGTH)
 # Bounds for parameters read back from the database (a tampered row must not exhaust memory).
 N_RANGE, R_RANGE, P_RANGE, DKLEN_RANGE = (2 ** 14, 2 ** 16), (1, 16), (1, 4), (32, 128)
 
@@ -17,6 +25,24 @@ class PasswordPolicyError(ValueError):
     def __init__(self, code, message):
         super().__init__(message)
         self.code = code
+
+
+class PasswordConfigError(ValueError):
+    """ITGLASSES_PASSWORD_MIN_LENGTH is not a whole number from 5 to 256: the backend refuses to start."""
+    code = "password_config"
+
+
+def min_length(value=None):
+    """Minimum password length (ITGLASSES_PASSWORD_MIN_LENGTH, default 5). Never falls back silently."""
+    raw = os.environ.get(MIN_LENGTH_VARIABLE) if value is None else value
+    text = "" if raw is None else str(raw).strip()
+    if not text:
+        return MIN_LENGTH_DEFAULT
+    low, high = MIN_LENGTH_RANGE
+    if not (text.isascii() and text.isdecimal()) or not low <= int(text) <= high:
+        raise PasswordConfigError(f"{MIN_LENGTH_VARIABLE} debe ser un numero entero entre {low} y {high} "
+                                  f"(valor actual: {text[:20]!r}).")
+    return int(text)
 
 
 def params_text(n=N, r=R, p=P, dklen=DKLEN):
@@ -64,15 +90,13 @@ def needs_rehash(params):
     return params != params_text()
 
 
-def check_policy(password, username=None):
-    """14 to 256 characters, not only spaces, and not containing the username. No composition rules."""
+def check_policy(password):
+    """min_length() to 256 characters and not only spaces. No composition rules."""
+    minimum = min_length()
     if not isinstance(password, str):
         raise PasswordPolicyError("password_invalid", "La contrasena no es valida.")
-    if not MIN_LENGTH <= len(password) <= MAX_LENGTH:
+    if not minimum <= len(password) <= MAX_LENGTH:
         raise PasswordPolicyError("password_length",
-                                  f"La contrasena debe tener entre {MIN_LENGTH} y {MAX_LENGTH} caracteres.")
+                                  f"La contrasena debe tener entre {minimum} y {MAX_LENGTH} caracteres.")
     if not password.strip():
         raise PasswordPolicyError("password_blank", "La contrasena no puede ser solo espacios.")
-    if username and username.lower() in password.lower():
-        raise PasswordPolicyError("password_contains_username",
-                                  "La contrasena no puede contener el nombre de usuario.")

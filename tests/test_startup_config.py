@@ -474,3 +474,41 @@ def test_turbo_model_folder_with_vocabulary_json_is_accepted(tmp_path):
     result = _run_runtime_config(tmp_path, {"ITGLASSES_WHISPER_PYTHON": str(python),
                                             "ITGLASSES_WHISPER_MODEL": str(turbo)})
     assert result.returncode == 2 and "incomplete" in result.stdout
+
+
+def _run_and_print_password_minimum(project_root, entries, environment=None):
+    (project_root / "runtime-config.psd1").write_text(
+        "@{ WhisperPython = ''; WhisperModel = ''; RequireAuth = $false; AllowLanBinding = $false; "
+        f"PairingOrigin = ''; {entries} }}",
+        encoding="utf-8",
+    )
+    script = (
+        "$ErrorActionPreference='Stop'; "
+        f". {_quote_ps(ROOT / 'scripts' / 'runtime-config.ps1')}; "
+        f"try {{ $null=Set-ITGlassesRuntimeConfiguration -ProjectRoot {_quote_ps(project_root)}; "
+        "'MIN=[' + $env:ITGLASSES_PASSWORD_MIN_LENGTH + ']' } "
+        "catch { 'CONFIG_ERROR:' + $_.Exception.Message; exit 2 }"
+    )
+    env = {**os.environ, "ITGLASSES_WHISPER_PYTHON": "", "ITGLASSES_WHISPER_MODEL": "",
+           "ITGLASSES_REQUIRE_AUTH": "", "ITGLASSES_ALLOW_LAN_BINDING": "", "ITGLASSES_API_TOKENS": "",
+           "ITGLASSES_PAIRING_ORIGIN": "", "ITGLASSES_PASSWORD_MIN_LENGTH": "", **(environment or {})}
+    return subprocess.run(
+        [POWERSHELL, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script],
+        capture_output=True, text=True, env=env, timeout=20, check=False,
+    )
+
+
+def test_password_minimum_from_configuration_is_exported(tmp_path):
+    result = _run_and_print_password_minimum(tmp_path, "PasswordMinLength = 12")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "MIN=[12]" in result.stdout
+    result = _run_and_print_password_minimum(tmp_path, "PasswordMinLength = 12", {"ITGLASSES_PASSWORD_MIN_LENGTH": "8"})
+    assert "MIN=[8]" in result.stdout  # the environment wins
+    result = _run_and_print_password_minimum(tmp_path, "WhisperIdleSeconds = 900")
+    assert "MIN=[]" in result.stdout  # absent: the backend uses its default (5)
+
+
+@pytest.mark.parametrize("entry", ["PasswordMinLength = 4", "PasswordMinLength = '8'"])
+def test_invalid_password_minimum_stops_startup(tmp_path, entry):
+    result = _run_and_print_password_minimum(tmp_path, entry)
+    assert result.returncode == 2 and "PasswordMinLength" in result.stdout
