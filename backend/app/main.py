@@ -33,6 +33,18 @@ def _start_whisper_preload(app):
     return asyncio.create_task(preload()) if preload else None
 
 
+def _start_piper_preload(app):
+    """Background load of the persistent Piper voice (ITGLASSES_PIPER_PERSISTENT, on by default). Never blocks."""
+    from backend.app.voice.service import VoiceService, piper_persistent_enabled
+
+    if not piper_persistent_enabled():
+        return None
+    if getattr(app.state, "voice", None) is None:
+        app.state.voice = VoiceService()
+    preload = getattr(app.state.voice, "preload_piper", None)
+    return asyncio.create_task(preload()) if preload else None
+
+
 def ollama_warmup_enabled(value=None):
     """ITGLASSES_OLLAMA_WARMUP: load the chat model at startup. On by default; 0/false/off/no turn it off."""
     import os
@@ -59,12 +71,14 @@ def create_app(provider: LLMProvider | None = None, knowledge=None, voice=None, 
     async def lifespan(app):
         preload_task = None
         warmup_task = None
+        piper_task = None
         try:
             preload_task = _start_whisper_preload(app)
             warmup_task = _start_ollama_warmup(app, warm)
+            piper_task = _start_piper_preload(app)
             yield
         finally:
-            for task in (preload_task, warmup_task):
+            for task in (preload_task, warmup_task, piper_task):
                 if task is not None and not task.done():
                     task.cancel()
                     await asyncio.gather(task, return_exceptions=True)

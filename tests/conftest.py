@@ -7,6 +7,11 @@ An explicit client=... always wins. Patched at configure time so that clients
 created in fixtures of any scope, or at import, get the same default.
 """
 import inspect
+import os
+
+# Tests fake the per-request speech worker; the persistent Piper (on by default) has its own tests with fake
+# processes (test_piper_persistent.py) and must never start a real Piper here.
+os.environ.setdefault("ITGLASSES_PIPER_PERSISTENT", "0")
 
 from starlette.testclient import TestClient
 

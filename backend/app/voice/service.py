@@ -37,6 +37,7 @@ from .persistent_worker import (
 )
 from . import vocabulary as voice_vocabulary
 from .correction import apply_to_result as _correct_transcript
+from .piper_persistent import PersistentPiper, PiperWorkerError
 
 logger = logging.getLogger(__name__)
 
@@ -239,6 +240,18 @@ def whisper_idle_seconds(device, value=None):
     return max(seconds, WHISPER_IDLE_MIN_SECONDS)
 
 
+# After a failure of the persistent Piper, the per-request worker is used for this long before trying again.
+PIPER_PAUSE_SECONDS = 300
+
+
+def piper_persistent_enabled(value=None):
+    """ITGLASSES_PIPER_PERSISTENT: keep the Piper voice loaded in one CPU process (no ~5 s load per answer). On by
+    default; 0/false/off/no use the per-request worker, the method before. Any failure of the persistent worker
+    falls back to the per-request worker for that answer."""
+    raw = os.environ.get("ITGLASSES_PIPER_PERSISTENT") if value is None else value
+    return str(raw or "").strip().lower() not in _FALSE
+
+
 def whisper_preload_enabled(value=None):
     """ITGLASSES_WHISPER_PRELOAD: load Whisper when the backend starts. Off by default."""
     flag = str(_setting("ITGLASSES_WHISPER_PRELOAD", value) or "").strip().lower()
@@ -334,6 +347,11 @@ def _runtime_arguments(target):
     return {"device": target["device"], "compute_type": target["compute_type"]}
 
 
+def _seconds_label(value):
+    """A number of seconds for the log (keeps the decimal point); anything else is 'none'."""
+    return f"{value:.3f}" if isinstance(value, (int, float)) and not isinstance(value, bool) else "none"
+
+
 def _safe_label(value):
     return re.sub(r"[^a-zA-Z0-9_]", "", str(value or "unknown"))[:64]
 
@@ -359,6 +377,9 @@ class VoiceService:
         self._whisper_lifecycle_lock = asyncio.Lock()
         self._gpu_cooldown_until = 0.0
         self._vram_cache = None
+        # Persistent Piper (CPU): created on first use or at startup; paused for a while after a failure.
+        self._piper = None
+        self._piper_paused_until = 0.0
 
     @property
     def _whisper_active(self):
@@ -671,6 +692,48 @@ class VoiceService:
 
     async def shutdown(self):
         await self._stop_whisper_worker()
+        if self._piper is not None:
+            await self._piper.stop()
+
+    def _piper_worker(self):
+        if self._piper is None:
+            self._piper = PersistentPiper(self.models, self.temporary, PROJECT_ROOT)
+        return self._piper
+
+    async def _persistent_tts(self, task):
+        """Synthesis with the persistent Piper into task["output"]. None when it is off, paused or fails: the
+        caller then uses the per-request worker, as before. Logs codes and times only, never the text."""
+        if not piper_persistent_enabled() or time.monotonic() < self._piper_paused_until:
+            return None
+        started = time.perf_counter()
+        try:
+            self.temporary.mkdir(parents=True, exist_ok=True)
+            reply = await self._piper_worker().synthesize(task)
+            if not Path(task["output"]).is_file():
+                raise PiperWorkerError("no_output")
+        except PiperWorkerError as error:
+            self._piper_paused_until = time.monotonic() + PIPER_PAUSE_SECONDS
+            logger.warning("Piper persistent failed code=%s; per-request worker for %d s",
+                           _safe_label(str(error)), PIPER_PAUSE_SECONDS)
+            return None
+        logger.info("Piper persistent ok elapsed_ms=%d synthesis_s=%s",
+                    round((time.perf_counter() - started) * 1000), _seconds_label(reply.get("synthesis_seconds")))
+        return {"engine": "piper", "persistent": True, "execution_providers": ["CPUExecutionProvider"],
+                "threads": 2, "cpu_seconds": reply.get("cpu_seconds")}
+
+    async def preload_piper(self):
+        """Load the persistent Piper voice at startup so the first answer does not pay the load. Never raises."""
+        if not piper_persistent_enabled() or not self._tts_available():
+            return False
+        try:
+            self.temporary.mkdir(parents=True, exist_ok=True)
+            await self._piper_worker().ensure_started()
+            return True
+        except PiperWorkerError as error:
+            logger.warning("Piper preload failed code=%s", _safe_label(str(error)))
+        except Exception as error:  # noqa: BLE001 - preload must never break the backend startup
+            logger.warning("Piper preload failed error_type=%s", _safe_label(type(error).__name__))
+        return False
 
     async def preload_whisper(self):
         """Voz 3 (ITGLASSES_WHISPER_PRELOAD, off by default): load the configured Whisper when the backend starts.
@@ -1094,6 +1157,12 @@ class VoiceService:
                     task["input"] = str(folder / "input.wav")
                 else:
                     task.update(payload)
+                    # Persistent Piper first (ITGLASSES_PIPER_PERSISTENT, on by default); None = per-request below.
+                    persistent = await self._persistent_tts(task)
+                    if persistent is not None:
+                        persistent["elapsed_ms"] = round((time.perf_counter() - started) * 1000)
+                        persistent["audio"] = Path(task["output"]).read_bytes()
+                        return persistent
                 environment = {**os.environ, "TEMP": str(self.temporary), "TMP": str(self.temporary),
                                "OMP_NUM_THREADS": "2",
                                "OPENBLAS_NUM_THREADS": "2", "PYTHONDONTWRITEBYTECODE": "1"}

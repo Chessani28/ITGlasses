@@ -29,6 +29,18 @@ _MD_LIST = re.compile(r"^\s*[-*+]\s+", re.MULTILINE)
 _MD_NUMBERED = re.compile(r"^\s*\d+\.\s+", re.MULTILINE)
 
 
+# Shown in the chat above general answers; never read aloud (same text as assistant.service.GENERAL_NOTICE).
+GENERAL_NOTICE = "Respuesta general (no proviene de los manuales autorizados):"
+_GENERAL_NOTICE_LINE = re.compile(r"(?m)^[ \t]*" + re.escape(GENERAL_NOTICE) + r"[ \t]*\n?")
+
+
+def strip_general_notice(text: str) -> str:
+    """Remove the general-answer notice where a line starts with it (the chat keeps it). Never returns an empty
+    text: a notice alone is left as is."""
+    stripped = _GENERAL_NOTICE_LINE.sub("", text or "")
+    return stripped if stripped.strip() else text
+
+
 def normalize_for_speech(text: str) -> str:
     """Normalize text for TTS: remove emojis, markdown, handle URLs/citations."""
     if not text:

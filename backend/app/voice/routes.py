@@ -6,7 +6,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field
 from backend.app.knowledge.models import KnowledgeError
 from backend.app.knowledge.routes import service as knowledge_service
-from .normalize import normalize_for_speech
+from .normalize import normalize_for_speech, strip_general_notice
 from .service import MAX_AUDIO, STT_ENGINE_ALIASES, STT_ENGINES, VOICE_NAME, VoiceService, validate_audio
 
 router = APIRouter(prefix="/api/v1/voice")
@@ -92,7 +92,8 @@ async def synthesize(payload: SpeechRequest, request: Request):
                     raise KnowledgeError("source_unavailable", "A referenced source is no longer authorized or current. Ask the question again.", 409)
     await verify_sources()
     # Normalize text for speech synthesis
-    speech_text = normalize_for_speech(payload.text)
+    # The general-answer notice stays in the chat; the voice does not read it.
+    speech_text = normalize_for_speech(strip_general_notice(payload.text))
     tts_payload = payload.model_dump(exclude={"citation_ids"})
     tts_payload["text"] = speech_text
     result = await svc.run("tts", tts_payload, request)
