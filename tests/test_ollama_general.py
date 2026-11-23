@@ -167,8 +167,8 @@ def test_warmup_setting(value, enabled, monkeypatch):
     assert ollama_warmup_enabled() is enabled
 
 
-def test_config_keeps_the_chat_model_loaded_ten_minutes_and_the_selector_uses_it():
-    assert load_settings(ROOT / "config.toml").keep_alive == "10m"
+def test_config_keeps_the_chat_model_loaded_two_hours_and_the_selector_uses_it():
+    assert load_settings(ROOT / "config.toml").keep_alive == "2h"
     assert Settings().keep_alive == "30s"  # the code default is unchanged
     assert EvidenceSelector("m", keep_alive="10m").keep_alive == "10m"
     routes = (ROOT / "backend" / "app" / "knowledge" / "routes.py").read_text(encoding="utf-8")

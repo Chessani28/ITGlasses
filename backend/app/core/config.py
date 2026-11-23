@@ -1,10 +1,13 @@
 from dataclasses import dataclass
 from pathlib import Path
 import os
+import re
 import tomllib
 from urllib.parse import urlsplit
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
+# An Ollama keep_alive duration: "30s", "10m", "2h", "1.5h", plain seconds, 0 (unload now) or -1 (forever).
+KEEP_ALIVE = re.compile(r"^(?:-1|\d+(?:\.\d+)?(?:ms|s|m|h)?)$")
 
 
 @dataclass(frozen=True)
@@ -42,6 +45,8 @@ class Settings:
             raise ValueError("Context must be between 512 and 4096 tokens")
         if not 1 <= self.max_output_tokens <= 1024:
             raise ValueError("Output must be between 1 and 1024 tokens")
+        if not isinstance(self.keep_alive, str) or not KEEP_ALIVE.fullmatch(self.keep_alive.strip()):
+            raise ValueError("keep_alive must be an Ollama duration such as 30s, 10m, 2h or -1")
         if not 1 <= self.timeout_seconds <= 300 or not 1 <= self.health_timeout_seconds <= 10:
             raise ValueError("Timeout outside supported bounds")
 
@@ -56,6 +61,8 @@ def load_settings(path: Path = PROJECT_ROOT / "config.toml") -> Settings:
         data["provider"] = os.environ["ITGLASSES_PROVIDER"]
     if "OLLAMA_BASE_URL" in os.environ:
         data["ollama_url"] = os.environ["OLLAMA_BASE_URL"]
+    if os.environ.get("ITGLASSES_OLLAMA_KEEP_ALIVE", "").strip():
+        data["keep_alive"] = os.environ["ITGLASSES_OLLAMA_KEEP_ALIVE"].strip()
     if "ITGLASSES_ALLOW_LAN_BINDING" in os.environ:
         data["allow_lan_binding"] = os.environ["ITGLASSES_ALLOW_LAN_BINDING"].lower() in {"1", "true", "yes"}
     return Settings(**data)

@@ -1,3 +1,5 @@
 provider = "ollama"
-# Keep the chat model loaded 10 minutes after each use (default 30 s): turbo and qwen3 fit together in the GPU.
-keep_alive = "10m"
+# Keep the chat model loaded 2 hours after each use (code default 30 s) so it never unloads between questions in a
+# demo. Applies to chat, the evidence selector and the startup warm-up. Whisper turbo and qwen3 fit together in the
+# GPU; this does not raise the VRAM in use, it only keeps it longer. ITGLASSES_OLLAMA_KEEP_ALIVE overrides it.
+keep_alive = "2h"
