@@ -97,7 +97,7 @@ def test_internal_questions_never_reach_the_public_search(message):
 
 
 def test_diagnostics_are_readable_in_the_log_text_without_the_query(caplog):
-    caplog.set_level("INFO", logger="uvicorn.error")
+    caplog.set_level("INFO", logger="backend.app.assistant.web_search")   # the logger that reaches backend.log
     message = "Busca en internet cuál es la versión más reciente de DNS SecretoPrueba-7731"
     web, _ = ask(message, web=Web(error=WebSearchError("private provider detail", "timeout")))
     assert len(web.calls) == 1

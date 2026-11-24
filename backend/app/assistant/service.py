@@ -515,10 +515,20 @@ class UnifiedAssistantService:
             "error_category": safe_error,
             "response_mode": response_mode,
         }
+        from backend.app.assistant.web_search import ATTEMPT_OUTCOMES, VALID_BACKENDS
+        attempts = service_diagnostics.get("attempts")
+        diagnostic["attempts"] = [
+            {"backend": item.get("backend") if item.get("backend") in VALID_BACKENDS else "other",
+             "outcome": item.get("outcome") if item.get("outcome") in ATTEMPT_OUTCOMES else "other",
+             "ms": item.get("ms") if isinstance(item.get("ms"), int) and not isinstance(item.get("ms"), bool) else 0}
+            for item in (attempts if isinstance(attempts, list) else [])[:12] if isinstance(item, dict)
+        ]
+        cache = service_diagnostics.get("cache")
+        diagnostic["cache"] = cache if cache in {"hit", "miss", "off"} else "off"
         import json
         import logging
-        # Counts and categories only (never the query): visible in the console as well as in ``extra``.
-        logging.getLogger("uvicorn.error").info(
+        # Counts and categories only (never the query): logs\backend.log, and ``extra`` for the tests.
+        logging.getLogger("backend.app.assistant.web_search").info(
             "Public search diagnostics: %s",
             json.dumps(diagnostic, sort_keys=True, ensure_ascii=False),
             extra={"public_search_diagnostics": diagnostic},

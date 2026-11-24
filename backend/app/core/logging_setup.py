@@ -10,8 +10,9 @@ MAX_BYTES = 1_000_000
 BACKUPS = 5
 FORMAT = "%(asctime)s %(levelname)s %(name)s: %(message)s"
 _MARK = "_itglasses_handler"
-# Third-party loggers that would repeat every request (URLs) at INFO.
-QUIET = ("httpx", "httpcore", "multipart", "asyncio")
+# Third-party loggers that would repeat every request (URLs) at INFO; primp and ddgs would also write the public
+# search query (the user's words) in its URLs.
+QUIET = ("httpx", "httpcore", "multipart", "asyncio", "primp", "ddgs")
 
 
 def configure_logging(root: Path, console=True) -> Path:

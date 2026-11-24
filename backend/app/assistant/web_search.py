@@ -15,6 +15,7 @@ import logging
 from urllib.parse import urlsplit
 import os
 import re
+import time
 import requests
 from dataclasses import dataclass, field
 from typing import Protocol
@@ -23,6 +24,63 @@ from typing import Protocol
 _SAFE_ERROR_CATEGORIES = frozenset({
     "provider_unavailable", "timeout", "rate_limited", "no_results", "irrelevant",
 })
+logger = logging.getLogger(__name__)   # INFO reaches logs\backend.log (uvicorn.error does not)
+
+# ddgs text engines, tried in this order, one after another; "auto" lets ddgs pick (its own fan-out).
+BACKENDS_VARIABLE = "ITGLASSES_WEB_BACKENDS"
+DEFAULT_BACKENDS = ("yahoo", "google", "yandex", "auto")
+VALID_BACKENDS = frozenset({"auto", "bing", "brave", "duckduckgo", "google", "grokipedia", "mojeek", "startpage",
+                            "wikipedia", "yahoo", "yandex"})
+TOTAL_VARIABLE = "ITGLASSES_WEB_TOTAL_SECONDS"     # all the attempts of one search together
+DEFAULT_TOTAL_SECONDS, TOTAL_RANGE = 25, (5, 120)
+CACHE_VARIABLE = "ITGLASSES_WEB_CACHE_HOURS"       # "current version" answers; 0 = no cache
+DEFAULT_CACHE_HOURS, CACHE_RANGE = 6, (0, 48)
+CACHE_MAX = 64
+ATTEMPT_OUTCOMES = frozenset({"ok", "not_official", "skipped_budget"}) | _SAFE_ERROR_CATEGORIES
+# A question about the current state of something: its answer may be cached for a few hours.
+CURRENT_FACT = re.compile(r"versi[oó]n|version|latest|current|newest|reciente|actual|[uú]ltim", re.I)
+
+
+class WebSearchConfigError(ValueError):
+    """Invalid ITGLASSES_WEB_BACKENDS, ITGLASSES_WEB_TOTAL_SECONDS or ITGLASSES_WEB_CACHE_HOURS."""
+
+
+def _number(variable, default, bounds):
+    raw = (os.environ.get(variable) or "").strip()
+    if not raw:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        raise WebSearchConfigError(f"{variable} must be a number between {bounds[0]} and {bounds[1]}") from None
+    if not bounds[0] <= value <= bounds[1]:
+        raise WebSearchConfigError(f"{variable} must be a number between {bounds[0]} and {bounds[1]}")
+    return value
+
+
+def search_settings():
+    """(backends, total seconds, cache hours) from the environment; WebSearchConfigError if invalid."""
+    raw = (os.environ.get(BACKENDS_VARIABLE) or "").strip()
+    backends = tuple(name.strip().lower() for name in raw.split(",") if name.strip()) if raw else DEFAULT_BACKENDS
+    unknown = [name for name in backends if name not in VALID_BACKENDS]
+    if not backends or unknown:
+        raise WebSearchConfigError(f"{BACKENDS_VARIABLE} accepts a comma-separated list of: "
+                                   + ", ".join(sorted(VALID_BACKENDS)))
+    return backends, _number(TOTAL_VARIABLE, DEFAULT_TOTAL_SECONDS, TOTAL_RANGE), \
+        _number(CACHE_VARIABLE, DEFAULT_CACHE_HOURS, CACHE_RANGE)
+
+
+def _classify(exc, errors):
+    """A ddgs (or thread) failure as a safe WebSearchError."""
+    if isinstance(exc, WebSearchError):
+        return exc
+    if isinstance(exc, (TimeoutError, asyncio.TimeoutError, requests.Timeout, errors[2])):
+        return WebSearchError("public search timed out", "timeout")
+    if isinstance(exc, errors[1]):
+        return WebSearchError("public search was rate limited", "rate_limited")
+    if isinstance(exc, errors[0]) and "no results found" in str(exc).casefold():
+        return WebSearchError("provider returned no results", "no_results")
+    return WebSearchError("public search provider failed", "provider_unavailable")
 
 
 def search_query_category(query: str) -> str:
@@ -94,7 +152,8 @@ class DuckDuckGoSearch:
     context.
     """
 
-    def __init__(self, endpoint=None, timeout_seconds: float = 15.0, user_agent=None):
+    def __init__(self, endpoint=None, timeout_seconds: float = 15.0, user_agent=None, backends=None,
+                 total_seconds=None):
         self.endpoint = endpoint or os.environ.get(
             "ITGLASSES_WEB_DUCKDUCKGO_ENDPOINT",
             "https://api.duckduckgo.com/",
@@ -104,12 +163,19 @@ class DuckDuckGoSearch:
             "ITGLASSES_WEB_USER_AGENT", "ITGlasses-web-assistant/1.0"
         )
         self.last_diagnostics = {}
+        configured, total, _ = search_settings()
+        self.backends = tuple(backends or configured)
+        self.total_seconds = float(total_seconds or total)
 
-    async def search(self, query: str, max_results: int = 5) -> list[WebSearchResult]:
+    async def search(self, query: str, max_results: int = 5, accept=None) -> list[WebSearchResult]:
+        """Try the ddgs engines of ITGLASSES_WEB_BACKENDS in order until one gives results (and, with accept,
+        results that accept() takes: official ones), all within ITGLASSES_WEB_TOTAL_SECONDS. Results not
+        accepted are kept as a last resort. Only the public query is sent."""
         self.last_diagnostics = {
             "provider_result_count": 0,
             "basic_validated_count": 0,
             "provider_discard_reasons": {},
+            "attempts": [],
         }
         if not query or not query.strip():
             raise WebSearchError("empty query")
@@ -123,28 +189,54 @@ class DuckDuckGoSearch:
                 "search dependency is unavailable", "provider_unavailable"
             ) from exc
 
-        try:
-            def lookup():
-                with DDGS(timeout=self.timeout_seconds) as ddgs:
-                    return list(ddgs.text(query.strip(), max_results=max_results))
-            raw = await asyncio.to_thread(lookup)
-        except TimeoutException as exc:
-            raise WebSearchError("public search timed out", "timeout") from exc
-        except RatelimitException as exc:
-            raise WebSearchError("public search was rate limited", "rate_limited") from exc
-        except DDGSException as exc:
-            if "no results found" in str(exc).casefold():
-                raise WebSearchError("provider returned no results", "no_results") from exc
-            raise WebSearchError("public search provider failed", "provider_unavailable") from exc
-        except (TimeoutError, asyncio.TimeoutError, requests.Timeout) as exc:
-            raise WebSearchError("public search timed out", "timeout") from exc
-        except Exception as exc:
-            raise WebSearchError("public search provider failed", "provider_unavailable") from exc
+        errors = (DDGSException, RatelimitException, TimeoutException)
+        deadline = time.monotonic() + self.total_seconds
+        attempts = self.last_diagnostics["attempts"]
+        fallback = None
+        failure = None
+        for backend in self.backends:
+            remaining = deadline - time.monotonic()
+            if remaining < 1:
+                attempts.append({"backend": backend, "outcome": "skipped_budget", "ms": 0})
+                break
+            started = time.monotonic()
 
+            def lookup(backend=backend, timeout=min(self.timeout_seconds, remaining)):
+                with DDGS(timeout=timeout) as ddgs:
+                    return list(ddgs.text(query.strip(), max_results=max_results, backend=backend))
+            try:
+                raw = await asyncio.wait_for(asyncio.to_thread(lookup), timeout=remaining)
+            except Exception as exc:  # noqa: BLE001 - classified, never shown
+                failure = _classify(exc, errors)
+                attempts.append({"backend": backend, "outcome": failure.category,
+                                 "ms": int((time.monotonic() - started) * 1000)})
+                continue
+            results, counts = self._validated(raw, max_results)
+            elapsed = int((time.monotonic() - started) * 1000)
+            if not results:
+                failure = WebSearchError("provider returned no results", "no_results")
+                attempts.append({"backend": backend, "outcome": "no_results", "ms": elapsed})
+                continue
+            if accept is not None and not accept(results):
+                attempts.append({"backend": backend, "outcome": "not_official", "ms": elapsed})
+                fallback = fallback or (results, counts)
+                continue
+            attempts.append({"backend": backend, "outcome": "ok", "ms": elapsed})
+            self.last_diagnostics.update(counts)
+            return results
+        if fallback is not None:
+            self.last_diagnostics.update(fallback[1])
+            return fallback[0]
+        raise failure or WebSearchError("provider returned no results", "no_results")
+
+    @staticmethod
+    def _validated(raw, max_results):
+        """The usable results of one engine and their counts."""
+        counts = {"provider_result_count": 0, "basic_validated_count": 0, "provider_discard_reasons": {}}
         results: list[WebSearchResult] = []
         discard_reasons = {}
-        for item in raw:
-            self.last_diagnostics["provider_result_count"] += 1
+        for item in raw or []:
+            counts["provider_result_count"] += 1
             if not isinstance(item, dict):
                 discard_reasons["invalid_result"] = discard_reasons.get("invalid_result", 0) + 1
                 continue
@@ -179,9 +271,9 @@ class DuckDuckGoSearch:
             results.append(WebSearchResult(title=title, url=link, snippet=snippet))
 
         results = results[: max_results or 0]
-        self.last_diagnostics["basic_validated_count"] = len(results)
-        self.last_diagnostics["provider_discard_reasons"] = discard_reasons
-        return results
+        counts["basic_validated_count"] = len(results)
+        counts["provider_discard_reasons"] = discard_reasons
+        return results, counts
 
 
 class OfflineSearch:
@@ -204,6 +296,9 @@ class WebSearchService:
             backend = self._default_backend()
         self.backend = backend
         self.last_error: Exception | None = None
+        self.cache_seconds = search_settings()[2] * 3600
+        self._cache = {}        # public query -> (expires, results); in memory only
+        self._clock = time.monotonic
 
     @staticmethod
     def _default_backend():
@@ -249,9 +344,22 @@ class WebSearchService:
             if windows:
                 query = f"Windows {windows.group(1)} latest version release information"
             query += " site:learn.microsoft.com"
+        cacheable = self.cache_seconds > 0 and bool(CURRENT_FACT.search(query))
+        self.last_diagnostics["cache"] = "miss" if cacheable else "off"
+        key = (query, max_results)
+        cached = self._cache.get(key) if cacheable else None
+        if cached is not None and cached[0] > self._clock():
+            self.last_diagnostics.update({"cache": "hit", "provider_result_count": len(cached[1]),
+                                          "basic_validated_count": len(cached[1])})
+            return list(cached[1])
+        self._cache.pop(key, None)
         try:
-            results = await self.backend.search(query, max_results)
+            if official_microsoft and isinstance(self.backend, DuckDuckGoSearch):
+                results = await self.backend.search(query, max_results, accept=self._has_official)
+            else:
+                results = await self.backend.search(query, max_results)
             backend_diagnostics = getattr(self.backend, "last_diagnostics", {})
+            self.last_diagnostics["attempts"] = list(backend_diagnostics.get("attempts", []))
             self.last_diagnostics["provider_result_count"] = backend_diagnostics.get(
                 "provider_result_count", len(results)
             )
@@ -291,6 +399,7 @@ class WebSearchService:
                 backend_diagnostics.get("provider_discard_reasons", {})
             )
             self.last_diagnostics["error_category"] = _safe_error_category(exc) or "provider_unavailable"
+            self.last_diagnostics["attempts"] = list(backend_diagnostics.get("attempts", []))
             return []
         except Exception:
             self.last_diagnostics["error_category"] = "provider_unavailable"
@@ -304,7 +413,16 @@ class WebSearchService:
             self.last_diagnostics["error_category"] = category
         else:
             self.last_diagnostics["error_category"] = _safe_error_category(self.last_error)
+            # Cache only what is worth repeating: for the Windows table, a verified version.
+            if cacheable and (not windows_release_query or results[0].verified):
+                if len(self._cache) >= CACHE_MAX:
+                    self._cache.pop(min(self._cache, key=lambda k: self._cache[k][0]))
+                self._cache[key] = (self._clock() + self.cache_seconds, tuple(results))
         return results
+
+    @staticmethod
+    def _has_official(results):
+        return any((urlsplit(result.url).hostname or "").endswith(".microsoft.com") for result in results)
 
     @staticmethod
     def _windows_release(result):
@@ -333,10 +451,10 @@ class WebSearchService:
             excerpt = (f"La versión con fecha de disponibilidad general más reciente en la tabla oficial es {latest[0]} "
                        f"({latest[2]}). Compilación publicada: {latest[7]}; fecha de revisión: {latest[6]}. "
                        "La disponibilidad para cada equipo depende del canal y la compatibilidad.")
-            logging.getLogger("uvicorn.error").info("Official release page fetched HTTP 200; version=%s", latest[0])
+            logger.info("Official release page fetched HTTP 200; version=%s", latest[0])
             return WebSearchResult(result.title, result.url, excerpt, verified=True)
         except (requests.RequestException, ValueError, UnicodeError) as exc:
-            logging.getLogger("uvicorn.error").warning("Official release verification failed: %s", exc)
+            logger.warning("Official release verification failed: %s", type(exc).__name__)
             return WebSearchResult(result.title, result.url,
                                    "No pude verificar la tabla actual de versiones. Consulta esta fuente oficial; no confirmo una versión más reciente.")
 

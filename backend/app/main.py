@@ -52,6 +52,7 @@ def _check_password_settings():
     from backend.app.backups import BackupConfigError, check_settings as backup_settings
     from backend.app.history.conversations import HistoryConfigError, check_settings as history_settings
     from backend.app.assistant.context import ContextConfigError, mode as context_mode
+    from backend.app.assistant.web_search import WebSearchConfigError, search_settings
     from backend.app.users.access import AccessConfigError, bearer_scope, loopback_mode
     from backend.app.users.passwords import PasswordConfigError, min_length
     from backend.app.users.sessions import SessionConfigError, lifetimes
@@ -65,8 +66,10 @@ def _check_password_settings():
         logger.info("daily_backup enabled=%s keep=%d", enabled, keep)
         saving, gap = history_settings()
         logger.info("chat_history enabled=%s device_gap_min=%d chat_context=%s", saving, gap // 60, context_mode())
+        backends, total, cache_hours = search_settings()
+        logger.info("public_search backends=%s total_s=%g cache_h=%g", ",".join(backends), total, cache_hours)
     except (PasswordConfigError, SessionConfigError, AccessConfigError, BackupConfigError, HistoryConfigError,
-            ContextConfigError) as error:
+            ContextConfigError, WebSearchConfigError) as error:
         logger.error("Invalid configuration: %s", error)
         raise
 

@@ -852,7 +852,7 @@ def test_consented_vpn_search_synthesizes_relevant_public_evidence():
 def test_search_diagnostics_report_retained_results_without_sensitive_content(caplog):
     from backend.app.assistant.web_search import WebSearchResult
 
-    caplog.set_level("INFO", logger="uvicorn.error")
+    caplog.set_level("INFO", logger="backend.app.assistant.web_search")
     secret_question = (
         "Según mis manuales, ¿cómo configuro la VPN de Contoso con contraseña "
         "SensitiveToken-48391?"
@@ -893,6 +893,8 @@ def test_search_diagnostics_report_retained_results_without_sensitive_content(ca
         "discard_reasons": {"provider": {}, "conversational": {}},
         "error_category": None,
         "response_mode": "ollama_synthesis",
+        "attempts": [],
+        "cache": "off",
     }
     assert all(
         sensitive not in caplog.text
@@ -903,7 +905,7 @@ def test_search_diagnostics_report_retained_results_without_sensitive_content(ca
 def test_relevance_filter_discards_results_and_logs_safe_reason(caplog):
     from backend.app.assistant.web_search import WebSearchResult
 
-    caplog.set_level("INFO", logger="uvicorn.error")
+    caplog.set_level("INFO", logger="backend.app.assistant.web_search")
     web = StubWebSearch(results=[
         WebSearchResult(
             "Impresora: instala el controlador",
@@ -941,7 +943,7 @@ def test_provider_failures_are_reported_safely_in_search_diagnostics(
 ):
     from backend.app.assistant.web_search import WebSearchError
 
-    caplog.set_level("INFO", logger="uvicorn.error")
+    caplog.set_level("INFO", logger="backend.app.assistant.web_search")
     web = StubWebSearch(error=WebSearchError(
         f"private provider detail {category}", category
     ))
@@ -964,7 +966,7 @@ def test_provider_failures_are_reported_safely_in_search_diagnostics(
 
 
 def test_zero_provider_results_are_reported_as_conversational_recovery(caplog):
-    caplog.set_level("INFO", logger="uvicorn.error")
+    caplog.set_level("INFO", logger="backend.app.assistant.web_search")
     web = StubWebSearch(results=[])
     service = build(knowledge=StubKnowledge(
         answer="Sin evidencia.", status="insufficient_evidence", sources=[]
@@ -988,7 +990,7 @@ def test_zero_provider_results_are_reported_as_conversational_recovery(caplog):
 def test_current_fact_search_logs_evidence_fallback_diagnostics(caplog):
     from backend.app.assistant.web_search import WebSearchResult
 
-    caplog.set_level("INFO", logger="uvicorn.error")
+    caplog.set_level("INFO", logger="backend.app.assistant.web_search")
     source = WebSearchResult(
         "Windows 11 release information",
         "https://learn.microsoft.com/en-us/windows/release-health/windows11-release-information",
