@@ -77,7 +77,7 @@ export class VoiceController {
     }
     const epoch = this.epoch, waitingWake = this.waitingWake;
     this.clock.clearTimeout(this.timer); this.abort = new AbortController();
-    this.state("transcribing", "Reconocimiento local en CPU…");
+    this.state("transcribing", "Reconocimiento de voz local…");
     try {
       const transcript = await this.io.transcribe(audio, this.abort.signal, this.preferences.engine);
       if (epoch !== this.epoch) return;

@@ -1,4 +1,5 @@
 """Local transport adapters; no alternate chat or authorization implementation."""
+import time
 from typing import Literal
 from uuid import UUID
 from fastapi import APIRouter, Request
@@ -10,6 +11,54 @@ from .normalize import normalize_for_speech, strip_general_notice
 from .service import MAX_AUDIO, STT_ENGINE_ALIASES, STT_ENGINES, VOICE_NAME, VoiceService, validate_audio
 
 router = APIRouter(prefix="/api/v1/voice")
+
+# Stage "historial" 5: when Whisper answers 503 (not enough GPU memory, GPU unusable, not configured) the web and
+# the app retry with Vosk; that Vosk transcription says why, in "notice" (the web shows it; the current app keeps
+# its own "Motor de voz básico" label and ignores the field until an Android stage shows it).
+FALLBACK_SECONDS = 120
+FALLBACK_NOTICES = {
+    "voice_vram_limit": "Whisper no disponible por memoria de la GPU; usando Vosk, la transcripción puede ser "
+                        "menos precisa.",
+    "voice_gpu_unavailable": "Whisper no puede usar la GPU en este momento; usando Vosk, la transcripción puede ser "
+                             "menos precisa.",
+    "voice_worker_startup": "Whisper no pudo iniciar en la GPU; usando Vosk, la transcripción puede ser menos precisa.",
+}
+FALLBACK_DEFAULT = "Whisper no está disponible; usando Vosk, la transcripción puede ser menos precisa."
+CPU_NOTICE = "Whisper funciona en la CPU con el modelo pequeño porque la GPU no está disponible; puede tardar más."
+FALLBACKS_MAX = 200
+
+
+def _requester(request):
+    """Who is talking: the paired device, the logged-in user or this PC (only to pair a Whisper failure with the
+    Vosk retry that follows it)."""
+    state = request.state
+    device = getattr(state, "device_id", None)
+    if device:
+        return ("device", device)
+    user = getattr(state, "user_id", None)
+    return ("user", user) if user else ("local", request.client.host if request.client else "")
+
+
+def _fallbacks(request):
+    table = getattr(request.app.state, "voice_fallbacks", None)
+    if table is None:
+        table = request.app.state.voice_fallbacks = {}
+    return table
+
+
+def _remember_whisper_failure(request, code):
+    table = _fallbacks(request)
+    if len(table) >= FALLBACKS_MAX:
+        table.pop(min(table, key=lambda key: table[key][1]))
+    table[_requester(request)] = (code, time.monotonic())
+
+
+def _vosk_notice(request):
+    """The reason of a Whisper failure of this requester in the last FALLBACK_SECONDS (used once), or None."""
+    found = _fallbacks(request).pop(_requester(request), None)
+    if found is None or time.monotonic() - found[1] > FALLBACK_SECONDS:
+        return None
+    return found[0]
 
 
 class DiagnosticSettings(BaseModel):
@@ -78,7 +127,20 @@ async def transcribe(request: Request):
         if len(raw) > MAX_AUDIO:
             raise KnowledgeError("audio_size", "Audio exceeds the 30-second limit.", 413)
     validate_audio(raw)
-    return await svc.run("stt", bytes(raw), request, engine=engine)
+    try:
+        result = await svc.run("stt", bytes(raw), request, engine=engine)
+    except KnowledgeError as error:
+        if engine == "whisper-small" and error.status == 503:
+            _remember_whisper_failure(request, error.code)
+        raise
+    if engine == "vosk":
+        code = _vosk_notice(request)
+        if code:
+            result = {**result, "fallback_from": "whisper-small", "fallback_reason": code,
+                      "notice": FALLBACK_NOTICES.get(code, FALLBACK_DEFAULT)}
+    elif result.get("fallback_reason"):
+        result = {**result, "notice": CPU_NOTICE}
+    return result
 
 
 @router.post("/synthesize")

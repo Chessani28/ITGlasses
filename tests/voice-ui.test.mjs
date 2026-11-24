@@ -25,7 +25,7 @@ test('captured audio remains replayable after stopping microphone and uses separ
     const controller=initVoice({lock(){},send(){}});
     await controller.io.transcribe(new Blob(['wav']),new AbortController().signal,'whisper-small');
     assert.equal(requests.at(-1).headers['X-ITGlasses-STT-Engine'],'whisper-small');
-    assert.equal(element('voice-engine-active').textContent,'Whisper Small · experimental');
+    assert.equal(element('voice-engine-active').textContent,'Whisper');
     controller.stop();
     await element('voice-playback-btn').handlers.click();
     assert.equal(element('voice-playback-audio').plays,1);
@@ -56,9 +56,65 @@ test('voice UI refuses to display a different engine than the one requested',asy
     const controller=initVoice({lock(){},send(){}});
     await assert.rejects(
       controller.io.transcribe(new Blob(['wav']),new AbortController().signal,'whisper-small'),
-      /devolvió Vosk en lugar de Whisper Small/
+      /devolvió Vosk · CPU en lugar de Whisper\./
     );
     assert.equal(element('voice-engine-active').textContent,'');
     assert.equal(element('voice-transcript').textContent,'');
+  } finally {Object.assign(globalThis,previous);}
+});
+
+function voiceDom(){
+  const nodes=new Map();
+  const element=id=>{
+    if(!nodes.has(id)) nodes.set(id,{id,src:'',value:'whisper-small',checked:false,hidden:true,handlers:{},dataset:{},textContent:'',
+      classList:{replace(){}},addEventListener(event,fn){this.handlers[event]=fn;},
+      removeEventListener(event,fn){if(this.handlers[event]===fn)delete this.handlers[event];},
+      focus(){},pause(){},load(){},removeAttribute(){},async play(){}});
+    return nodes.get(id);
+  };
+  return element;
+}
+
+test('when Whisper answers 503 the web retries once with Vosk and shows why',async()=>{
+  const previous={document:globalThis.document,window:globalThis.window,fetch:globalThis.fetch};
+  const element=voiceDom();
+  globalThis.document={getElementById:element,addEventListener(){}};
+  globalThis.window={addEventListener(){}};
+  const engines=[];
+  globalThis.fetch=async(path,options={})=>{
+    if(String(path).includes('/voice/status')) return new Response(JSON.stringify({stt_engines:{}}),{status:200});
+    const engine=options.headers['X-ITGlasses-STT-Engine']; engines.push(engine);
+    if(engine==='whisper-small') return new Response(JSON.stringify({error:{code:'voice_vram_limit',message:'GPU'}}),{status:503});
+    return new Response(JSON.stringify({text:'hola',raw_text:'hola',normalized_text:'hola',elapsed_ms:2,engine:'vosk',
+      notice:'Whisper no disponible por memoria de la GPU; usando Vosk, la transcripción puede ser menos precisa.'}),{status:200});
+  };
+  try {
+    const controller=initVoice({lock(){},send(){}});
+    const data=await controller.io.transcribe(new Blob(['wav']),new AbortController().signal,'whisper-small');
+    assert.deepEqual(engines,['whisper-small','vosk']);
+    assert.equal(data.engine,'vosk');
+    assert.equal(element('voice-engine-active').textContent,'Vosk · CPU');
+    assert.equal(element('voice-engine-notice').hidden,false);
+    assert.match(element('voice-engine-notice').textContent,/memoria de la GPU; usando Vosk/);
+    controller.stop();
+  } finally {Object.assign(globalThis,previous);}
+});
+
+test('any other Whisper failure is reported as it is, without a Vosk retry',async()=>{
+  const previous={document:globalThis.document,window:globalThis.window,fetch:globalThis.fetch};
+  const element=voiceDom();
+  globalThis.document={getElementById:element,addEventListener(){}};
+  globalThis.window={addEventListener(){}};
+  const engines=[];
+  globalThis.fetch=async(path,options={})=>{
+    if(String(path).includes('/voice/status')) return new Response(JSON.stringify({stt_engines:{}}),{status:200});
+    engines.push(options.headers['X-ITGlasses-STT-Engine']);
+    return new Response(JSON.stringify({error:{code:'voice_busy',message:'Ocupado'}}),{status:409});
+  };
+  try {
+    const controller=initVoice({lock(){},send(){}});
+    await assert.rejects(controller.io.transcribe(new Blob(['wav']),new AbortController().signal,'whisper-small'),/Ocupado/);
+    assert.deepEqual(engines,['whisper-small']);
+    assert.equal(element('voice-engine-notice').hidden,true);
   } finally {Object.assign(globalThis,previous);}
 });

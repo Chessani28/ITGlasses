@@ -2,8 +2,10 @@ import {api, chatPayload, documentState, elapsed, jsonOptions, limits, sourcePat
 
 import {initVoice} from "./voice-ui.mjs";
 import {initAccounts} from "./accounts.mjs";
+import {initHistory, toChatEntries} from "./history.mjs";
 let voiceActive = false;
 let accounts = null;
+let historyPanel = null;
 let currentPage = "chat";
 const PAGE_TITLES = {chat: "Conversaciones", documents: "Documentos", system: "Estado del sistema",
   "my-devices": "Mis dispositivos", users: "Usuarios", owners: "Dispositivos y usuarios", audit: "Auditoría"};
@@ -66,6 +68,7 @@ function setMode(mode) {
   $("message").maxLength = limits[mode];
   $("message").placeholder = text.prompt;
   $("context-note").textContent = text.context;
+  if (mode === "assistant") historyPanel?.cleared();  // the saved-or-not note of the history
   $("composer-mode").textContent = text.label;
   $("welcome-eyebrow").textContent = text.eyebrow;
   $("welcome-title").replaceChildren(document.createTextNode(text.title), node("br"), node("em", "", text.subtitle));
@@ -156,10 +159,16 @@ async function sendMessage(message, choiceId, signal) {
     result = data;
     if (typeof data.answer !== "string") throw new Error("El backend no devolvió una respuesta de chat válida.");
     if (mode === "assistant") chat.conversation = data.session_id || chat.conversation;
+    if (mode === "assistant") historyPanel?.answered(data);
     if (mode === "knowledge") chat.conversation = data.conversation_id || null;
     Object.assign(pending, {text: data.answer, ms, status: data.status || data.route, sources: mode === "assistant" ? (data.sources || []) : (mode === "knowledge" ? data.sources : []),
       options: data.options, conversation: chat.conversation});
   } catch (error) {
+    if (error.code === "conversation_not_found") {
+      chat.conversation = null;
+      error.message = "Esa conversación ya no está disponible (se borró o no es tuya). La siguiente pregunta iniciará una nueva.";
+      historyPanel?.refresh();
+    }
     if (error.code === "conversation_expired") {
       chat.conversation = null;
       error.message = "La conversación del servidor expiró. La siguiente pregunta iniciará una nueva; también puedes pulsar «Nueva conversación».";
@@ -337,7 +346,7 @@ $("message").addEventListener("keydown", event => {
   if (event.key === "Enter" && !event.shiftKey && !event.isComposing) { event.preventDefault(); $("chat-form").requestSubmit(); }
 });
 $("new-chat").addEventListener("click", () => {
-  state.chats[state.mode] = {messages: [], conversation: null}; renderChat(); $("message").focus();
+  state.chats[state.mode] = {messages: [], conversation: null}; renderChat(); historyPanel?.cleared(); $("message").focus();
 });
 $("refresh-status").addEventListener("click", refreshStatus);
 $("refresh-documents").addEventListener("click", refreshDocuments);
@@ -359,6 +368,21 @@ $("confirm-withdraw").addEventListener("click", () => {
 });
 const voice = initVoice({send: (text, signal) => sendMessage(text, undefined, signal), lock: active => {voiceActive = active; updateControls();}});
 setMode("assistant");
+// Stage "historial" 5: the saved conversations of the logged-in user, next to the chat.
+historyPanel = initHistory({
+  open(conversation) {
+    state.chats.assistant = {messages: toChatEntries(conversation.messages), conversation: conversation.id};
+    if (state.mode !== "assistant") setMode("assistant"); else renderChat();
+    pendingScroll();
+  },
+  reset() {
+    if (state.busy) return;
+    state.chats.assistant = {messages: [], conversation: null};
+    if (state.mode === "assistant") renderChat();
+  },
+  current: () => state.chats.assistant.conversation,
+  busy: () => state.busy || voiceActive,
+});
 refreshStatus();
 // Stage "usuarios" 6: login screen, user menu and administration pages. After a login or logout the status, the
 // document list (when it may be seen) and the device panel are reloaded.

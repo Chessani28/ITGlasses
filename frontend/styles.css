@@ -125,3 +125,28 @@ main{margin-left:240px;min-height:100dvh;display:flex;flex-direction:column}.top
 .secret-value{font:600 20px/1.6 Consolas,"Cascadia Mono",monospace!important;letter-spacing:1px;text-align:center;color:var(--green);user-select:all}
 .device-owner{display:block;color:#a9c3b5;font-size:11px}
 @media(max-width:760px){.user-box{display:flex;border-top:0;padding:0}.nav-section{display:none}.metadata-grid.three{grid-template-columns:1fr}.row-actions{justify-content:flex-start}nav{flex-wrap:wrap}}
+
+/* Stage "historial" 5: saved conversations next to the chat, and the voice engine notice. */
+.chat-page{width:min(100%,1440px)}
+.chat-layout{display:grid;grid-template-columns:280px minmax(0,1fr);gap:24px;flex:1;min-height:0}
+.chat-main{display:flex;flex-direction:column;min-width:0}
+.history-panel{border:1px solid var(--border);background:var(--panel);border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:10px;align-self:start;position:sticky;top:16px;max-height:calc(100dvh - 140px);overflow:hidden}
+.history-heading{display:flex;align-items:center;gap:8px}.history-heading h2{font-size:14px;font-weight:600;margin:0;flex:1}
+.history-tools{display:grid;gap:8px}.history-tools label{display:flex;flex-direction:column;gap:4px;font-size:10px;color:#acb8af}
+.history-tools select{border:1px solid #354039;border-radius:7px;background:#121814;color:#e0e9e2;padding:7px 8px;font-size:12px}
+.history-tools .text-button{justify-self:start;font-size:11px;padding:2px 0}
+.history-list{list-style:none;margin:0;padding:0;display:grid;gap:6px;overflow-y:auto;min-height:0}
+.history-item{border:1px solid #2a332e;border-radius:10px;background:#161c19}
+.history-item.active{border-color:var(--green);background:#1b241e}
+.history-open{display:flex;flex-direction:column;gap:2px;width:100%;text-align:left;background:transparent;border:0;color:var(--text);padding:9px 10px 4px}
+.history-open strong{font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.history-open small{font-size:10px;color:#93a398}.history-open:disabled{cursor:default;opacity:1}
+.history-actions{display:flex;gap:12px;padding:0 10px 8px}.history-actions button{font-size:10px;padding:2px 0}.history-actions .secondary-button{padding:5px 9px}
+.danger-text{color:var(--red)!important}
+.history-empty{font-size:11px;color:#96a79b;padding:10px}
+.history-anonymous p{font-size:12px;color:#b6c4bf;margin:0 0 8px}
+.history-feedback{font-size:11px;margin:0}.history-feedback:empty{display:none}.history-feedback .text-button{margin-left:8px}
+.history-list[hidden],.history-tools[hidden],.history-anonymous[hidden]{display:none}
+.voice-engine-notice{border:1px solid #6b5a3a;background:#2a2418;color:var(--amber)!important;border-radius:8px;padding:8px 12px}
+.voice-engine-notice[hidden]{display:none}
+@media(max-width:1100px){.chat-layout{grid-template-columns:1fr}.history-panel{position:static;max-height:none}.history-list{max-height:260px}}

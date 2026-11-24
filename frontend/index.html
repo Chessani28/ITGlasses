@@ -36,16 +36,31 @@
   <main id="main" tabindex="-1">
     <header class="topbar"><div><span class="breadcrumb">Workspace</span><span class="slash">/</span><span id="page-title">Conversaciones</span></div><div class="top-actions"><span id="connection" class="badge neutral">Comprobando conexión</span><button id="refresh-status" class="icon-button" title="Actualizar estado" aria-label="Actualizar estado">↻</button></div></header>
     <section id="chat-page" class="page chat-page" aria-label="Conversaciones">
+     <div class="chat-layout">
+      <aside id="history-panel" class="history-panel" aria-labelledby="history-title">
+        <div class="history-heading"><h2 id="history-title">Historial</h2><span id="history-count" class="badge neutral">—</span><button id="history-refresh" class="icon-button" type="button" title="Actualizar historial" aria-label="Actualizar historial">↻</button></div>
+        <div id="history-anonymous" class="history-anonymous" hidden><p>Sin sesión, las conversaciones no se guardan. Con tu cuenta verás aquí las de la web, el celular y los lentes.</p><button id="history-login" class="secondary-button" type="button">Iniciar sesión</button></div>
+        <div id="history-tools" class="history-tools" hidden>
+          <label>Canal<select id="history-channel"><option value="">Todos</option><option value="web">Web</option><option value="device">Celular y lentes</option></select></label>
+          <label>Dispositivo<select id="history-device"><option value="">Todos los dispositivos</option></select></label>
+          <button id="history-deleted" class="text-button" type="button">Ver borradas</button>
+        </div>
+        <p id="history-feedback" class="feedback history-feedback" role="status"></p>
+        <ul id="history-list" class="history-list" aria-label="Conversaciones guardadas" hidden></ul>
+        <button id="history-more" class="secondary-button" type="button" hidden>Ver más</button>
+      </aside>
+      <div class="chat-main">
       <div class="chat-toolbar"><button id="new-chat" class="text-button">＋ Nueva conversación</button></div>
 
       <details class="voice-panel" open>
-        <summary>◉ Asistente de voz <span class="badge neutral">LOCAL · CPU</span></summary>
+        <summary>◉ Asistente de voz <span id="voice-badge" class="badge neutral">LOCAL</span></summary>
         <div class="voice-heading"><div><strong id="voice-state" data-state="idle">En espera</strong><small id="voice-mic">○ MICRÓFONO APAGADO</small></div>
   <div class="voice-buttons"><button id="voice-start" class="primary-button" type="button">Activar micrófono</button><button id="voice-stop" class="danger-button" type="button" disabled>■ Detener / interrumpir</button></div>
   <label class="diagnostic-toggle"><input type="checkbox" id="voice-diagnostic-toggle"> Modo diagnóstico · desarrollo</label></div>
         <p id="voice-detail" role="status">Pulsa Activar para conceder permiso. El audio se procesa en este equipo.</p>
         <p class="voice-transcription" id="voice-transcript" aria-live="polite">Tu transcripción aparecerá aquí. Las respuestas y citas aparecerán en el chat.</p>
-        <p class="voice-engine-label">Motor utilizado: <strong id="voice-engine-active">Vosk</strong></p>
+        <p class="voice-engine-label">Motor utilizado: <strong id="voice-engine-active">—</strong></p>
+        <p id="voice-engine-notice" class="voice-engine-notice" role="status" hidden></p>
         <div id="voice-transcript-confirmation" class="voice-transcript-confirmation" hidden>
           <label for="voice-transcript-editor">Revisa y corrige la transcripción antes de enviarla al chat.</label>
           <textarea id="voice-transcript-editor" rows="3" maxlength="2000"></textarea>
@@ -90,10 +105,10 @@
         <audio id="voice-audio" controls aria-label="Respuesta hablada local"></audio><small id="voice-timing"></small>
         <details><summary>Preferencias de voz</summary><fieldset id="voice-preferences">
           <label>Reconocimiento de voz<select id="voice-engine">
-            <option id="voice-engine-vosk" value="vosk" selected>Vosk · predeterminado</option>
-            <option id="voice-engine-whisper" value="whisper-small" disabled>Whisper Small · experimental</option>
+            <option id="voice-engine-whisper" value="whisper-small" disabled>Whisper · recomendado</option>
+            <option id="voice-engine-vosk" value="vosk" selected>Vosk · básico, sin GPU</option>
           </select></label>
-          <small id="voice-engine-status" class="voice-wide">Vosk es el motor predeterminado.</small>
+          <small id="voice-engine-status" class="voice-wide">Comprobando los motores de voz…</small>
           <label><input id="voice-wake" type="checkbox"> Esperar «Oye, ITGlasses» · experimental</label>
           <label><input id="voice-speak" type="checkbox" checked> Leer las respuestas</label>
           <label>Ventana de seguimiento<select id="voice-window"><option value="15">15 segundos</option><option value="30">30 segundos</option><option value="60">60 segundos</option></select></label>
@@ -102,7 +117,7 @@
           <label>Umbral del micrófono<select id="voice-threshold"><option value="0.006">Sensible</option><option value="0.012" selected>Normal</option><option value="0.025">Menos sensible</option></select></label>
           <label class="voice-wide">Frases reconocidas, separadas por coma<input id="voice-aliases" maxlength="250" value="oye itglasses, oye it glasses, oye iti clases, oye y ti clases, oye y te clases"></label>
         </fieldset><p>La activación compara transcripciones: puede fallar o activarse por error. Ajusta las frases según la transcripción visible. No es un detector profesional de palabra clave.</p></details>
-        <small>Habla y deja una pausa de 1,1 segundos. Máximo 28 segundos por turno. La captura se ignora durante la respuesta para evitar eco. Detener libera el micrófono; una petición de chat ya enviada puede continuar en el servidor. El chat general no conserva contexto semántico.</small>
+        <small>Habla y deja una pausa de 1,1 segundos. Máximo 28 segundos por turno. La captura se ignora durante la respuesta para evitar eco. Detener libera el micrófono; una petición de chat ya enviada puede continuar en el servidor. El asistente conserva el contexto de la conversación y, con sesión iniciada, la guarda en tu historial.</small>
       </details>
 
       <div id="conversation" class="conversation" role="log" aria-label="Mensajes de la conversación" aria-live="polite">
@@ -127,6 +142,8 @@
         </form>
         <div class="composer-hint"><span>Enter para enviar · Shift + Enter para una nueva línea</span><span>Revisa las fuentes antes de actuar.</span></div>
       </div>
+      </div>
+     </div>
     </section>
     <section id="documents-page" class="page content-page" hidden aria-label="Documentos">
       <div class="section-heading"><div><span class="eyebrow">BIBLIOTECA LOCAL</span><h1>Tu base de conocimiento</h1><p>Sube, autoriza y organiza la documentación que puede consultar el asistente.</p></div><button id="refresh-documents" class="secondary-button">↻ Actualizar lista</button></div>
@@ -183,7 +200,7 @@
         <p id="users-feedback" class="feedback" role="status"></p>
       </form>
       <div class="list-heading"><h2>Cuentas <span id="users-count" class="badge neutral">—</span></h2><small>Un administrador gestiona usuarios; el superadmin, también administradores.</small></div>
-      <div class="table-wrap"><table class="data-table"><thead><tr><th>Usuario</th><th>Rol</th><th>Estado</th><th>Dispositivos</th><th>Último acceso</th><th><span class="sr-only">Acciones</span></th></tr></thead><tbody id="users-body"></tbody></table></div>
+      <div class="table-wrap"><table class="data-table"><thead><tr><th>Usuario</th><th>Rol</th><th>Estado</th><th>Dispositivos</th><th>Historial</th><th>Último acceso</th><th><span class="sr-only">Acciones</span></th></tr></thead><tbody id="users-body"></tbody></table></div>
     </section>
     <section id="owners-page" class="page content-page" hidden aria-label="Dispositivos y usuarios">
       <div class="section-heading"><div><span class="eyebrow">ADMINISTRACIÓN</span><h1>Dispositivos y usuarios</h1><p>Asigna cada celular o par de lentes a la persona que lo usa. Asignar no cambia su estado ni lo desconecta.</p></div><button id="owners-refresh" class="secondary-button" type="button">↻ Actualizar</button></div>
@@ -231,6 +248,7 @@
   </dialog>
   <dialog id="secret-dialog" aria-labelledby="secret-title"><h2 id="secret-title">Contraseña temporal</h2><p id="secret-description"></p><pre id="secret-value" class="secret-value"></pre><p>Se muestra solo esta vez. Entrégala en persona o por un canal seguro; tendrá que cambiarla al entrar.</p><div class="dialog-actions"><button id="secret-copy" type="button" class="secondary-button">Copiar</button><button id="secret-close" type="button" class="primary-button">Ya la entregué</button></div></dialog>
   <dialog id="confirm-dialog" aria-labelledby="confirm-title"><h2 id="confirm-title"></h2><p id="confirm-text"></p><div class="dialog-actions"><button id="confirm-cancel" type="button" class="secondary-button">Cancelar</button><button id="confirm-ok" type="button" class="danger-button"></button></div></dialog>
+  <dialog id="history-dialog" aria-labelledby="history-dialog-title"><form id="history-dialog-form" method="dialog"><h2 id="history-dialog-title"></h2><p id="history-dialog-text"></p><div id="history-dialog-field" class="dialog-fields" hidden><label>Título <input id="history-dialog-input" maxlength="80" autocomplete="off"></label></div><div class="dialog-actions"><button id="history-dialog-cancel" type="button" class="secondary-button">Cancelar</button><button id="history-dialog-confirm" type="submit" class="primary-button"></button></div></form></dialog>
   <noscript>Activa JavaScript para utilizar esta interfaz local.</noscript>
 </body>
 </html>

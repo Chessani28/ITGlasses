@@ -21,6 +21,8 @@ const ACTIONS = {
   "document.withdraw": "Documento retirado", "document.delete": "Documento eliminado",
   "document.reindex": "Documento reindexado", "settings.update": "Ajustes cambiados",
   "auth.login": "Inicio de sesión", "auth.logout": "Cierre de sesión", "auth.locked": "Cuenta bloqueada por intentos",
+  "conversation.delete": "Conversación borrada", "conversation.restore": "Conversación restaurada",
+  "conversation.purge": "Historial depurado",
 };
 const VIA = {local: "PC sin sesión", token: "Token compartido", device: "Dispositivo", session: "Sesión"};
 const OUTCOMES = {ok: ["Correcto", "good"], denied: ["Rechazado", "warning"], error: ["Error", "bad"]};
@@ -68,6 +70,18 @@ export function describeDetail(detail) {
   if (!detail) return "";
   return Object.entries(detail).filter(([key]) => key !== "via")
     .map(([key, value]) => `${key}: ${value === null ? "—" : value}`).join(" · ");
+}
+/** Admin column "Historial": counts and dates only (the server never sends titles or messages). */
+export function historySummary(stats) {
+  if (!stats) return {main: "—", note: ""};
+  if (!stats.conversations && !stats.deleted_pending) return {main: "Sin conversaciones", note: ""};
+  const main = `${stats.conversations} conv. · ${stats.messages} mensajes`;
+  const parts = [];
+  if (stats.web) parts.push(`${stats.web} web`);
+  if (stats.devices?.length) parts.push(stats.devices.map(device => `${device.label || "Dispositivo"} (${device.conversations})`).join(", "));
+  if (stats.deleted_pending) parts.push(`${stats.deleted_pending} borrada${stats.deleted_pending === 1 ? "" : "s"} pendiente${stats.deleted_pending === 1 ? "" : "s"}`);
+  if (stats.last_at) parts.push(`última ${when(stats.last_at)}`);
+  return {main, note: parts.join(" · ")};
 }
 export function actorName(entry) {
   if (entry.actor_username) return entry.actor_username;
@@ -253,7 +267,7 @@ export function initAccounts({showPage, currentPage, onChange}) {
     } catch (error) { feedback("users-feedback", error.message, true); }
     await loadUsers();
   }
-  function userRow(user) {
+  function userRow(user, stats) {
     const row = el("tr");
     const name = el("td");
     name.append(el("strong", "", user.username));
@@ -290,16 +304,23 @@ export function initAccounts({showPage, currentPage, onChange}) {
     } else {
       actions.append(el("small", "cell-note", user.id === session.user?.id ? "Tu cuenta" : "Sin permisos"));
     }
+    const history = el("td");
+    const summary = historySummary(stats?.[user.id]);
+    history.append(el("span", "", summary.main));
+    if (summary.note) history.append(el("small", "cell-note", summary.note));
     row.append(name, el("td", "", ROLE_NAMES[user.role] || user.role), status, el("td", "", user.devices ?? 0),
-      el("td", "", when(user.last_login_at)), actions);
+      history, el("td", "", when(user.last_login_at)), actions);
     return row;
   }
   async function loadUsers() {
     $("new-role-admin").hidden = !hasRole("superadmin");
     $("new-role-admin").disabled = !hasRole("superadmin");
     try {
-      const {data} = await api("/api/v1/admin/users", {}, 20000);
-      $("users-body").replaceChildren(...data.users.map(userRow));
+      const [{data}, stats] = await Promise.all([api("/api/v1/admin/users", {}, 20000),
+        // Metadata only; an older backend without it shows "—".
+        api("/api/v1/admin/conversations/stats", {}, 20000).then(({data: found}) =>
+          Object.fromEntries(found.users.map(item => [item.user_id, item]))).catch(() => null)]);
+      $("users-body").replaceChildren(...data.users.map(user => userRow(user, stats)));
       $("users-count").textContent = String(data.users.length);
     } catch (error) { feedback("users-feedback", error.message, true); }
   }
@@ -402,6 +423,17 @@ export function initAccounts({showPage, currentPage, onChange}) {
         card.append(el("span", "badge " + (device.state === "active" ? "good" : device.state === "blocked" ? "bad" : "neutral"),
           DEVICE_STATES[device.state] || device.state));
         card.append(el("p", "document-meta", `Aprobado: ${when(device.approved_at)} · Última conexión: ${when(device.last_seen)}`));
+        if (device.state !== "blocked") {
+          const label = device.name || device.model || "este dispositivo";
+          card.append(button("Nueva conversación en este dispositivo", "secondary-button", async () => {
+            try {
+              const {data: done} = await api(`/api/v1/me/devices/${encodeURIComponent(device.id)}/new-conversation`,
+                jsonOptions({}), 20000);
+              feedback("mine-feedback", done.closed ? `Listo: el siguiente mensaje desde ${label} empezará una conversación nueva.`
+                : `${label} no tenía una conversación abierta; la siguiente ya será nueva.`);
+            } catch (error) { feedback("mine-feedback", error.message, true); }
+          }));
+        }
         list.append(card);
       }
     } catch (error) { feedback("mine-feedback", error.message, true); }
@@ -425,7 +457,7 @@ export function initAccounts({showPage, currentPage, onChange}) {
     try {
       const {data} = await api(`/api/v1/admin/audit?${query}`, {}, 20000);
       $("audit-scope").textContent = data.complete ? "Vista completa (superadmin): incluye inicios de sesión y bloqueos."
-        : "Vista de administración: acciones sobre usuarios, dispositivos y documentos.";
+        : "Vista de administración: acciones sobre usuarios, dispositivos, documentos y conversaciones (sin su contenido).";
       $("audit-body").append(...data.entries.map(auditRow));
       auditBefore = data.next_before_id;
       $("audit-more").hidden = !auditBefore;
