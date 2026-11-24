@@ -47,75 +47,8 @@
     </div>
   </aside>
   <main id="main" tabindex="-1">
-    <header class="topbar"><button id="sidebar-toggle" class="icon-button menu-toggle" type="button" aria-label="Abrir menú" aria-expanded="false" aria-controls="sidebar">☰</button><span id="page-title" class="page-title">Nueva conversación</span><div class="top-actions"><span id="connection" class="badge neutral">Comprobando conexión</span><button id="refresh-status" class="icon-button" title="Actualizar estado" aria-label="Actualizar estado">↻</button></div></header>
+    <header class="topbar"><button id="sidebar-toggle" class="icon-button menu-toggle" type="button" aria-label="Abrir menú" aria-expanded="false" aria-controls="sidebar">☰</button><span id="page-title" class="page-title">Nueva conversación</span><div class="top-actions"><span id="connection" class="badge neutral">Comprobando conexión</span><button id="voice-settings-open" class="icon-button" type="button" title="Ajustes de voz" aria-label="Ajustes de voz" aria-haspopup="dialog">⚙</button><button id="refresh-status" class="icon-button" title="Actualizar estado" aria-label="Actualizar estado">↻</button></div></header>
     <section id="chat-page" class="page chat-page" aria-label="Conversaciones">
-      <details class="voice-panel">
-        <summary>◉ Asistente de voz <span id="voice-badge" class="badge neutral">LOCAL</span></summary>
-        <div class="voice-heading"><div><strong id="voice-state" data-state="idle">En espera</strong><small id="voice-mic">○ MICRÓFONO APAGADO</small></div>
-  <div class="voice-buttons"><button id="voice-start" class="primary-button" type="button">Activar micrófono</button><button id="voice-stop" class="danger-button" type="button" disabled>■ Detener / interrumpir</button></div>
-  <label class="diagnostic-toggle"><input type="checkbox" id="voice-diagnostic-toggle"> Modo diagnóstico · desarrollo</label></div>
-        <p id="voice-detail" role="status">Pulsa Activar para conceder permiso. El audio se procesa en este equipo.</p>
-        <p class="voice-transcription" id="voice-transcript" aria-live="polite">Tu transcripción aparecerá aquí. Las respuestas y citas aparecerán en el chat.</p>
-        <p class="voice-engine-label">Motor utilizado: <strong id="voice-engine-active">—</strong></p>
-        <p id="voice-engine-notice" class="voice-engine-notice" role="status" hidden></p>
-        <div id="voice-transcript-confirmation" class="voice-transcript-confirmation" hidden>
-          <label for="voice-transcript-editor">Revisa y corrige la transcripción antes de enviarla al chat.</label>
-          <textarea id="voice-transcript-editor" rows="3" maxlength="2000"></textarea>
-          <div class="voice-buttons">
-            <button id="voice-transcript-confirm" class="primary-button" type="button">Confirmar y enviar</button>
-            <button id="voice-transcript-discard" class="secondary-button" type="button">Descartar</button>
-          </div>
-        </div>
-        <div id="voice-diagnostic-section" hidden>
-          <h3>Diagnóstico de grabación</h3>
-          <div id="voice-recording-status" class="voice-diagnostic-item"></div>
-          <div class="voice-diagnostic-grid">
-            <div class="voice-diagnostic-item"><small>Duración grabación</small><strong id="voice-recording-duration">—</strong></div>
-            <div class="voice-diagnostic-item"><small>Motivo parada</small><strong id="voice-record-stop-reason">—</strong></div>
-            <div class="voice-diagnostic-item"><small>Duración habla</small><strong id="voice-speech-duration">—</strong></div>
-            <div class="voice-diagnostic-item"><small>Energía RMS</small><strong id="voice-audio-energy">—</strong></div>
-            <div class="voice-diagnostic-item"><small>Transcripción original</small><strong id="voice-transcript-raw">—</strong></div>
-<div class="voice-diagnostic-item"><small>Transcripción normalizada</small><strong id="voice-transcript-normalized">—</strong></div>
-          <div class="voice-diagnostic-item"><small>Confianza Vosk</small><strong id="voice-confidence">—</strong></div>
-            <div class="voice-diagnostic-item"><small>Motivos aclaración</small><strong id="voice-clarification-reasons">—</strong></div>
-          </div>
-          <div class="voice-diagnostic-row">
-            <label for="voice-playback-btn">Reproducir grabación capturada:</label>
-            <button id="voice-playback-btn" class="secondary-button" disabled>Reproducir</button>
-          </div>
-          <div class="voice-diagnostic-row">
-            <audio id="voice-playback-audio" controls style="width:100%"></audio>
-          </div>
-          <details id="voice-diag-toggle-row" class="open"><summary>Ajustes de grabación desarrollador</summary>
-            <form id="voice-diag-settings-form" hidden>
-              <div class="field-row">
-                <label>Silence timeout (s)<input id="voice-diag-silent-timeout" type="number" min="1.1" max="2.0" step="0.1" value="1.1"></label>
-                <label>Energy threshold<input id="voice-diag-threshold" type="number" min="0.008" max="0.012" step="0.001" value="0.012"></label>
-                <label>Pre-speech buffer (s)<input id="voice-diag-prespeak-buffer" type="number" min="0.2" max="0.3" step="0.05" value="0.25"></label>
-                <label>Max duration (s)<input id="voice-diag-max-duration" type="number" min="10" max="30" step="1" value="28"></label>
-              </div>
-              <p id="voice-diag-feedback" class="feedback" role="status"></p>
-              <button id="voice-diag-save" class="secondary-button" type="button">Guardar ajustes</button>
-            </form>
-          </details>
-        </div>
-        <audio id="voice-audio" controls aria-label="Respuesta hablada local"></audio><small id="voice-timing"></small>
-        <details><summary>Preferencias de voz</summary><fieldset id="voice-preferences">
-          <label>Reconocimiento de voz<select id="voice-engine">
-            <option id="voice-engine-whisper" value="whisper-small" disabled>Whisper · recomendado</option>
-            <option id="voice-engine-vosk" value="vosk" selected>Vosk · básico, sin GPU</option>
-          </select></label>
-          <small id="voice-engine-status" class="voice-wide">Comprobando los motores de voz…</small>
-          <label><input id="voice-wake" type="checkbox"> Esperar «Oye, ITGlasses» · experimental</label>
-          <label><input id="voice-speak" type="checkbox" checked> Leer las respuestas</label>
-          <label>Ventana de seguimiento<select id="voice-window"><option value="15">15 segundos</option><option value="30">30 segundos</option><option value="60">60 segundos</option></select></label>
-          <label>Voz española<select id="voice-speaker"><option value="0">Sharvard · hablante 1</option><option value="1">Sharvard · hablante 2</option></select></label>
-          <label>Velocidad<select id="voice-speed"><option value="0.85">Pausada</option><option value="1" selected>Normal</option><option value="1.15">Ágil</option></select></label>
-          <label>Umbral del micrófono<select id="voice-threshold"><option value="0.006">Sensible</option><option value="0.012" selected>Normal</option><option value="0.025">Menos sensible</option></select></label>
-          <label class="voice-wide">Frases reconocidas, separadas por coma<input id="voice-aliases" maxlength="250" value="oye itglasses, oye it glasses, oye iti clases, oye y ti clases, oye y te clases"></label>
-        </fieldset><p>La activación compara transcripciones: puede fallar o activarse por error. Ajusta las frases según la transcripción visible. No es un detector profesional de palabra clave.</p></details>
-        <small>Habla y deja una pausa de 1,1 segundos. Máximo 28 segundos por turno. La captura se ignora durante la respuesta para evitar eco. Detener libera el micrófono; una petición de chat ya enviada puede continuar en el servidor. El asistente conserva el contexto de la conversación y, con sesión iniciada, la guarda en tu historial.</small>
-      </details>
       <div id="conversation" class="conversation" role="log" aria-label="Mensajes de la conversación" aria-live="polite">
         <div id="welcome" class="welcome">
           <span class="brand-icon hero-icon" aria-hidden="true">it<span>g</span></span>
@@ -126,10 +59,30 @@
         </div>
       </div>
       <div class="composer-area">
+      <div id="voice-bar" class="voice-bar" hidden>
+        <div class="voice-bar-row">
+          <span class="voice-pulse" aria-hidden="true"></span>
+          <strong id="voice-state" data-state="idle">En espera</strong>
+          <p class="voice-transcription" id="voice-transcript" aria-live="polite">Tu transcripción aparecerá aquí.</p>
+          <button id="voice-stop" class="danger-button voice-stop" type="button" disabled>■ Detener</button>
+          <button id="voice-bar-close" class="icon-button small voice-bar-close" type="button" aria-label="Cerrar aviso de voz" title="Cerrar">×</button>
+        </div>
+        <div class="voice-bar-meta"><span id="voice-detail" role="status">Pulsa el micrófono para hablar. El audio se procesa en este equipo.</span><span class="voice-engine-label">Motor: <strong id="voice-engine-active">—</strong></span></div>
+        <p id="voice-engine-notice" class="voice-engine-notice" role="status" hidden></p>
+        <div id="voice-transcript-confirmation" class="voice-transcript-confirmation" hidden>
+          <label for="voice-transcript-editor">Revisa y corrige la transcripción antes de enviarla al chat.</label>
+          <textarea id="voice-transcript-editor" rows="3" maxlength="2000"></textarea>
+          <div class="voice-buttons">
+            <button id="voice-transcript-confirm" class="primary-button" type="button">Confirmar y enviar</button>
+            <button id="voice-transcript-discard" class="secondary-button" type="button">Descartar</button>
+          </div>
+        </div>
+        <audio id="voice-audio" class="voice-answer-audio" controls aria-label="Respuesta hablada local" hidden></audio>
+      </div>
         <form id="chat-form" class="composer">
           <label class="sr-only" for="message">Tu pregunta</label>
           <textarea id="message" rows="1" maxlength="16000" placeholder="Escribe tu pregunta…" required></textarea>
-          <div class="composer-bottom"><span id="composer-mode">Asistente ITGlasses</span><div class="composer-actions"><span id="character-count">0 / 16000</span><button id="send" type="submit" aria-label="Enviar pregunta" title="Enviar">↑</button></div></div>
+          <div class="composer-bottom"><span id="composer-mode">Asistente ITGlasses</span><div class="composer-actions"><span id="character-count">0 / 16000</span><button id="voice-mic-button" class="mic-button" type="button" aria-label="Activar micrófono" aria-pressed="false" title="Hablar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3Z"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg></button><button id="voice-start" type="button" hidden>Activar micrófono</button><button id="send" type="submit" aria-label="Enviar pregunta" title="Enviar">↑</button></div></div>
         </form>
         <p id="context-note" class="context-note">Asistente · contexto de sesión del backend.</p>
       </div>
@@ -204,6 +157,62 @@
       <div class="list-footer"><button id="audit-more" class="secondary-button" type="button" hidden>Ver más antiguas</button></div>
     </section>
   </main>
+  <dialog id="voice-settings" class="voice-settings" aria-labelledby="voice-settings-title">
+    <div class="dialog-heading"><div><span class="eyebrow">ASISTENTE DE VOZ</span><h2 id="voice-settings-title">Ajustes de voz <span id="voice-badge" class="badge neutral">LOCAL</span></h2></div><button id="voice-settings-close" class="icon-button" type="button" aria-label="Cerrar ajustes de voz">×</button></div>
+    <p class="voice-mic-line"><small id="voice-mic">○ MICRÓFONO APAGADO</small> <small id="voice-timing"></small></p>
+    <h3>Preferencias de voz</h3>
+    <fieldset id="voice-preferences">
+          <label>Reconocimiento de voz<select id="voice-engine">
+            <option id="voice-engine-whisper" value="whisper-small" disabled>Whisper · recomendado</option>
+            <option id="voice-engine-vosk" value="vosk" selected>Vosk · básico, sin GPU</option>
+          </select></label>
+          <small id="voice-engine-status" class="voice-wide">Comprobando los motores de voz…</small>
+          <label><input id="voice-wake" type="checkbox"> Esperar «Oye, ITGlasses» · experimental</label>
+          <label><input id="voice-speak" type="checkbox" checked> Leer las respuestas</label>
+          <label>Ventana de seguimiento<select id="voice-window"><option value="15">15 segundos</option><option value="30">30 segundos</option><option value="60">60 segundos</option></select></label>
+          <label>Voz española<select id="voice-speaker"><option value="0">Sharvard · hablante 1</option><option value="1">Sharvard · hablante 2</option></select></label>
+          <label>Velocidad<select id="voice-speed"><option value="0.85">Pausada</option><option value="1" selected>Normal</option><option value="1.15">Ágil</option></select></label>
+          <label>Umbral del micrófono<select id="voice-threshold"><option value="0.006">Sensible</option><option value="0.012" selected>Normal</option><option value="0.025">Menos sensible</option></select></label>
+          <label class="voice-wide">Frases reconocidas, separadas por coma<input id="voice-aliases" maxlength="250" value="oye itglasses, oye it glasses, oye iti clases, oye y ti clases, oye y te clases"></label>
+        </fieldset>
+    <p>La activación compara transcripciones: puede fallar o activarse por error. Ajusta las frases según la transcripción visible. No es un detector profesional de palabra clave.</p>
+    <small>Habla y deja una pausa de 1,1 segundos. Máximo 28 segundos por turno. La captura se ignora durante la respuesta para evitar eco. Detener libera el micrófono; una petición de chat ya enviada puede continuar en el servidor. El asistente conserva el contexto de la conversación y, con sesión iniciada, la guarda en tu historial.</small>
+    <h3>Modo diagnóstico</h3>
+    <label class="diagnostic-toggle"><input type="checkbox" id="voice-diagnostic-toggle"> Modo diagnóstico · desarrollo (muestra el audio y los datos de cada grabación)</label>
+    <div id="voice-diagnostic-section" hidden>
+          <h3>Diagnóstico de grabación</h3>
+          <div id="voice-recording-status" class="voice-diagnostic-item"></div>
+          <div class="voice-diagnostic-grid">
+            <div class="voice-diagnostic-item"><small>Duración grabación</small><strong id="voice-recording-duration">—</strong></div>
+            <div class="voice-diagnostic-item"><small>Motivo parada</small><strong id="voice-record-stop-reason">—</strong></div>
+            <div class="voice-diagnostic-item"><small>Duración habla</small><strong id="voice-speech-duration">—</strong></div>
+            <div class="voice-diagnostic-item"><small>Energía RMS</small><strong id="voice-audio-energy">—</strong></div>
+            <div class="voice-diagnostic-item"><small>Transcripción original</small><strong id="voice-transcript-raw">—</strong></div>
+<div class="voice-diagnostic-item"><small>Transcripción normalizada</small><strong id="voice-transcript-normalized">—</strong></div>
+          <div class="voice-diagnostic-item"><small>Confianza Vosk</small><strong id="voice-confidence">—</strong></div>
+            <div class="voice-diagnostic-item"><small>Motivos aclaración</small><strong id="voice-clarification-reasons">—</strong></div>
+          </div>
+          <div class="voice-diagnostic-row">
+            <label for="voice-playback-btn">Reproducir grabación capturada:</label>
+            <button id="voice-playback-btn" class="secondary-button" disabled>Reproducir</button>
+          </div>
+          <div class="voice-diagnostic-row">
+            <audio id="voice-playback-audio" class="voice-playback" controls></audio>
+          </div>
+          <details id="voice-diag-toggle-row" class="open"><summary>Ajustes de grabación desarrollador</summary>
+            <form id="voice-diag-settings-form" hidden>
+              <div class="field-row">
+                <label>Silence timeout (s)<input id="voice-diag-silent-timeout" type="number" min="1.1" max="2.0" step="0.1" value="1.1"></label>
+                <label>Energy threshold<input id="voice-diag-threshold" type="number" min="0.008" max="0.012" step="0.001" value="0.012"></label>
+                <label>Pre-speech buffer (s)<input id="voice-diag-prespeak-buffer" type="number" min="0.2" max="0.3" step="0.05" value="0.25"></label>
+                <label>Max duration (s)<input id="voice-diag-max-duration" type="number" min="10" max="30" step="1" value="28"></label>
+              </div>
+              <p id="voice-diag-feedback" class="feedback" role="status"></p>
+              <button id="voice-diag-save" class="secondary-button" type="button">Guardar ajustes</button>
+            </form>
+          </details>
+        </div>
+  </dialog>
   <dialog id="source-dialog" aria-labelledby="source-title"><div class="dialog-heading"><div><span class="eyebrow">EVIDENCIA DOCUMENTAL</span><h2 id="source-title">Fuente</h2></div><button id="close-source" class="icon-button" aria-label="Cerrar fuente">×</button></div><p id="source-meta"></p><pre id="source-text"></pre><p id="source-feedback" role="status"></p></dialog>
   <dialog id="device-dialog" aria-labelledby="device-dialog-title"><h2 id="device-dialog-title"></h2><dl id="device-dialog-details" class="device-details"></dl><p id="device-dialog-consequence"></p><div class="dialog-actions"><button id="device-dialog-cancel" type="button" class="secondary-button">Cancelar</button><button id="device-dialog-confirm" type="button" class="danger-button"></button></div></dialog>
   <dialog id="withdraw-dialog" aria-labelledby="withdraw-title"><h2 id="withdraw-title">¿Retirar este documento?</h2><p id="withdraw-description"></p><p>Dejará de utilizarse en nuevas respuestas y aclaraciones pendientes. El archivo original se conserva.</p><div class="dialog-actions"><button id="cancel-withdraw" class="secondary-button">Cancelar</button><button id="confirm-withdraw" class="danger-button">Retirar documento</button></div></dialog>
