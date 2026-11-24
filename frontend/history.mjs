@@ -20,6 +20,33 @@ export function describe(item) {
 export function titleOf(item) {
   return item.title || "Conversación sin título";
 }
+/** Groups of the sidebar list by the day of the last message, in the browser's time zone. */
+export const GROUPS = ["Hoy", "Ayer", "7 días", "Anteriores"];
+export function groupOf(seconds, now = new Date()) {
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const at = (seconds || 0) * 1000;
+  if (at >= today) return "Hoy";
+  if (at >= today - DAY * 1000) return "Ayer";
+  if (at >= today - 7 * DAY * 1000) return "7 días";
+  return "Anteriores";
+}
+/** [{label, items}] in GROUPS order, without empty groups; the order of the items is kept. */
+export function groupByDate(items, now = new Date()) {
+  const groups = new Map(GROUPS.map(label => [label, []]));
+  for (const item of items) groups.get(groupOf(item.last_message_at, now)).push(item);
+  return [...groups].filter(([, list]) => list.length).map(([label, list]) => ({label, items: list}));
+}
+/** "web", "glasses" or "phone". Glasses only when the user's own device list (from the backend) says the device is
+ * a Ray-Ban Meta; any other device, or one not in that list, is shown as a phone. */
+export function channelKind(item, variants = new Map()) {
+  if (item.channel === "web") return "web";
+  return variants.get(item.device_id) === "meta" ? "glasses" : "phone";
+}
+export const KIND_LABELS = {web: "Web", phone: "Celular", glasses: "Lentes"};
+/** How many filters are active (shown on the filter button). */
+export function activeFilters({channel = "", deviceId = "", deleted = false} = {}) {
+  return (channel ? 1 : 0) + (deviceId ? 1 : 0) + (deleted ? 1 : 0);
+}
 /** /api/v1/conversations with the filters of the panel. */
 export function listPath({channel = "", deviceId = "", deleted = false, cursor = null, limit = PAGE} = {}) {
   const query = new URLSearchParams({limit: String(limit)});
@@ -56,6 +83,24 @@ function el(tag, className, text) {
   if (text !== undefined && text !== null) node.textContent = String(text);
   return node;
 }
+const ICONS = {
+  web: ["M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z", "M3 12h18", "M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3Z"],
+  phone: ["M8 2.5h8a1.5 1.5 0 0 1 1.5 1.5v16a1.5 1.5 0 0 1-1.5 1.5H8A1.5 1.5 0 0 1 6.5 20V4A1.5 1.5 0 0 1 8 2.5Z", "M11 18.5h2"],
+  glasses: ["M3 10.5h18", "M3.5 10.5l1 4.5a2 2 0 0 0 2 1.5h2.5a2 2 0 0 0 2-1.6l.5-2.6", "M20.5 10.5l-1 4.5a2 2 0 0 1-2 1.5H15a2 2 0 0 1-2-1.6l-.5-2.6"],
+};
+function icon(kind) {
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("class", "channel-icon");
+  svg.setAttribute("aria-hidden", "true");
+  for (const d of ICONS[kind]) {
+    const path = document.createElementNS(NS, "path");
+    path.setAttribute("d", d);
+    svg.append(path);
+  }
+  return svg;
+}
 function button(text, className, handler, label) {
   const node = el("button", className, text);
   node.type = "button";
@@ -68,7 +113,7 @@ function button(text, className, handler, label) {
 export function initHistory(chat) {
   const $ = id => document.getElementById(id);
   const view = {items: [], cursor: null, deleted: false, saving: null, grace: 7, lastSaved: null, user: null,
-    loading: false, dialog: null, refreshTimer: null};
+    loading: false, dialog: null, refreshTimer: null, variants: new Map(), menu: null};
 
   function feedback(text, error = false, undo = null) {
     const box = $("history-feedback");
@@ -84,32 +129,47 @@ export function initHistory(chat) {
     const list = $("history-list");
     const logged = Boolean(session.user);
     $("history-anonymous").hidden = logged;
-    $("history-tools").hidden = !logged;
+    $("history-filter-toggle").hidden = !logged;
+    if (!logged) filters(false);
+    const count = activeFilters({channel: $("history-channel").value, deviceId: $("history-device").value, deleted: view.deleted});
+    $("history-filter-count").textContent = count ? String(count) : "";
+    $("history-filter-toggle").classList.toggle("on", count > 0);
     list.hidden = !logged;
     $("history-count").textContent = logged ? String(view.items.length) + (view.cursor ? "+" : "") : "—";
     $("history-more").hidden = !logged || !view.cursor;
     $("history-deleted").textContent = view.deleted ? "← Volver a mis conversaciones" : "Ver borradas";
+    $("history-deleted").setAttribute("aria-pressed", String(view.deleted));
     $("history-title").textContent = view.deleted ? "Borradas" : "Historial";
     note();
     if (!logged) { list.replaceChildren(); return; }
     const current = chat.current();
-    list.replaceChildren(...view.items.map(item => {
+    const shown = view.items.find(item => item.id === current);
+    if (shown) chat.titled?.(titleOf(shown));   // the header follows a rename
+    closeMenu();
+    const row = item => {
       const row = el("li", "history-item" + (item.id === current ? " active" : ""));
-      const open = button("", "history-open", () => openConversation(item.id), `Abrir: ${titleOf(item)}`);
+      const kind = channelKind(item, view.variants);
+      const open = button("", "history-open", () => openConversation(item.id), `Abrir: ${titleOf(item)} · ${KIND_LABELS[kind]}`);
+      open.title = describe(item);
       if (view.deleted) open.disabled = true;
-      open.append(el("strong", "", titleOf(item)), el("small", "", describe(item)));
+      open.append(icon(kind), el("span", "history-title", titleOf(item)));
       if (view.deleted) open.append(el("small", "warning-text", purgeText(item.purge_after)));
       if (item.id === current) open.setAttribute("aria-current", "true");
       const actions = el("div", "history-actions");
       if (view.deleted) {
         actions.append(button("Restaurar", "secondary-button", () => restore(item), `Restaurar ${titleOf(item)}`));
       } else {
-        actions.append(button("Renombrar", "text-button", () => askRename(item), `Renombrar ${titleOf(item)}`),
-          button("Borrar", "text-button danger-text", () => askDelete(item), `Borrar ${titleOf(item)}`));
+        const more = button("⋯", "history-more-button", event => { event.stopPropagation(); toggleMenu(item, more); },
+          `Opciones de ${titleOf(item)}`);
+        more.setAttribute("aria-haspopup", "menu");
+        more.setAttribute("aria-expanded", "false");
+        actions.append(more);
       }
       row.append(open, actions);
       return row;
-    }));
+    };
+    list.replaceChildren(...groupByDate(view.items).flatMap(group => [
+      el("li", "history-group", group.label), ...group.items.map(row)]));
     if (!view.items.length) {
       list.append(el("li", "history-empty", view.deleted ? "No hay conversaciones borradas que se puedan restaurar."
         : "Todavía no hay conversaciones guardadas. Escribe una pregunta para empezar."));
@@ -135,10 +195,12 @@ export function initHistory(chat) {
     const select = $("history-device");
     const keep = select.value;
     select.replaceChildren(Object.assign(el("option", "", "Todos los dispositivos"), {value: ""}));
+    view.variants = new Map();
     if (!session.user) return;
     try {
       const {data} = await api("/api/v1/me/devices", {}, 20000);
       for (const device of data.devices) {
+        view.variants.set(device.id, device.variant);
         const option = el("option", "", device.name || device.model || (device.variant === "meta" ? "Ray-Ban Meta" : "Celular"));
         option.value = device.id;
         select.append(option);
@@ -162,6 +224,53 @@ export function initHistory(chat) {
     }
     render();
   }
+
+  // --- the ⋯ menu of a row (Renombrar, Borrar) ------------------------------------------------------------------
+  function closeMenu(focus = false) {
+    if (!view.menu) return;
+    const {node, opener} = view.menu;
+    view.menu = null;
+    node.remove();
+    opener.setAttribute("aria-expanded", "false");
+    opener.closest(".history-item")?.classList.remove("menu-open");
+    if (focus) opener.focus();
+  }
+  function toggleMenu(item, opener) {
+    const same = view.menu?.opener === opener;
+    closeMenu();
+    if (same) return;
+    const node = el("div", "history-menu");
+    node.setAttribute("role", "menu");
+    const choose = (text, className, run) => {
+      const choice = button(text, "menu-item" + (className ? " " + className : ""), () => { closeMenu(); run(); });
+      choice.setAttribute("role", "menuitem");
+      return choice;
+    };
+    node.append(choose("Renombrar", "", () => askRename(item)), choose("Borrar", "danger-text", () => askDelete(item)));
+    opener.closest(".history-item").classList.add("menu-open");
+    opener.closest(".history-item").append(node);
+    opener.setAttribute("aria-expanded", "true");
+    view.menu = {node, opener};
+    node.querySelector("button").focus();
+  }
+  function filters(show) {
+    $("history-tools").hidden = !show;
+    $("history-filter-toggle").setAttribute("aria-expanded", String(show));
+  }
+  document.addEventListener("click", event => {
+    if (view.menu && !view.menu.node.contains(event.target)) closeMenu();
+    if (!$("history-tools").hidden && !event.target.closest("#history-tools, #history-filter-toggle")) filters(false);
+  });
+  document.addEventListener("keydown", event => {
+    if (event.key !== "Escape" || document.querySelector("dialog[open]")) return;
+    if (view.menu) { event.stopImmediatePropagation(); closeMenu(true); }
+    else if (!$("history-tools").hidden) { event.stopImmediatePropagation(); filters(false); $("history-filter-toggle").focus(); }
+  }, true);
+  $("history-filter-toggle").addEventListener("click", event => {
+    event.stopPropagation();
+    filters($("history-tools").hidden);
+    if (!$("history-tools").hidden) $("history-channel").focus();
+  });
 
   // --- rename and delete dialog -------------------------------------------------------------------------------
   function showDialog({title, text, value = null, confirm, danger = false, run}) {

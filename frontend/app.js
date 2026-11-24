@@ -10,6 +10,7 @@ let voiceActive = false;
 let accounts = null;
 let historyPanel = null;
 let currentPage = "chat";
+let chatTitle = null;   // the open conversation's title in the header (null: a new one)
 const PAGE_TITLES = {chat: "Conversaciones", documents: "Documentos", system: "Estado del sistema",
   "my-devices": "Mis dispositivos", users: "Usuarios", owners: "Dispositivos y usuarios", audit: "Auditoría"};
 const $ = id => document.getElementById(id);
@@ -345,7 +346,7 @@ function showPage(page) {
     if (button.dataset.page === page) button.setAttribute("aria-current", "page");
     else button.removeAttribute("aria-current");
   });
-  $("page-title").textContent = PAGE_TITLES[page];
+  $("page-title").textContent = page === "chat" ? chatTitle || "Nueva conversación" : PAGE_TITLES[page];
   if (page === "documents") refreshDocuments();
   if (page === "system") refreshStatus();
   accounts?.opened(page);
@@ -359,8 +360,12 @@ $("sidebar").addEventListener("click", event => { if (event.target.closest("[dat
 $("message").addEventListener("keydown", event => {
   if (event.key === "Enter" && !event.shiftKey && !event.isComposing) { event.preventDefault(); $("chat-form").requestSubmit(); }
 });
+function titled(title) {
+  chatTitle = title;
+  if (currentPage === "chat") $("page-title").textContent = chatTitle || "Nueva conversación";
+}
 $("new-chat").addEventListener("click", () => {
-  state.chats[state.mode] = {messages: [], conversation: null}; renderChat(); historyPanel?.cleared(); $("message").focus();
+  state.chats[state.mode] = {messages: [], conversation: null}; titled(null); renderChat(); historyPanel?.cleared(); $("message").focus();
 });
 $("refresh-status").addEventListener("click", refreshStatus);
 $("refresh-documents").addEventListener("click", refreshDocuments);
@@ -386,16 +391,19 @@ setMode("assistant");
 historyPanel = initHistory({
   open(conversation) {
     state.chats.assistant = {messages: toChatEntries(conversation.messages), conversation: conversation.id};
+    titled(conversation.title || "Conversación sin título");
     if (state.mode !== "assistant") setMode("assistant");
     renderChat(true);
   },
   reset() {
     if (state.busy) return;
     state.chats.assistant = {messages: [], conversation: null};
+    titled(null);
     if (state.mode === "assistant") renderChat();
   },
   current: () => state.chats.assistant.conversation,
   busy: () => state.busy || voiceActive,
+  titled,
 });
 refreshStatus();
 // Stage "usuarios" 6: login screen, user menu and administration pages. After a login or logout the status, the

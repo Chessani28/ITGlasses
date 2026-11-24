@@ -20,12 +20,12 @@
     </div>
     <button id="new-chat" class="new-chat" type="button" title="Nueva conversación"><span class="nav-icon" aria-hidden="true">＋</span><span class="nav-label">Nueva conversación</span></button>
     <section id="history-panel" class="history-panel" aria-labelledby="history-title">
-      <div class="history-heading"><h2 id="history-title">Historial</h2><span id="history-count" class="history-count">—</span><button id="history-refresh" class="icon-button small" type="button" title="Actualizar historial" aria-label="Actualizar historial">↻</button></div>
+      <div class="history-heading"><h2 id="history-title">Historial</h2><span id="history-count" class="history-count">—</span><button id="history-filter-toggle" class="icon-button small filter-toggle" type="button" aria-label="Filtros del historial" aria-expanded="false" aria-controls="history-tools" title="Filtros" hidden><span aria-hidden="true">⚲</span><span id="history-filter-count" class="filter-count" aria-hidden="true"></span></button><button id="history-refresh" class="icon-button small" type="button" title="Actualizar historial" aria-label="Actualizar historial">↻</button></div>
       <div id="history-anonymous" class="history-anonymous" hidden><p>Sin sesión, las conversaciones no se guardan. Con tu cuenta verás aquí las de la web, el celular y los lentes.</p><button id="history-login" class="secondary-button" type="button">Iniciar sesión</button></div>
-      <div id="history-tools" class="history-tools" hidden>
+      <div id="history-tools" class="history-tools" role="group" aria-label="Filtros del historial" hidden>
         <label>Canal<select id="history-channel"><option value="">Todos</option><option value="web">Web</option><option value="device">Celular y lentes</option></select></label>
         <label>Dispositivo<select id="history-device"><option value="">Todos los dispositivos</option></select></label>
-        <button id="history-deleted" class="text-button" type="button">Ver borradas</button>
+        <button id="history-deleted" class="chip" type="button" aria-pressed="false">Ver borradas</button>
       </div>
       <p id="history-feedback" class="feedback history-feedback" role="status"></p>
       <ul id="history-list" class="history-list" aria-label="Conversaciones guardadas" hidden></ul>
@@ -47,7 +47,7 @@
     </div>
   </aside>
   <main id="main" tabindex="-1">
-    <header class="topbar"><button id="sidebar-toggle" class="icon-button menu-toggle" type="button" aria-label="Abrir menú" aria-expanded="false" aria-controls="sidebar">☰</button><span id="page-title" class="page-title">Conversaciones</span><div class="top-actions"><span id="connection" class="badge neutral">Comprobando conexión</span><button id="refresh-status" class="icon-button" title="Actualizar estado" aria-label="Actualizar estado">↻</button></div></header>
+    <header class="topbar"><button id="sidebar-toggle" class="icon-button menu-toggle" type="button" aria-label="Abrir menú" aria-expanded="false" aria-controls="sidebar">☰</button><span id="page-title" class="page-title">Nueva conversación</span><div class="top-actions"><span id="connection" class="badge neutral">Comprobando conexión</span><button id="refresh-status" class="icon-button" title="Actualizar estado" aria-label="Actualizar estado">↻</button></div></header>
     <section id="chat-page" class="page chat-page" aria-label="Conversaciones">
       <details class="voice-panel">
         <summary>◉ Asistente de voz <span id="voice-badge" class="badge neutral">LOCAL</span></summary>

@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {channelLabel, describe, graceText, historyNote, listPath, purgeText, titleOf, toChatEntries} from "../frontend/history.mjs";
+import {readFileSync} from "node:fs";
+import {activeFilters, channelKind, channelLabel, describe, graceText, groupByDate, groupOf, GROUPS, historyNote, listPath, purgeText, titleOf,
+  toChatEntries} from "../frontend/history.mjs";
 import {historySummary} from "../frontend/accounts.mjs";
 import {badgeText, engineName, engineStatus, FALLBACK_NOTICE} from "../frontend/voice-ui.mjs";
 
@@ -70,4 +72,45 @@ test("the voice panel names the engine that really transcribed", () => {
   assert.equal(engineStatus({"whisper-small": {available: false, reason: "no configurado"}}),
     "Whisper no disponible: no configurado. Se usa Vosk (básico).");
   assert.match(FALLBACK_NOTICE, /usando Vosk, la transcripción puede ser menos precisa/);
+});
+
+test("the sidebar groups conversations by the day of their last message", () => {
+  const now = new Date(2026, 10, 24, 15, 0);                       // 24 Nov 2026, 15:00 local time
+  const at = (...date) => new Date(...date).getTime() / 1000;
+  assert.equal(groupOf(at(2026, 10, 24, 0, 5), now), "Hoy");
+  assert.equal(groupOf(at(2026, 10, 23, 23, 59), now), "Ayer");
+  assert.equal(groupOf(at(2026, 10, 23, 0, 0), now), "Ayer");
+  assert.equal(groupOf(at(2026, 10, 22, 23, 0), now), "7 días");
+  assert.equal(groupOf(at(2026, 10, 17, 0, 0), now), "7 días");
+  assert.equal(groupOf(at(2026, 10, 16, 23, 0), now), "Anteriores");
+  assert.equal(groupOf(null, now), "Anteriores");
+  const items = [{id: "a", last_message_at: at(2026, 10, 24, 9)}, {id: "b", last_message_at: at(2026, 10, 20, 9)},
+    {id: "c", last_message_at: at(2026, 10, 24, 8)}, {id: "d", last_message_at: at(2025, 1, 1)}];
+  assert.deepEqual(groupByDate(items, now).map(group => [group.label, group.items.map(item => item.id)]),
+    [["Hoy", ["a", "c"]], ["7 días", ["b"]], ["Anteriores", ["d"]]]);      // no empty "Ayer", order kept
+  assert.deepEqual(GROUPS, ["Hoy", "Ayer", "7 días", "Anteriores"]);
+});
+
+test("the channel icon shows glasses only when the user's device list says so", () => {
+  const variants = new Map([["g1", "meta"], ["p1", "phone"]]);
+  assert.equal(channelKind({channel: "web"}, variants), "web");
+  assert.equal(channelKind({channel: "device", device_id: "g1"}, variants), "glasses");
+  assert.equal(channelKind({channel: "device", device_id: "p1"}, variants), "phone");
+  assert.equal(channelKind({channel: "device", device_id: "unknown"}, variants), "phone");
+  assert.equal(channelKind({channel: "device", device_id: "g1"}), "phone");       // without the list: phone
+});
+
+test("the filter button counts the active filters", () => {
+  assert.equal(activeFilters(), 0);
+  assert.equal(activeFilters({channel: "device"}), 1);
+  assert.equal(activeFilters({channel: "device", deviceId: "x", deleted: true}), 3);
+});
+
+test("a row offers Renombrar and Borrar only in its ⋯ menu", () => {
+  const source = readFileSync(new URL("../frontend/history.mjs", import.meta.url), "utf8");
+  assert.match(source, /button\("⋯", "history-more-button"/);
+  assert.match(source, /setAttribute\("aria-haspopup", "menu"\)/);
+  assert.doesNotMatch(source, /button\("Renombrar", "text-button"/);
+  const css = readFileSync(new URL("../frontend/styles.css", import.meta.url), "utf8");
+  assert.match(css, /@media \(hover:none\) \{ \.history-more-button \{ opacity:1; \} \}/);
 });
