@@ -66,6 +66,9 @@ def _check_password_settings():
         logger.info("daily_backup enabled=%s keep=%d", enabled, keep)
         saving, gap = history_settings()
         logger.info("chat_history enabled=%s device_gap_min=%d chat_context=%s", saving, gap // 60, context_mode())
+        from backend.app.history.conversations import retention_settings
+        retention, grace = retention_settings()
+        logger.info("history_retention retention_days=%d deleted_grace_days=%d", retention, grace)
         backends, total, cache_hours = search_settings()
         logger.info("public_search backends=%s total_s=%g cache_h=%g", ",".join(backends), total, cache_hours)
     except (PasswordConfigError, SessionConfigError, AccessConfigError, BackupConfigError, HistoryConfigError,
@@ -131,6 +134,14 @@ def _start_daily_backups():
     return asyncio.create_task(run_daily_backups()) if daily_enabled() else None
 
 
+def _start_history_purge():
+    """Stage "historial" 4: purge deleted conversations past their grace and those older than the retention, at
+    startup and every 6 hours in the background (never blocks or breaks the startup)."""
+    from backend.app.history.manage import run_purges
+
+    return asyncio.create_task(run_purges())
+
+
 def create_app(provider: LLMProvider | None = None, knowledge=None, voice=None, warmup=None) -> FastAPI:
     """``warmup``: warm the chat model up at startup; by default only for the backend's own provider (None), never
     for a provider a test injects."""
@@ -144,14 +155,16 @@ def create_app(provider: LLMProvider | None = None, knowledge=None, voice=None, 
         warmup_task = None
         piper_task = None
         backup_task = None
+        purge_task = None
         try:
             preload_task = _start_whisper_preload(app)
             warmup_task = _start_ollama_warmup(app, warm)
             piper_task = _start_piper_preload(app)
             backup_task = _start_daily_backups()
+            purge_task = _start_history_purge()
             yield
         finally:
-            for task in (preload_task, warmup_task, piper_task, backup_task):
+            for task in (preload_task, warmup_task, piper_task, backup_task, purge_task):
                 if task is not None and not task.done():
                     task.cancel()
                     await asyncio.gather(task, return_exceptions=True)
@@ -191,6 +204,9 @@ def create_app(provider: LLMProvider | None = None, knowledge=None, voice=None, 
     app.include_router(users_router)
     app.include_router(audit_router)
     app.include_router(me_router)
+    # Saved conversations (stage "historial" 4): login session only, never require_auth or Caddy.
+    from backend.app.history.routes import router as history_router
+    app.include_router(history_router)
 
     @app.middleware("http")
     async def upload_limit(request: Request, call_next):

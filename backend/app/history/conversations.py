@@ -17,6 +17,10 @@ import time
 import uuid
 
 GAP_VARIABLE, GAP_DEFAULT, GAP_RANGE = "ITGLASSES_DEVICE_CONVERSATION_GAP_MINUTES", 30, (5, 1440)
+# Stage "historial" 4: conversations older than the retention (0 = no limit) and deleted ones once their grace is
+# over are purged (with their messages) at startup and every 6 hours.
+RETENTION_VARIABLE, RETENTION_DEFAULT, RETENTION_RANGE = "ITGLASSES_HISTORY_RETENTION_DAYS", 90, (0, 3650)
+GRACE_VARIABLE, GRACE_DEFAULT, GRACE_RANGE = "ITGLASSES_HISTORY_DELETED_GRACE_DAYS", 7, (0, 90)
 ENABLED_VARIABLE = "ITGLASSES_HISTORY"
 ON, OFF = {"1", "true", "yes", "on"}, {"0", "false", "no", "off"}
 ANSWER_MAX = 32000
@@ -53,8 +57,32 @@ def gap_seconds():
     return int(raw) * 60
 
 
+def _days(variable, default, bounds):
+    raw = (os.environ.get(variable) or "").strip()
+    if not raw:
+        return default
+    low, high = bounds
+    if not (raw.isascii() and raw.isdecimal()) or not low <= int(raw) <= high:
+        raise HistoryConfigError(f"{variable} debe ser un numero entero de dias entre {low} y {high} "
+                                 f"(valor actual: {raw[:20]!r}).")
+    return int(raw)
+
+
+def retention_days():
+    return _days(RETENTION_VARIABLE, RETENTION_DEFAULT, RETENTION_RANGE)
+
+
+def grace_days():
+    return _days(GRACE_VARIABLE, GRACE_DEFAULT, GRACE_RANGE)
+
+
 def check_settings():
     return enabled(), gap_seconds()
+
+
+def retention_settings():
+    """(retention days, grace days after a delete); HistoryConfigError if invalid, so the backend refuses to start."""
+    return retention_days(), grace_days()
 
 
 def _now(now):

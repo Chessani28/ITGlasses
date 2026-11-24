@@ -5,7 +5,8 @@ Never published by Caddy (it refuses /api/v1/admin and publishes only the phone 
 
 Who manages whom (accounts.can_manage): an admin manages users; a superadmin manages users and admins and is the
 only one who changes roles. Nobody manages a superadmin or themself here. The audit log is read-only for both:
-an admin sees user, device and document actions; a superadmin sees everything (logins, lockouts, bootstrap...).
+an admin sees user, device, document and conversation actions (deletes and purges: never content or titles); a
+superadmin sees everything (logins, lockouts, bootstrap...).
 """
 from typing import Literal
 
@@ -22,7 +23,7 @@ audit_router = APIRouter(prefix="/api/v1/admin")
 me_router = APIRouter(prefix="/api/v1/me")
 
 ADMIN_ROLES = ("admin", "superadmin")
-ADMIN_AUDIT_PREFIXES = ("user.", "device.", "document.")
+ADMIN_AUDIT_PREFIXES = ("user.", "device.", "document.", "conversation.")
 DEVICE_FIELDS = "id,variant,name,model,state,created_at,approved_at,last_seen"
 ACCOUNT_STATUS = {"username_taken": 409, "last_superadmin": 409, "user_not_found": 404}
 

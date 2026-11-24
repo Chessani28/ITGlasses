@@ -133,7 +133,7 @@ def test_invalid_access_settings_stop_the_backend(world, monkeypatch, variable, 
 
 # Routes with their own gate, not require_auth: public, web login, device panel and phone pairing (DPoP).
 OWN_GATE = ("/health", "/api/v1/status", "/api/v1/auth/", "/api/v1/admin/", "/api/v1/pairing/", "/api/v1/devices/",
-            "/api/v1/me/")
+            "/api/v1/me/", "/api/v1/conversations")
 
 
 def registered_routes(app):

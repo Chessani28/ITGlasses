@@ -118,5 +118,7 @@ def transaction(path=None):
     with closing(sqlite3.connect(path.as_uri() + "?mode=rw", uri=True, timeout=5)) as db, db:
         db.row_factory = sqlite3.Row
         db.execute("PRAGMA foreign_keys=ON")
+        # A purged conversation is overwritten in the file, not only unlinked (stage "historial" 4).
+        db.execute("PRAGMA secure_delete=ON")
         db.execute("BEGIN IMMEDIATE")
         yield db

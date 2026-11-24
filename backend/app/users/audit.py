@@ -13,6 +13,7 @@ ACTIONS = frozenset({
     "document.upload", "document.replace", "document.authorize", "document.withdraw", "document.delete",
     "document.reindex",
     "settings.update",
+    "conversation.delete", "conversation.restore", "conversation.purge",
     "auth.login", "auth.logout", "auth.locked",
 })
 KINDS = ("user", "script", "system")

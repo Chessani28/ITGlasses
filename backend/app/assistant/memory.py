@@ -55,6 +55,10 @@ class SessionStore:
         state["time"] = now
         return session_id, state
 
+    def forget(self, session_id):
+        """Drop a session's in-memory state (a deleted conversation must not live on in memory)."""
+        self._sessions.pop(session_id, None)
+
     def remember(self, state, message, answer, route=None):
         """Append an exchange and its route (by default the state's active route) to the history."""
         history = state.get("history") or []
