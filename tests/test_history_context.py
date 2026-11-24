@@ -156,9 +156,75 @@ def test_the_notice_never_reaches_the_model_as_context():
     assert GENERAL_NOTICE not in text.calls[-1]
 
 
-def test_without_a_previous_general_exchange_nothing_changes():
-    answer = chat(service(), "¿Para qué sirve en una empresa?")
+NO_TOPIC = "No supongas ni inventes un tema"
+
+
+def test_a_followup_without_context_never_gets_an_invented_topic():
+    provider = TurnsProvider()
+    answer = chat(service(provider=provider), "¿Y en empresas grandes?")
+    assert answer["route"] == "general"
+    prompt, turns = provider.calls[-1]
+    assert NO_TOPIC in prompt and not turns and "Pregunta anterior" not in prompt
+
+
+def test_after_a_manual_exchange_the_followup_gets_the_previous_question_and_its_it_topic():
+    provider = TurnsProvider()
+    svc = service(provider=provider)
+    assert chat(svc, "Según el manual, ¿qué es una VPN?")["route"] == "knowledge"
+    answer = chat(svc, "¿Y en empresas grandes?")
+    assert answer["route"] == "general" and answer["answer"].startswith(GENERAL_NOTICE + "\n")
+    prompt, turns = provider.calls[-1]
+    assert "Pregunta anterior del usuario: Según el manual, ¿qué es una VPN?" in prompt and NO_TOPIC in prompt
+    assert not turns and "No pude verificar" not in prompt          # never the manual answer
+
+
+def test_with_a_general_context_there_is_no_no_topic_instruction():
+    provider = TurnsProvider()
+    svc = service(provider=provider)
+    chat(svc, "¿Qué es una VPN?")
+    chat(svc, "¿Y en empresas grandes?")
+    assert NO_TOPIC not in provider.calls[-1][0]
+
+
+# --- a generic "empresa" is never a documentation word ---------------------------------------------------------------
+
+@pytest.mark.parametrize("question", ["¿Qué es una VPN? ¿Y para qué sirve en una empresa?",
+                                      "¿Para qué sirve una VPN en cualquier empresa?",
+                                      "¿Qué es un firewall empresarial?", "¿Cómo usan las empresas una VPN?"])
+def test_a_generic_company_is_answered_in_general_after_the_manuals(question):
+    knowledge = NoEvidence()
+    answer = chat(service(knowledge), question)
+    assert answer["route"] == "general" and answer["answer"].startswith(GENERAL_NOTICE + "\n")
+    assert knowledge.queries                                         # the manuals were asked first
+
+
+@pytest.mark.parametrize("question", ["¿Cuál es el horario de la empresa?", "Configura la VPN de mi empresa",
+                                      "¿Qué usa nuestra empresa para la VPN?"])
+def test_the_company_itself_still_needs_the_manuals(question):
+    answer = chat(service(), question)
     assert answer["route"] == "knowledge" and answer["answer"] == UNVERIFIED
+
+
+# --- a follow-up inherits whether the previous topic was IT ------------------------------------------------------------
+
+def test_a_followup_inherits_the_topic_of_the_previous_exchange():
+    svc = service()
+    chat(svc, "¿Qué es una VPN?")
+    chat(svc, "¿Cuál es la capital de Francia?")
+    assert not chat(svc, "¿Me lo resumes en una frase?")["answer"].startswith(GENERAL_NOTICE)
+    chat(svc, "¿Qué es un firewall?")
+    assert chat(svc, "¿Me lo resumes en una frase?")["answer"].startswith(GENERAL_NOTICE + "\n")
+
+
+def test_the_inherited_topic_survives_a_restart():
+    from backend.app.history.conversations import restore_state, snapshot
+    svc = service()
+    chat(svc, "¿Qué es una VPN?")
+    chat(svc, "¿Cuál es la capital de Francia?")
+    saved = snapshot(svc.sessions.get("s")[1])
+    again = service()                                            # a new backend: the state comes from the history
+    restore_state(again.sessions.get("s")[1], saved)
+    assert not chat(again, "¿Me lo resumes en una frase?")["answer"].startswith(GENERAL_NOTICE)
 
 
 def test_a_manual_with_evidence_still_wins_over_the_general_followup():

@@ -78,7 +78,10 @@ IT_CONTEXTUAL_FOLLOWUP = re.compile(
 # mentions one of them stays in the knowledge route, where evidence is
 # mandatory, even when it also looks conceptual.
 DOCUMENTED_TOPIC = re.compile(
-    r"\bprocedimientos?\b|\bmanuales?\b|\bpol[ií]ticas?\b|\bempresa\b"
+    # "empresa" only as the company itself ("la/mi/nuestra empresa", "de la empresa"), never generic ("una
+    # empresa", "cualquier empresa"; "empresas" and "empresarial" never match).
+    r"\bprocedimientos?\b|\bmanuales?\b|\bpol[ií]ticas?\b"
+    r"|(?<!\buna )(?<!\bcada )(?<!\btoda )(?<!\botra )(?<!\balguna )(?<!\bcualquier )\bempresa\b"
     r"|\boficiales?\b|\bgu[ií]as?\b|\binstruccion(?:es)?\b"
     r"|\bpasos?\b|\bdocumentos?\b|\bcomandos?\b|\bcredenciales?\b"
     r"|\bconfiguraci[oó]n\b|\bdirectriz(?:es)?\b|\bnormativa\b"
@@ -1347,15 +1350,25 @@ class UnifiedAssistantService:
     def _general_is_it(cls, state, message):
         """The rule of GENERAL_NOTICE: a general answer with content about IT or the company carries it (local
         model, public sources or the conversation, never the manuals); small talk and general culture do not. A
-        follow-up ("¿Y en empresas grandes?", "¿Me lo resumes?") keeps the IT topic of the previous answer."""
+        follow-up ("¿Y en empresas grandes?", "¿Me lo resumes?") inherits topic_it: IT after a VPN, not after
+        París."""
         text = _fold(message or "")
         if cls._is_it_related(message) or DOCUMENTED_TOPIC.search(text):
-            return True
-        if not state.get("active_it_topic"):
-            return False
-        text = text.lstrip("¿¡ \t")
-        return bool(FOLLOWUP_START.search(text) or FOLLOWUP_ANAPHORA.search(text)
-                    or IT_CONTEXTUAL_FOLLOWUP.search(text) or FOLLOWUP_CLITIC.search(text))
+            value = True
+        elif cls._followup_shape(message, contextual=True):
+            value = bool(state.get("topic_it"))   # inherits the topic of the previous exchange, IT or not
+        else:
+            value = False                          # a question of its own about something else
+        state["_topic_it"] = value                 # chat() keeps it as topic_it for the next follow-up
+        return value
+
+    @staticmethod
+    def _followup_shape(message, contextual=False):
+        """"y…", "pero…", "por qué…", "eso…", "¿me lo resumes?", "explícamelo"; with contextual=True also the
+        IT_CONTEXTUAL_FOLLOWUP openings ("cómo…", "qué hago…"), which are follow-ups only inside a topic."""
+        text = _fold(message or "").lstrip("¿¡ \t")
+        return bool(FOLLOWUP_START.search(text) or FOLLOWUP_ANAPHORA.search(text) or FOLLOWUP_CLITIC.search(text)
+                    or (contextual and IT_CONTEXTUAL_FOLLOWUP.search(text)))
 
     @staticmethod
     def _label_general(state, answer, it_topic):
@@ -1550,6 +1563,15 @@ class UnifiedAssistantService:
                 "\n\nConversación previa:\n" + recent +
                 "\n\nResponde de forma coherente con la conversación previa."
             )
+        if not general and self._followup_shape(message):
+            # A follow-up with no general answer to lean on (none yet, or the previous exchange was a manual one,
+            # which never reaches the general model): the previous question only, and no guessed topic.
+            previous = (history[-1][0] or "")[:chat_context.QUESTION_MAX] if history and use_history else ""
+            if previous:
+                context += "\n\nPregunta anterior del usuario: " + previous
+            context += ("\n\nEl mensaje parece continuar una conversación, pero no hay respuestas previas que lo "
+                        "aclaren. No supongas ni inventes un tema: si no queda claro de qué habla, pide en una frase "
+                        "que lo aclare.")
         if state.get("active_subject"):
             context += "\nTema explícito de soporte activo: " + state["active_subject"] + ". Mantén ese sujeto en seguimientos sin sujeto explícito; no conviertas el objeto de una conexión en el dispositivo averiado. Si hay ambigüedad, pregunta."
         missing = (
@@ -1606,7 +1628,22 @@ class UnifiedAssistantService:
         return answer or GENERAL_UNAVAILABLE
 
     async def chat(self, message, session_id=None):
+        """_chat, then keep whether this exchange was about IT (topic_it) so that a follow-up inherits it: a manual
+        answer is always IT, a general one as _general_is_it decided; social and clarifying replies change nothing."""
+        result = await self._chat(message, session_id)
+        if not result.get("session_id"):
+            return result
+        _, state = self.sessions.get(result["session_id"])
+        decided = state.pop("_topic_it", None)
+        if result.get("route") == "knowledge":
+            state["topic_it"] = True
+        elif result.get("route") == "general" and decided is not None:
+            state["topic_it"] = decided
+        return result
+
+    async def _chat(self, message, session_id=None):
         session_id, state = self.sessions.get(session_id)
+        state.pop("_topic_it", None)
         message = (message or "").strip()
 
         if not state.get("history") and re.search(r"\b(?:eso|lo anterior)\b", message, re.I) and not re.search(r"\b(?:windows|vpn|dns|bios|ssd|ram|cpu|gpu)\b", message, re.I):
@@ -2018,6 +2055,7 @@ class UnifiedAssistantService:
                 state["active_route"] = "general"
                 self.sessions.remember(state, message, answer)
                 return {"answer": answer, "session_id": session_id, "route": "general", "sources": []}
+            state["_topic_it"] = True   # a current fact from public sources (versions, updates)
             answer = self._label_general(state, await self._general_answer(state, message), True)
             state["active_route"] = "general"
             self.sessions.remember(state, message, answer)
