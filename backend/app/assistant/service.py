@@ -16,6 +16,7 @@ import uuid
 from urllib.parse import urlsplit
 
 from backend.app.assistant.memory import SessionStore
+from backend.app.assistant import context as chat_context
 from backend.app.providers.base import ModelUnavailableError, ProviderTimeoutError, ProviderUnavailableError
 from backend.app.assistant.procedures import flatten
 from backend.app.assistant import named as named_reference
@@ -85,6 +86,21 @@ DOCUMENTED_TOPIC = re.compile(
     r"|\binstructions?\b|\bsteps?\b|\bdocuments?\b|\bcommands?\b",
     re.IGNORECASE,
 )
+
+# Stage "historial" 3: a follow-up of a general exchange ("¿Y para qué sirve en una empresa?", "¿y cuáles son los
+# pasos?") that only names a company in general or asks for steps or configuration of the same topic. It still asks
+# the manuals first; only when they have no evidence is it answered in general (labelled), instead of "No pude
+# verificar ese procedimiento". The company's own procedures ("la VPN de la empresa", "nuestro", "interno") and
+# explicit manual requests keep the documentation route. Patterns run on folded text (lowercase, no accents).
+FOLLOWUP_START = re.compile(r"^(?:y|e|pero|entonces|tambien|ademas|para que|por que)\b")
+FOLLOWUP_ANAPHORA = re.compile(r"\b(?:eso|esto|ello|lo anterior|lo mismo|la misma|el mismo)\b")
+COMPANY_OWN = re.compile(r"\b(?:la|mi|nuestra|esta|esa|tu|su)\s+empresa\b|\bempresa\s+(?:actual|interna)\b"
+                         r"|\bintern[oa]s?\b|\bnuestr[oa]s?\b")
+COMPANY_GENERIC = re.compile(r"\b(?:una|unas|las|toda|cualquier|cada)\s+empresas?\b|\bempresas\b"
+                             r"|\bempresariales?\b")
+SOFT_DOCUMENTED = re.compile(r"\b(?:configuracion|pasos?|comandos?|steps?|commands?)\b")
+# "¿Me lo resumes?", "explícamelo": a follow-up that picks up the previous answer with a pronoun.
+FOLLOWUP_CLITIC = re.compile(r"\b(?:me|te|se|nos)\s+l[oa]s?\b|\b\w+(?:mel[oa]s?|sel[oa]s?)\b")
 
 EXPLICIT_MANUAL_REQUEST = re.compile(
     r"\bseg[uú]n\s+(?:(?:mis|los|las|la)\s+)?(?:manual(?:es)?|documentos?|"
@@ -202,6 +218,11 @@ def _strip_spanish_prefix(text):
     for pattern in prefixes:
         text = re.sub(pattern, "", text, flags=re.IGNORECASE)
     return text
+
+
+def _without_notice(answer):
+    """A previous answer as context for the model, without GENERAL_NOTICE (the model must not imitate it)."""
+    return answer[len(GENERAL_NOTICE):].lstrip() if isinstance(answer, str) and answer.startswith(GENERAL_NOTICE) else answer
 
 
 def _fold(text):
@@ -1305,6 +1326,48 @@ class UnifiedAssistantService:
             return False
         return DOCUMENTED_TOPIC.search(text) is None
 
+    @staticmethod
+    def _general_followup(state, message):
+        """A follow-up of a general exchange that only mentions documentation-sounding words in a general sense
+        (see FOLLOWUP_START and COMPANY_GENERIC): the manuals are asked first, and without evidence it is answered
+        in general with the conversation, never refused as a company procedure."""
+        if state.get("active_route") != "general" or not state.get("history"):
+            return False
+        if EXPLICIT_MANUAL_REQUEST.search(message or ""):
+            return False
+        text = _fold(message or "").lstrip("¿¡ \t")
+        if not (FOLLOWUP_START.search(text) or FOLLOWUP_ANAPHORA.search(text)):
+            return False
+        if COMPANY_OWN.search(text):
+            return False
+        rest = SOFT_DOCUMENTED.sub(" ", COMPANY_GENERIC.sub(" ", text))
+        return DOCUMENTED_TOPIC.search(rest) is None
+
+    @classmethod
+    def _general_is_it(cls, state, message):
+        """The rule of GENERAL_NOTICE: a general answer with content about IT or the company carries it (local
+        model, public sources or the conversation, never the manuals); small talk and general culture do not. A
+        follow-up ("¿Y en empresas grandes?", "¿Me lo resumes?") keeps the IT topic of the previous answer."""
+        text = _fold(message or "")
+        if cls._is_it_related(message) or DOCUMENTED_TOPIC.search(text):
+            return True
+        if not state.get("active_it_topic"):
+            return False
+        text = text.lstrip("¿¡ \t")
+        return bool(FOLLOWUP_START.search(text) or FOLLOWUP_ANAPHORA.search(text)
+                    or IT_CONTEXTUAL_FOLLOWUP.search(text) or FOLLOWUP_CLITIC.search(text))
+
+    @staticmethod
+    def _label_general(state, answer, it_topic):
+        """GENERAL_NOTICE first when _general_answer produced content (not a system message such as "No pude
+        verificar información actual…") and the topic is IT: _general_is_it, evaluated BEFORE _general_answer
+        (which may drop active_it_topic), or a current fact from public sources (versions, updates). Shown in the
+        chat, never read aloud (voice.normalize.strip_general_notice)."""
+        content = state.pop("_general_content", False)
+        if not content or answer.startswith(GENERAL_NOTICE) or not it_topic:
+            return answer
+        return GENERAL_NOTICE + "\n" + answer
+
     @classmethod
     def _continues_it(cls, state, message):
         if state.get("active_route") != "general" or not state.get("active_it_topic"):
@@ -1315,22 +1378,25 @@ class UnifiedAssistantService:
         return bool(IT_CONTEXTUAL_FOLLOWUP.search(text))
 
     async def _general_fallback_answer(self, state, message, use_history=True):
-        """General answer to an IT question the manuals did not cover: GENERAL_NOTICE first. A refusal for lack of
+        """General answer to a question the manuals did not cover: GENERAL_NOTICE first when it is IT. A refusal for lack of
         documentation is generated again once without the conversation; a second refusal becomes GENERAL_OFFER
         (the next "sí" answers in general)."""
+        notice = GENERAL_NOTICE + "\n" if self._general_is_it(state, message) else ""  # same rule as _label_general
         answer = await self._general_answer(state, message, documentation_missing=True, use_history=use_history)
+        state.pop("_general_content", None)
         if answer in GENERAL_FAILURES:
             return answer
         if use_history and _DOCUMENTATION_REFUSAL.search(_fold(answer)):
             answer = await self._general_answer(state, message, documentation_missing=True, use_history=False)
+            state.pop("_general_content", None)
             if answer in GENERAL_FAILURES:
                 return answer
         if _DOCUMENTATION_REFUSAL.search(_fold(answer)):
             if not use_history:
-                return GENERAL_NOTICE + "\n" + answer  # already asked once: never loop
+                return notice + answer  # already asked once: never loop
             state["pending_general"] = {"question": message[:4000]}
             return GENERAL_OFFER
-        return GENERAL_NOTICE + "\n" + answer
+        return notice + answer
 
     async def _general_answer(self, state, message, documentation_missing=False, use_history=True):
         """Answer with the general provider, optionally enriched with public sources.
@@ -1340,6 +1406,7 @@ class UnifiedAssistantService:
         stored on the state so the chat layer can return them to the caller.
         """
         state["web_sources"] = []
+        state["_general_content"] = False   # True only for content, see _label_general
         if self._is_it_related(message):
             state["active_it_topic"] = True
         else:
@@ -1409,6 +1476,7 @@ class UnifiedAssistantService:
                     retrieved_at = getattr(source, "retrieved_at", None)
                     if retrieved_at:
                         citation += f" (consultada: {retrieved_at})"
+                    state["_general_content"] = True
                     return f"{source.snippet}\n\n{citation}"
 
                 state["web_sources"] = [
@@ -1468,9 +1536,15 @@ class UnifiedAssistantService:
         history = state.get("history") or []
         routes = list(state.get("history_routes") or [])
         routes = [None] * (len(history) - len(routes)) + routes[-len(history):] if history else []
-        general = [entry for entry, route in zip(history, routes) if route == "general"] if use_history else []
+        general = [(entry[0], _without_notice(entry[1]), *entry[2:])
+                   for entry, route in zip(history, routes) if route == "general"] if use_history else []
         context = ""
-        if general:
+        # E4: with a provider that takes turns, the previous general exchanges go as real user/assistant turns
+        # (sized to num_ctx by the provider); otherwise, or with ITGLASSES_CHAT_CONTEXT=prompt, as text.
+        as_turns = bool(general) and hasattr(self.provider, "generate_general_turns") and chat_context.mode() == "turns"
+        if as_turns:
+            context = "\n\nResponde de forma coherente con la conversación previa."
+        elif general:
             recent = "\n".join(f"Usuario: {entry[0]}\nAsistente: {entry[1]}" for entry in general[-4:])
             context = (
                 "\n\nConversación previa:\n" + recent +
@@ -1491,8 +1565,11 @@ class UnifiedAssistantService:
         try:
             # The general chat may be longer than /api/v1/chat (OllamaProvider.generate_general: 768 tokens, and
             # the text generated so far plus a note when it reaches the limit). Other providers: generate().
-            generate = getattr(self.provider, "generate_general", None) or self.provider.generate
-            answer = await generate(prompt)
+            if as_turns:
+                answer = await self.provider.generate_general_turns(prompt, general[-chat_context.MAX_TURNS:])
+            else:
+                generate = getattr(self.provider, "generate_general", None) or self.provider.generate
+                answer = await generate(prompt)
         except (ProviderTimeoutError, ProviderUnavailableError) as exc:
             import logging
             logging.getLogger("assistant").error("general provider failed error_type=%s", type(exc).__name__)
@@ -1525,6 +1602,7 @@ class UnifiedAssistantService:
                 for source in state["web_sources"][:3]
             )
             answer += "\n\nFuentes consultadas:\n" + citations
+        state["_general_content"] = bool(answer)
         return answer or GENERAL_UNAVAILABLE
 
     async def chat(self, message, session_id=None):
@@ -1793,6 +1871,7 @@ class UnifiedAssistantService:
 
         needs_web = self._needs_web(message)
         documentation_only = bool(DOCUMENTED_TOPIC.search(_fold(message)))
+        general_followup = documentation_only and self._general_followup(state, message)
         ordinary_general = self._is_conceptual(message) or self._continues_general(state, message)
         needs_knowledge = (
             needs_web or documentation_only or self._is_it_related(message)
@@ -1802,7 +1881,8 @@ class UnifiedAssistantService:
         # Non-IT conceptual questions and ordinary follow-ups retain the fast,
         # conversational path. IT topics proceed to authorized retrieval first.
         if not needs_knowledge:
-            answer = await self._general_answer(state, message)
+            it_topic = self._general_is_it(state, message)
+            answer = self._label_general(state, await self._general_answer(state, message), it_topic)
             state["active_route"] = "general"
             self.sessions.remember(state, message, answer)
             return {"answer": answer, "session_id": session_id, "route": "general",
@@ -1895,7 +1975,7 @@ class UnifiedAssistantService:
             return {"answer": result.answer, "session_id": session_id, "route": "knowledge",
                     "sources": result.sources if result.sources else []}
 
-        if documentation_only:
+        if documentation_only and not general_followup:
             if (result is not None and result.status == "insufficient_evidence"
                     and EXPLICIT_MANUAL_REQUEST.search(message)):
                 query, display_topic, _ = self._public_query_parts(
@@ -1938,7 +2018,7 @@ class UnifiedAssistantService:
                 state["active_route"] = "general"
                 self.sessions.remember(state, message, answer)
                 return {"answer": answer, "session_id": session_id, "route": "general", "sources": []}
-            answer = await self._general_answer(state, message)
+            answer = self._label_general(state, await self._general_answer(state, message), True)
             state["active_route"] = "general"
             self.sessions.remember(state, message, answer)
             return {"answer": answer, "session_id": session_id, "route": "general",

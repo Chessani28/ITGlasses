@@ -95,7 +95,15 @@ class OllamaProvider:
         limit = min(GENERAL_MAX_OUTPUT_TOKENS, self.config.context_length // 2)
         return await self._chat("general", message, limit, allow_partial=True)
 
-    async def _chat(self, component, message, num_predict, allow_partial):
+    async def generate_general_turns(self, message: str, turns) -> str:
+        """Like generate_general, with the previous (question, answer) exchanges as real user/assistant turns
+        (E4), as many of the most recent as fit in num_ctx next to the answer's tokens."""
+        from backend.app.assistant.context import fit_turns
+        limit = min(GENERAL_MAX_OUTPUT_TOKENS, self.config.context_length // 2)
+        fitted = fit_turns(turns, self.config.context_length, limit, SYSTEM_PROMPT + message)
+        return await self._chat("general", message, limit, allow_partial=True, history=fitted)
+
+    async def _chat(self, component, message, num_predict, allow_partial, history=()):
         started = time.perf_counter()
         phase = "wait"
         data = {}
@@ -110,6 +118,8 @@ class OllamaProvider:
                         "model": self.model,
                         "messages": [
                             {"role": "system", "content": SYSTEM_PROMPT},
+                            *[{"role": role, "content": text} for question, answer in history
+                              for role, text in (("user", question), ("assistant", answer))],
                             {"role": "user", "content": message},
                         ],
                         "stream": False, "think": self.config.thinking,

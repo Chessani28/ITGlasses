@@ -644,7 +644,7 @@ def test_other_time_sensitive_web_results_are_summarized_not_dumped():
     result = ask(service, "¿Cuál es la última actualización de Exchange?")
 
     assert result["route"] == "general"
-    assert result["answer"].startswith(provider.answer)
+    assert result["answer"].startswith(GENERAL_NOTICE + "\n" + provider.answer)   # public sources: not the manuals
     assert "RAW EXCHANGE SNIPPET" not in result["answer"]
     assert "Fuentes consultadas:" in result["answer"]
     assert len(result["sources"]) == 2
