@@ -159,7 +159,7 @@ def test_misheard_name_answers_from_the_only_heading_it_mentions():
     assert result["answer"].startswith("No encontré un manual llamado «Terry D»; respondo desde «Training Setup "
                                        "Guideline».\n«REQUIRED PERIPHERALS» (2 pasos):")
     other = ask(build(), "Según el manual de Server, Rack, Gally, cómo se monta", session())
-    assert other["answer"] == "No encontré un manual llamado «Server» en los documentos autorizados."
+    assert other["answer"] == "No encontré un manual llamado «Server» en los documentos autorizados. ¿Quieres que te lo explique de forma general? Si existe ese manual, un administrador puede subirlo en Documentos."
 
 
 # --- Reserve answer without index pages ------------------------------------------------------------------------

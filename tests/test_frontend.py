@@ -48,6 +48,8 @@ def test_browser_modes_and_document_lifecycle(tmp_path):
             "message": "La opción seleccionada.", "conversation_id": answer["conversation_id"],
             "choice_document_id": docs[0]["id"]}).json()
         assert clarified["status"] == "answered" and clarified["intent"] == "identify"
+        # Never an internal id in the text (2026-11-24: "[68b5179f-…]" was shown); the sources carry them.
+        assert clarified["sources"][0]["citation_id"] not in clarified["answer"] and "[" not in clarified["answer"]
         assert clarified["sources"][0]["quote"] == ""
         source = clarified["sources"][0]["url"]
         assert client.get(source).json()["quote"] == "Formatear Windows."

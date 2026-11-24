@@ -14,6 +14,8 @@ import unicodedata
 MATCH_MIN = 0.80     # string similarity that still counts as the same name (misspellings, word order)
 ALIAS_MATCH_MIN = 0.98  # an alias or nickname matches only when it holds the whole name (or is the same name)
 NEAREST_MIN = 0.45   # below this nothing is offered as the closest one
+NEAREST_SURE = 0.60  # from here the similarity alone is enough to offer it
+WORD_LIKE_MIN = 0.75  # a word this close to a word of the entry ("trading" ~ "training") relates them
 _TOKEN = re.compile(r"[a-z0-9]+")
 STOPWORDS = frozenset("de del la el los las a al y e en para por con sobre un una the of for and to on in".split())
 GENERIC = frozenset(
@@ -173,6 +175,23 @@ def heading_scores(message, headings):
     return scores
 
 
+def related(name, entry):
+    """Whether ``entry`` may be offered as the closest one to ``name``: a shared word (glossary included), a word
+    nearly the same ("Trading Sarah Guyton" ~ Training Setup Guideline, a misheard name), or a high similarity.
+    Letters alike are not enough: "cambiar la impresora del piso 2" is not COMPUTER PREPARATION (0.50)."""
+    value = score(name, entry)
+    if value < NEAREST_MIN:
+        return False
+    if value >= NEAREST_SURE:
+        return True
+    name_tokens, entry_tokens = content_tokens(name), set(content_tokens(entry))
+    expanded = set().union(*(_variants(token) for token in name_tokens)) if name_tokens else set()
+    if expanded & entry_tokens:
+        return True
+    return any(SequenceMatcher(None, a, b).ratio() >= WORD_LIKE_MIN
+               for a in name_tokens if len(a) > 3 for b in entry_tokens if len(b) > 3)
+
+
 def find_heading(message, headings):
     """The heading a question mentions, also misspelled or by its Spanish alias: (heading, score) or None.
 
@@ -226,7 +245,8 @@ def resolve(name, index, message=None):
         if mentioned:
             nearest = next(e.document_title for e in entries if e.procedure and e.text == mentioned[0])
         else:
-            nearest = next((entry.text for value, entry in scored if value >= NEAREST_MIN and not entry.alias), None)
+            nearest = next((entry.text for value, entry in scored
+                            if value >= NEAREST_MIN and not entry.alias and related(name, entry.text)), None)
         return Resolution("missing", nearest=nearest)
     best = matches[0][0]
     top = [entry for value, entry in matches if value == best]

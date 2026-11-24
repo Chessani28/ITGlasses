@@ -89,7 +89,7 @@ def test_misheard_document_name_answers_from_the_only_heading_with_a_notice_firs
 
 @pytest.mark.parametrize(("message", "answer"), [
     ("Según el manual de Server Rack Guide, cómo se monta un servidor",
-     "No encontré un manual llamado «Server Rack Guide» en los documentos autorizados."),
+     "No encontré un manual llamado «Server Rack Guide» en los documentos autorizados. ¿Quieres que te lo explique de forma general? Si existe ese manual, un administrador puede subirlo en Documentos."),
     ("Según el manual Trading Sarah Guyton, ¿por qué fallan los periféricos requeridos?",   # not a reading question
      "No encontré un manual llamado «Trading Sarah Guyton»; lo más cercano es «Training Setup Guideline»."),
 ])

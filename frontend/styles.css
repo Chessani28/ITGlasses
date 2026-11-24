@@ -150,3 +150,9 @@ main{margin-left:240px;min-height:100dvh;display:flex;flex-direction:column}.top
 .voice-engine-notice{border:1px solid #6b5a3a;background:#2a2418;color:var(--amber)!important;border-radius:8px;padding:8px 12px}
 .voice-engine-notice[hidden]{display:none}
 @media(max-width:1100px){.chat-layout{grid-template-columns:1fr}.history-panel{position:static;max-height:none}.history-list{max-height:260px}}
+
+/* Answers rendered from Markdown (frontend/markdown.mjs). */
+.message-text.rich{white-space:normal}.message-text.rich p{margin:0 0 10px}.message-text.rich p:last-child{margin-bottom:0}
+.message-text.rich ul,.message-text.rich ol{margin:4px 0 10px;padding-left:22px}.message-text.rich li{margin:2px 0}
+.message-text.rich code{font:12px Consolas,"Cascadia Mono",monospace;background:#202825;border:1px solid #2f3a34;border-radius:5px;padding:1px 5px}
+.message-text.rich a{color:var(--green)}.message-text.rich strong{color:var(--text)}

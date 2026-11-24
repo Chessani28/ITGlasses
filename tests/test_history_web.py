@@ -118,5 +118,6 @@ def test_the_old_voice_texts_are_gone():
 
 
 def test_no_history_script_writes_html():
-    source = (FRONTEND / "history.mjs").read_text(encoding="utf-8")
-    assert "innerHTML" not in source and "insertAdjacentHTML" not in source and "outerHTML" not in source
+    for name in ("history.mjs", "markdown.mjs", "app.js"):
+        source = (FRONTEND / name).read_text(encoding="utf-8")
+        assert "innerHTML" not in source and "insertAdjacentHTML" not in source and "outerHTML" not in source, name

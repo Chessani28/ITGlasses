@@ -3,6 +3,7 @@ import {api, chatPayload, documentState, elapsed, jsonOptions, limits, sourcePat
 import {initVoice} from "./voice-ui.mjs";
 import {initAccounts} from "./accounts.mjs";
 import {initHistory, toChatEntries} from "./history.mjs";
+import {renderMarkdown} from "./markdown.mjs";
 let voiceActive = false;
 let accounts = null;
 let historyPanel = null;
@@ -98,7 +99,10 @@ function renderChat() {
       insufficient_evidence: "Evidencia insuficiente",
       general: "Chat general", knowledge: "Respuesta documentada", social: "Conversación"
     })[entry.status] || entry.status));
-    const text = node("div", "message-text", entry.text);
+    // The assistant's answers may carry Markdown (lists, **bold**, links): built as elements, never as HTML.
+    const rich = entry.role === "assistant" && !entry.pending && !entry.error;
+    const text = node("div", "message-text" + (rich ? " rich" : ""), rich ? undefined : entry.text);
+    if (rich) text.append(renderMarkdown(entry.text));
     if (entry.pending) text.prepend(node("span", "loading-dot"));
     body.append(heading, text);
     if (entry.sources?.length) {

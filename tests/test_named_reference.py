@@ -289,7 +289,7 @@ def test_unknown_name_is_said_and_the_previous_topic_is_not_carried():
     ask(service, "¿Cuáles son los pasos de COMPUTER PREPARATION?")
     queries = len(knowledge.queries)
     result = ask(service, "Según el procedimiento de respaldo, ¿qué hago primero?")
-    assert result["answer"] == "No encontré un procedimiento llamado «respaldo» en los documentos autorizados."
+    assert result["answer"] == "No encontré un procedimiento llamado «respaldo» en los documentos autorizados. ¿Quieres que te lo explique de forma general? Si existe ese manual, un administrador puede subirlo en Documentos."
     assert result["sources"] == [] and len(knowledge.queries) == queries
     follow_up = ask(service, "¿y el paso 2?")
     assert "COMPUTER PREPARATION" not in follow_up["answer"] and "Keyboard" not in follow_up["answer"]

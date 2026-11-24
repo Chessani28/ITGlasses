@@ -13,6 +13,7 @@ import asyncio
 import html
 import re
 import uuid
+from difflib import SequenceMatcher
 from urllib.parse import urlsplit
 
 from backend.app.assistant.memory import SessionStore
@@ -43,6 +44,7 @@ CURRENT_VERSION = re.compile(
 # non-IT concepts can use the general provider directly.
 CONCEPTUAL_QUESTION = re.compile(
     r"qu[eé]\s+(?:es|son|significa)\b"
+    r"|(?<!\w)[qk]\s+(?:es|son|significa)\b"   # "q es un firewall", as typed in a chat
     r"|\bdefinicion\b|\bdefin(?:e|icio|icioname|ame|iendo)\b"
     r"|\bexplic(?:a|ame|ar|ando|acion)\b"
     r"|\bdiferencia\s+entre\b"
@@ -67,6 +69,24 @@ IT_RELATED = re.compile(
     r"impresor[ií]a)\b",
     re.IGNORECASE,
 )
+
+# The IT words a typo should still find ("firewal", "ruter", "swich", "impresosa"): words of IT_RELATED with five
+# letters or more, folded. Compared by similarity in _fuzzy_it (IT_TYPO_MIN, same first letter).
+IT_TYPO_WORDS = ("ethernet", "windows", "linux", "android", "computadora", "computador", "ordenador", "laptop",
+                 "impresora", "servidor", "router", "switch", "firewall", "cortafuegos", "proxy", "outlook",
+                 "hardware", "software", "protocolo", "credencial", "contrasena", "teclado", "monitor", "gateway",
+                 "subnet", "subred")
+IT_TYPO_MIN = 0.85
+
+
+def _fuzzy_it(text):
+    """A word of the (folded) text that is an IT word with a typo."""
+    for word in re.findall(r"[a-z]{5,}", text):
+        for known in IT_TYPO_WORDS:
+            if word != known and word[0] == known[0] and SequenceMatcher(None, word, known).ratio() >= IT_TYPO_MIN:
+                return True
+    return False
+
 
 IT_CONTEXTUAL_FOLLOWUP = re.compile(
     r"^(?:y\s+)?(?:eso|esto|lo anterior|el anterior|la anterior|si eso|si no|"
@@ -182,6 +202,9 @@ _PUBLIC_STOPWORDS = frozenset("""
 # A general answer to an IT question the authorized manuals did not cover (added by the code, not the model).
 GENERAL_NOTICE = "Respuesta general (no proviene de los manuales autorizados):"
 GENERAL_OFFER = "No encontré esto en los manuales autorizados. ¿Quieres que te lo explique de forma general?"
+# After "No encontré un procedimiento llamado «X» en los documentos autorizados." when nothing related exists.
+MISSING_OFFER = ("¿Quieres que te lo explique de forma general? Si existe ese manual, un administrador puede subirlo "
+                 "en Documentos.")
 # A general answer that still refuses because documentation is missing.
 _DOCUMENTATION_REFUSAL = re.compile(
     r"\bno (?:tengo|dispongo de|cuento con) acceso a (?:la |una |ninguna |los |las )?(?:documentacion|manual|document)"
@@ -298,6 +321,10 @@ _READS_PROCEDURE = re.compile(
     r"en\s+qu[eé]\s+consiste|dime|cu[aá]l\s+es\s+el\s+(?:procedimiento|proceso))\b",
     re.IGNORECASE,
 )
+# "¿Qué es COMPUTER PREPARATION?": a section asked by name is read like "¿Cuáles son los pasos de…?" (never the
+# retrieval's "documento identificado"). Only for a heading named exactly (see _names_heading).
+_ASKS_WHAT = re.compile(r"(?:^|[\s¿¡,])(?:qu[eé]|q|k)\s+(?:es|son|significa)\b|\ben\s+qu[eé]\s+consiste\b",
+                        re.IGNORECASE)
 _READING_KINDS = {"ordinal", "next", "previous", "last", "steps", "procedure", "document"}
 # With a name, "el procedimiento de X" is the name itself, not a request to read it.
 _NAMED_READING_KINDS = _READING_KINDS - {"procedure"}
@@ -1322,7 +1349,8 @@ class UnifiedAssistantService:
 
     @staticmethod
     def _is_it_related(message):
-        return bool(IT_RELATED.search(_fold(message or "")) or _problem_subject(message))
+        folded = _fold(message or "")
+        return bool(IT_RELATED.search(folded) or _problem_subject(message) or _fuzzy_it(folded))
 
     @staticmethod
     def _continues_general(state, message):
@@ -1821,6 +1849,10 @@ class UnifiedAssistantService:
                     return {"answer": answer, "session_id": session_id, "route": "knowledge", "sources": sources}
             answer = named_reference.not_found_message(target, resolution.nearest)
             self._forget_document(state)
+            if not resolution.nearest:
+                # Nothing related to suggest: offer a general answer ("sí" answers it) or uploading the manual.
+                answer += " " + MISSING_OFFER
+                state["pending_general"] = {"question": message[:4000]}
             state["active_route"] = "knowledge"
             self.sessions.remember(state, message, answer)
             return {"answer": answer, "session_id": session_id, "route": "knowledge", "sources": []}
@@ -1861,6 +1893,26 @@ class UnifiedAssistantService:
                 and (kind in _READING_KINDS or _READS_PROCEDURE.search(message))
                 and not match_procedures(state.get("procedures"), message)):
             named_document = self._find_heading_anywhere(message)
+        # "¿Qué es <sección>?" (with or without "según el manual"): the section explained and its steps listed.
+        if kind is None and _ASKS_WHAT.search(message):
+            asked = named_document
+            if asked is None:
+                exact = [p for p in match_procedures(state.get("procedures"), message) if p.get("steps")]
+                if len(exact) == 1 and state.get("active_document_id"):
+                    asked = named_reference.Resolution("found", state["active_document_id"],
+                                                       state.get("active_document"), exact[0].get("title"))
+                elif target is None:
+                    asked = self._find_heading_anywhere(message)
+            if asked is not None and asked.procedure and self._names_heading(message, asked.procedure):
+                read = await self._answer_named_procedure(state, asked, "steps", None)
+                if read is not None:
+                    answer, sources = read
+                    document = asked.document_title or state.get("active_document")
+                    if document:
+                        answer = f"«{asked.procedure}» es una sección de «{document}». Estos son sus pasos:\n" + answer
+                    state["active_route"] = "knowledge"
+                    self.sessions.remember(state, message, answer)
+                    return {"answer": answer, "session_id": session_id, "route": "knowledge", "sources": sources}
         # A named procedure that was parsed is read straight from the document: no retrieval needed.
         if (named_document is not None and named_document.procedure
                 and (kind in (_NAMED_READING_KINDS if target else _READING_KINDS)
@@ -2104,6 +2156,14 @@ class UnifiedAssistantService:
     def _find_heading_anywhere(self, message):
         index = self._named_index()
         return None if index is None else named_reference.find_heading_anywhere(message, index)
+
+    @staticmethod
+    def _names_heading(message, heading):
+        """The question names this heading exactly (every word, or its Spanish alias), and the heading has two content
+        words or more: "¿Qué es una VPN?" never reads a one-word section called VPN."""
+        if len(named_reference.content_tokens(heading)) < 2:
+            return False
+        return named_reference.heading_scores(message, [heading]).get(heading, 0.0) >= 1.0
 
     def _resolve_named(self, target, message=None):
         index = self._named_index()

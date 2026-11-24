@@ -33,6 +33,23 @@ def reserve_answer(evidence, reason):
     return "Según la documentación autorizada:\n\n" + "\n\n".join(row["text"] for row in rows)
 
 
+# What a company question asked about, for the refusal without evidence: (this, a) in Spanish.
+_ASKED_ABOUT = (
+    (re.compile(r"\bpol[ií]ticas?\b", re.I), ("esa política", "una política")),
+    (re.compile(r"\b(?:procedimientos?|pasos?|instrucciones|protocolos?)\b", re.I),
+     ("ese procedimiento", "un procedimiento")),
+)
+
+
+def unverified_message(question):
+    """The refusal when the manuals hold no evidence, with the word the question used: política, procedimiento, or
+    the neutral "información" (manual, guía, empresa, cómo...)."""
+    this, a = next((words for pattern, words in _ASKED_ABOUT if pattern.search(question or "")),
+                   ("esa información", "información"))
+    return (f"No pude verificar {this} en los manuales y documentos autorizados disponibles. "
+            f"No puedo afirmar {a} de la empresa sin esa evidencia.")
+
+
 class KnowledgeService:
     def __init__(self, root, embeddings, selector):
         self.root = Path(root)
@@ -199,9 +216,7 @@ class KnowledgeService:
                 # Determine appropriate message based on query type
                 msg = request.message
                 if is_company_specific(msg):
-                    return respond("insufficient_evidence",
-                        "No pude verificar ese procedimiento en los manuales y documentos autorizados disponibles. "
-                        "No puedo afirmar un procedimiento de la empresa sin esa evidencia.")
+                    return respond("insufficient_evidence", unverified_message(msg))
                 else:
                     return respond("insufficient_evidence",
                         "No encontré información sobre ese tema en los manuales y documentos disponibles. "
@@ -300,7 +315,9 @@ class KnowledgeService:
                 evidence.append(current)
             sources = [self.source(row) for row in evidence]
             if mode == "identify":
-                answer = f'Documento identificado: «{selected_document["title"]}» (versión {selected_document["version"]}). [{evidence[0]["id"]}]\nNo se incluyen pasos de ejecución porque la consulta pide identificar el procedimiento.'
+                # Internal ids (citations, documents) never reach the text: the sources carry them.
+                answer = (f'Documento identificado: «{selected_document["title"]}» (versión {selected_document["version"]}).\n'
+                          'Si necesitas sus pasos, pregunta «¿Cuáles son los pasos de…?».')
                 # Identification exposes title/provenance only, never destructive steps.
                 sources = [{**source, "quote": "", "quote_available_at_source": True} for source in sources]
             else:
