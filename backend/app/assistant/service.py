@@ -1908,8 +1908,10 @@ class UnifiedAssistantService:
                 if read is not None:
                     answer, sources = read
                     document = asked.document_title or state.get("active_document")
-                    if document:
-                        answer = f"«{asked.procedure}» es una sección de «{document}». Estos son sus pasos:\n" + answer
+                    heading = f"«{asked.procedure}» "
+                    if document and answer.startswith(heading + "("):
+                        # One line: "«COMPUTER PREPARATION» es una sección de «Training Setup Guideline» (8 pasos):"
+                        answer = f"{heading}es una sección de «{document}» " + answer[len(heading):]
                     state["active_route"] = "knowledge"
                     self.sessions.remember(state, message, answer)
                     return {"answer": answer, "session_id": session_id, "route": "knowledge", "sources": sources}

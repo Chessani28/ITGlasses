@@ -36,8 +36,8 @@ def test_what_is_a_section_lists_its_steps_without_internal_ids(question):
     service, sid = build(knowledge), session()
     answer = ask(service, question, sid)
     assert answer["route"] == "knowledge" and answer["sources"] and knowledge.queries == []
-    assert answer["answer"].startswith("«COMPUTER PREPARATION» es una sección de «Training Setup Guideline». "
-                                       "Estos son sus pasos:\n«COMPUTER PREPARATION» (")
+    assert answer["answer"].startswith("«COMPUTER PREPARATION» es una sección de «Training Setup Guideline» (")
+    assert answer["answer"].count("COMPUTER PREPARATION") == 1           # the title once, not twice
     assert "\n1. " in answer["answer"] and "Documento identificado" not in answer["answer"]
     assert not UUID.search(answer["answer"])
     third = ask(service, "¿Y cuál es el paso 3?", sid)                       # the follow-up still works
