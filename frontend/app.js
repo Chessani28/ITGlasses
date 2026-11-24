@@ -7,6 +7,7 @@ import {renderMarkdown} from "./markdown.mjs";
 import {initLayout, nearBottom} from "./layout.mjs";
 import {initVoiceDock} from "./voice-dock.mjs";
 import {openInChat, startNewChat} from "./chat-nav.mjs";
+import {initPasswordToggles} from "./password-toggle.mjs";
 const layout = initLayout();
 let voiceActive = false;
 let accounts = null;
@@ -391,6 +392,7 @@ $("confirm-withdraw").addEventListener("click", () => {
 });
 const voice = initVoice({send: (text, signal) => sendMessage(text, undefined, signal), lock: active => {voiceActive = active; updateControls();}});
 initVoiceDock();
+initPasswordToggles();
 setMode("assistant");
 // Stage "historial" 5: the saved conversations of the logged-in user, next to the chat.
 historyPanel = initHistory({
