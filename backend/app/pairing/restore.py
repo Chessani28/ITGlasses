@@ -1,4 +1,4 @@
-"""Restore the device database or the chat history from a backup (revert of a schema migration, or a file of a
+r"""Restore the device database or the chat history from a backup (revert of a schema migration, or a file of a
 backup set in storage/backups/).
 
 Run it on this PC with the backend STOPPED (scripts\stop-backend.ps1):

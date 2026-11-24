@@ -34,6 +34,8 @@ class AssistantResponse(BaseModel):
     sources: list = Field(default_factory=list)
     # What the voice reads of a long answer (title and first steps, or first sentences). None: read the answer.
     speech: str | None = None
+    # Stage "historial": whether this exchange was saved in the chat history (older clients ignore it).
+    history_saved: bool = False
 
 
 class HealthResponse(BaseModel):

@@ -46,20 +46,28 @@ async def assistant_chat(payload: AssistantRequest, request: Request):
         import logging
         logging.getLogger("assistant").exception("knowledge service unavailable: %s", exc)
         knowledge = None
-    provider = request.app.state.provider
-    from backend.app.assistant.service import UnifiedAssistantService
-    if not hasattr(request.app.state, "assistant"):
-        request.app.state.assistant = UnifiedAssistantService(knowledge, provider)
-    else:
-        request.app.state.assistant.knowledge = knowledge
-        request.app.state.assistant.provider = provider
-    session = payload.session_id
-    device = getattr(request.state, "device_id", None)
-    if device:
-        from uuid import uuid4
-        session = session or str(uuid4())
-    result = await request.app.state.assistant.chat(payload.message, (device, session) if device else session)
-    if device:
-        result = {**result, "session_id": session}
+    assistant = _assistant(request, knowledge)
+    # Stage "historial" 2: the conversation is saved (web with a login, devices with an owner) and survives restarts;
+    # a device's open app and glasses mode share one conversation. Anything else runs in memory, as before.
+    from backend.app.history.chat import chat as history_chat
+    result = await history_chat(request, assistant, request.app.state.conversation_locks, payload.message,
+                                payload.session_id)
     from backend.app.assistant.speech import spoken_summary
     return AssistantResponse(**result, speech=spoken_summary(result.get("answer")))
+
+
+def _assistant(request, knowledge):
+    """The one assistant of the backend (E2): created at the first question with its in-memory state, never
+    recreated; only the knowledge service (built lazily) or a replaced provider are refreshed."""
+    from backend.app.assistant.service import UnifiedAssistantService
+    state = request.app.state
+    provider = state.provider
+    assistant = getattr(state, "assistant", None)
+    if assistant is None:
+        assistant = state.assistant = UnifiedAssistantService(knowledge, provider)
+        return assistant
+    # Another assistant (e.g. one a test injects) is used as it is: only attributes it has are refreshed.
+    for name, value in (("knowledge", knowledge), ("provider", provider)):
+        if hasattr(assistant, name) and getattr(assistant, name) is not value:
+            setattr(assistant, name, value)
+    return assistant

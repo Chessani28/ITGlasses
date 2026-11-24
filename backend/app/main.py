@@ -50,6 +50,7 @@ def _check_password_settings():
     """Refuse to start with an invalid ITGLASSES_PASSWORD_MIN_LENGTH or session lifetime instead of silently using
     the defaults."""
     from backend.app.backups import BackupConfigError, check_settings as backup_settings
+    from backend.app.history.conversations import HistoryConfigError, check_settings as history_settings
     from backend.app.users.access import AccessConfigError, bearer_scope, loopback_mode
     from backend.app.users.passwords import PasswordConfigError, min_length
     from backend.app.users.sessions import SessionConfigError, lifetimes
@@ -61,7 +62,9 @@ def _check_password_settings():
         logger.info("access loopback_mode=%s bearer_scope=%s", loopback_mode(), bearer_scope())
         enabled, keep = backup_settings()
         logger.info("daily_backup enabled=%s keep=%d", enabled, keep)
-    except (PasswordConfigError, SessionConfigError, AccessConfigError, BackupConfigError) as error:
+        saving, gap = history_settings()
+        logger.info("chat_history enabled=%s device_gap_min=%d", saving, gap // 60)
+    except (PasswordConfigError, SessionConfigError, AccessConfigError, BackupConfigError, HistoryConfigError) as error:
         logger.error("Invalid configuration: %s", error)
         raise
 
@@ -157,6 +160,10 @@ def create_app(provider: LLMProvider | None = None, knowledge=None, voice=None, 
                     raise
 
     app = FastAPI(title=settings.app_name, version=settings.version, lifespan=lifespan)
+    # The assistant (created at the first question, never recreated: E2) and one lock per saved conversation.
+    from backend.app.history.chat import ConversationLocks
+    app.state.assistant = None
+    app.state.conversation_locks = ConversationLocks()
     app.state.provider = provider if provider is not None else (
         OllamaProvider(settings) if settings.provider == "ollama" else MockLLM()
     )
