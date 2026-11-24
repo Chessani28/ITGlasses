@@ -4,6 +4,8 @@ import {initVoice} from "./voice-ui.mjs";
 import {initAccounts} from "./accounts.mjs";
 import {initHistory, toChatEntries} from "./history.mjs";
 import {renderMarkdown} from "./markdown.mjs";
+import {initLayout, nearBottom} from "./layout.mjs";
+const layout = initLayout();
 let voiceActive = false;
 let accounts = null;
 let historyPanel = null;
@@ -14,8 +16,11 @@ const $ = id => document.getElementById(id);
 const state = {mode: "assistant", busy: false, documentBusy: false, updating: null, withdrawing: null,
   sourceRequest: 0, chats: {assistant: {messages: [], conversation: null}, knowledge: {messages: [], conversation: null}, general: {messages: [], conversation: null}}};
 const welcome = $("welcome");
+/** The hero's suggestions: complete questions, sent as they are. */
+const SUGGESTIONS = [["De tus manuales", "¿Qué es COMPUTER PREPARATION?"], ["Conocimiento general", "¿Qué es una VPN?"],
+  ["Búsqueda en internet", "¿Cuál es la última versión de Windows 11?"]];
 const modeText = {
-  assistant: {eyebrow: "ASISTENTE UNIFICADO", title: "Asistente ITGlasses.", subtitle: "Una conversación.", description: "Conversación natural, conocimiento general y documentación autorizada en un solo modo.", context: "Asistente · contexto de sesión del backend.", prompt: "Escribe tu pregunta…", label: "Asistente ITGlasses · fuentes cuando aplique"},
+  assistant: {eyebrow: "ASISTENTE UNIFICADO", title: "Asistente ITGlasses", subtitle: "", description: "Conversación natural, conocimiento general y documentación autorizada en un solo lugar.", context: "Asistente · contexto de sesión del backend.", prompt: "Escribe tu pregunta…", label: "Asistente ITGlasses · fuentes cuando aplique"},
   knowledge: {eyebrow: "CONOCIMIENTO CON EVIDENCIA", title: "Tu documentación.", subtitle: "Respuestas con respaldo.",
     description: "Encuentra procedimientos, resuelve dudas y consulta las fuentes. Todo desde tu equipo, con tus documentos autorizados.",
     context: "Conocimiento · contexto temporal del backend. No se guarda al recargar.",
@@ -72,24 +77,28 @@ function setMode(mode) {
   if (mode === "assistant") historyPanel?.cleared();  // the saved-or-not note of the history
   $("composer-mode").textContent = text.label;
   $("welcome-eyebrow").textContent = text.eyebrow;
-  $("welcome-title").replaceChildren(document.createTextNode(text.title), node("br"), node("em", "", text.subtitle));
+  $("welcome-title").replaceChildren(document.createTextNode(text.title), ...(text.subtitle ? [node("br"), node("em", "", text.subtitle)] : []));
   $("welcome-description").textContent = text.description;
   const prompts = mode === "knowledge" ? [
     ["Busca un procedimiento", "¿Cuál es el procedimiento 24?"],
     ["Descríbelo con tus palabras", "Necesito instalar Windows desde cero con una USB. ¿Cómo se llama ese proceso?"]
-  ] : [["Entiende un concepto", "Explica brevemente qué es DNS."], ["Compara dos conceptos", "¿Cuál es la diferencia entre RAM y almacenamiento?"]];
+  ] : mode === "assistant" ? SUGGESTIONS
+    : [["Entiende un concepto", "Explica brevemente qué es DNS."], ["Compara dos conceptos", "¿Cuál es la diferencia entre RAM y almacenamiento?"]];
+  // A suggestion is a complete question: a click sends it as if it had been typed.
   $("suggestions").replaceChildren(...prompts.map(([label, prompt]) => {
-    const button = action("", "", () => { $("message").value = prompt; updateCounter(); $("message").focus(); });
-    button.append(node("span", "", "↗"), node("strong", "", label), node("small", "", prompt));
+    const button = action("", "", () => sendMessage(prompt));
+    button.append(node("strong", "", prompt), node("small", "", label));
     return button;
   }));
   updateCounter();
   renderChat();
 }
-function renderChat() {
-  const messages = state.chats[state.mode].messages;
-  if (!messages.length) { $("conversation").replaceChildren(welcome); return; }
-  $("conversation").replaceChildren(...messages.map(entry => {
+function renderChat(follow = false) {
+  const messages = state.chats[state.mode].messages, conversation = $("conversation");
+  // The view follows a new message only when the reader was already at the end (or asked for it).
+  const stick = follow || nearBottom(conversation);
+  if (!messages.length) { conversation.replaceChildren(welcome); return; }
+  conversation.replaceChildren(...messages.map(entry => {
     const article = node("article", `message ${entry.role}${entry.error ? " error" : ""}`);
     const body = node("div", "message-body");
     const heading = node("div", "message-label", entry.role === "user" ? "Tú" : "ITGlasses");
@@ -138,11 +147,12 @@ function renderChat() {
       });
       body.append(options);
     }
-    article.append(node("div", "avatar", entry.role === "user" ? "TÚ" : "it"), body);
+    article.append(body);
     return article;
   }));
   updateControls();
   document.querySelectorAll('.option-button[data-stale="true"]').forEach(button => button.disabled = true);
+  if (stick) conversation.scrollTop = conversation.scrollHeight;
 }
 async function sendMessage(message, choiceId, signal) {
   if (state.busy || state.documentBusy) { if (signal) throw new Error("Hay otra operación en curso."); return; }
@@ -156,8 +166,7 @@ async function sendMessage(message, choiceId, signal) {
   const pending = {role: "assistant", text: "Consultando el asistente local…", pending: true};
   chat.messages.push(pending);
   state.busy = true;
-  $("message").value = ""; updateCounter(); renderChat(); updateControls();
-  pendingScroll();
+  $("message").value = ""; layout.grow($("message")); updateCounter(); renderChat(true); updateControls();
   try {
     const {data, ms} = await api(mode === "assistant" ? "/api/v1/assistant/chat" : (mode === "knowledge" ? "/api/v1/knowledge/chat" : "/api/v1/chat"), {...jsonOptions(payload), signal}, 300000);
     result = data;
@@ -180,11 +189,10 @@ async function sendMessage(message, choiceId, signal) {
     Object.assign(pending, {text: errorText(error), error: true, ms: error.ms});
     if (signal) throw error;
   } finally {
-    pending.pending = false; state.busy = false; renderChat(); updateControls(); pendingScroll();
+    pending.pending = false; state.busy = false; renderChat(); updateControls();
   }
   return result;
 }
-function pendingScroll() { $("chat-form").scrollIntoView({block: "nearest"}); }
 async function inspectSource(id) {
   const request = ++state.sourceRequest;
   $("source-title").textContent = "Consultando fuente";
@@ -345,7 +353,9 @@ function showPage(page) {
 document.querySelectorAll("[data-page]").forEach(button => button.addEventListener("click", () => showPage(button.dataset.page)));
 document.querySelectorAll("[data-mode]").forEach(button => button.addEventListener("click", () => setMode(button.dataset.mode)));
 $("chat-form").addEventListener("submit", event => { event.preventDefault(); sendMessage($("message").value); });
-$("message").addEventListener("input", () => { $("message").setCustomValidity(""); updateCounter(); });
+$("message").addEventListener("input", () => { $("message").setCustomValidity(""); updateCounter(); layout.grow($("message")); });
+// Choosing something in the floating sidebar (icon rail or drawer) closes it.
+$("sidebar").addEventListener("click", event => { if (event.target.closest("[data-page], #new-chat, .history-open")) layout.picked(); });
 $("message").addEventListener("keydown", event => {
   if (event.key === "Enter" && !event.shiftKey && !event.isComposing) { event.preventDefault(); $("chat-form").requestSubmit(); }
 });
@@ -376,8 +386,8 @@ setMode("assistant");
 historyPanel = initHistory({
   open(conversation) {
     state.chats.assistant = {messages: toChatEntries(conversation.messages), conversation: conversation.id};
-    if (state.mode !== "assistant") setMode("assistant"); else renderChat();
-    pendingScroll();
+    if (state.mode !== "assistant") setMode("assistant");
+    renderChat(true);
   },
   reset() {
     if (state.busy) return;

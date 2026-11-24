@@ -103,7 +103,7 @@ def test_a_busy_voice_is_not_remembered_as_a_whisper_failure(client):
 def test_every_element_the_history_and_voice_scripts_use_exists_in_the_page():
     page = (FRONTEND / "index.html").read_text(encoding="utf-8")
     ids = set(re.findall(r'id="([^"]+)"', page))
-    for name in ("history.mjs", "voice-ui.mjs"):
+    for name in ("history.mjs", "voice-ui.mjs", "layout.mjs"):
         used = set(re.findall(r'\$\("#?([a-z0-9-]+)"\)', (FRONTEND / name).read_text(encoding="utf-8-sig")))
         assert used and used <= ids, (name, sorted(used - ids))
 
@@ -118,6 +118,6 @@ def test_the_old_voice_texts_are_gone():
 
 
 def test_no_history_script_writes_html():
-    for name in ("history.mjs", "markdown.mjs", "app.js"):
+    for name in ("history.mjs", "markdown.mjs", "app.js", "layout.mjs"):
         source = (FRONTEND / name).read_text(encoding="utf-8")
         assert "innerHTML" not in source and "insertAdjacentHTML" not in source and "outerHTML" not in source, name
