@@ -263,16 +263,16 @@ def _write_origin_config(project_root, value):
 
 
 def test_pairing_origin_from_configuration_is_exported(tmp_path):
-    _write_origin_config(tmp_path, "'https://172.16.5.143:8443'")
+    _write_origin_config(tmp_path, "'https://192.168.50.143:8443'")
 
     result = _run_and_print_origin(tmp_path)
 
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "ORIGIN=[https://172.16.5.143:8443]" in result.stdout
+    assert "ORIGIN=[https://192.168.50.143:8443]" in result.stdout
 
 
 def test_environment_pairing_origin_wins_over_configuration(tmp_path):
-    _write_origin_config(tmp_path, "'https://172.16.5.143:8443'")
+    _write_origin_config(tmp_path, "'https://192.168.50.143:8443'")
 
     result = _run_and_print_origin(tmp_path, {"ITGLASSES_PAIRING_ORIGIN": "https://10.0.0.5:9443"})
 
@@ -292,8 +292,8 @@ def test_missing_or_empty_pairing_origin_stays_off(tmp_path):
 
 
 def test_invalid_pairing_origin_stops_startup(tmp_path):
-    for value in ("'http://172.16.5.143:8443'", "'https://172.16.5.143:8443/'", "'https://HOST:8443'",
-                  "'https://172.16.5.143:443'", "'https://172.16.5.143 :8443'", "$true"):
+    for value in ("'http://192.168.50.143:8443'", "'https://192.168.50.143:8443/'", "'https://HOST:8443'",
+                  "'https://192.168.50.143:443'", "'https://192.168.50.143 :8443'", "$true"):
         _write_origin_config(tmp_path, value)
 
         result = _run_and_print_origin(tmp_path)

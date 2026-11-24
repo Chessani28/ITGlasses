@@ -38,7 +38,7 @@ def test_login_screen_settings(client, monkeypatch, mode, minimum):
 
 
 def test_login_screen_settings_only_from_this_pc(client):
-    with TestClient(client.app, base_url=LOCAL, client=("172.16.5.20", 50000)) as outside:
+    with TestClient(client.app, base_url=LOCAL, client=("192.168.50.20", 50000)) as outside:
         assert outside.get("/api/v1/auth/config").status_code == 403
 
 

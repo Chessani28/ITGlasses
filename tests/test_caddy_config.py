@@ -20,7 +20,7 @@ MATCHER = re.compile(r"\t@phone_(\w+) \{\n\t\tmethod (\w+)\n\t\tpath ([^\n]+)\n\
 
 
 def generated():
-    return caddy_config.caddyfile("172.16.5.143", 8443, CERT, KEY)
+    return caddy_config.caddyfile("192.168.50.143", 8443, CERT, KEY)
 
 
 def published(text):
@@ -46,7 +46,7 @@ def test_everything_else_is_404_and_the_site_is_locked_down():
     assert text.rstrip().endswith("\thandle {\n\t\trespond 404\n\t}\n}")
     assert text.count("respond 404") == 1
     assert text.index("handle @phone_") < text.index("\thandle {\n\t\trespond 404")
-    for needed in ("admin off", "auto_https disable_redirects", ":8443 {", "bind 172.16.5.143",
+    for needed in ("admin off", "auto_https disable_redirects", ":8443 {", "bind 192.168.50.143",
                    f"tls {CERT} {KEY}", "max_size 2MB", "reverse_proxy 127.0.0.1:",
                    "dial_timeout 5s", "response_header_timeout 150s"):
         assert needed in text, needed
@@ -58,12 +58,12 @@ def test_everything_else_is_404_and_the_site_is_locked_down():
                                    ("GET", "/api/v1/documents/{doc_id}"), ("POST", "/pairing/requests")])
 def test_refuses_to_publish_admin_wildcards_parameters_or_unprefixed_paths(route):
     with pytest.raises(SystemExit):
-        caddy_config.caddyfile("172.16.5.143", 8443, CERT, KEY, routes={route}, upstream=8000)
+        caddy_config.caddyfile("192.168.50.143", 8443, CERT, KEY, routes={route}, upstream=8000)
 
 
 def test_output_is_utf8_without_bom_and_with_lf(tmp_path):
     target = tmp_path / "Caddyfile"
-    caddy_config.main(["--output", str(target)])
+    caddy_config.main(["--output", str(target), "--bind", "192.168.50.143"])
     raw = target.read_bytes()
     assert not raw.startswith(b"\xef\xbb\xbf") and b"\r\n" not in raw
     assert raw.decode("utf-8") == generated()
@@ -73,8 +73,18 @@ def test_script_runs_as_a_program_from_any_directory(tmp_path):
     # As the operator runs it: a separate process, another working directory, no PYTHONPATH.
     target = tmp_path / "Caddyfile"
     env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
-    result = subprocess.run([sys.executable, str(SCRIPT), "--output", str(target)], cwd=tmp_path, env=env,
+    result = subprocess.run([sys.executable, str(SCRIPT), "--output", str(target), "--bind", "192.168.50.143"],
+                            cwd=tmp_path, env=env,
                             capture_output=True, text=True, timeout=60, check=False)
     assert result.returncode == 0, result.stdout + result.stderr
     assert target.read_bytes().decode("utf-8") == generated()
 
+
+def test_the_bind_address_comes_from_the_pairing_origin_or_must_be_given(tmp_path, monkeypatch):
+    target = tmp_path / "Caddyfile"
+    monkeypatch.setenv("ITGLASSES_PAIRING_ORIGIN", "https://192.168.50.143:8443")
+    caddy_config.main(["--output", str(target)])
+    assert target.read_text(encoding="utf-8") == generated()
+    monkeypatch.delenv("ITGLASSES_PAIRING_ORIGIN")
+    with pytest.raises(SystemExit):
+        caddy_config.main(["--output", str(target)])

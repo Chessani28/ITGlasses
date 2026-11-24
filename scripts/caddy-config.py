@@ -2,14 +2,18 @@ r"""Write the Caddyfile for the phones (stage 6). Routes come from the backend, 
 MOBILE + every route of the pairing router + GET /health. Everything else is 404 at Caddy.
 
 Usage (project root, venv):
-    .venv\Scripts\python scripts\caddy-config.py --output C:\ITGlasses-Caddy\Caddyfile
+    .venv\Scripts\python scripts\caddy-config.py --output C:\ITGlasses-Caddy\Caddyfile --bind 192.168.1.50
+
+--bind is the PC's LAN address; without it, the host of ITGLASSES_PAIRING_ORIGIN is used.
 
 No secrets: the certificate and key are referenced by path, never read. The backend is imported only
 inside phone_routes(), so loading this file (as the tests do) imports nothing and writes nothing.
 """
 import argparse
+import os
 import sys
 from pathlib import Path
+from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 # Run as a program (python scripts\caddy-config.py) the project root is not on sys.path: add it before any
@@ -97,7 +101,9 @@ def caddyfile(bind, port, cert, key, routes=None, upstream=None):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--output", required=True, type=Path)
-    parser.add_argument("--bind", default="172.16.5.143")
+    origin_host = urlsplit(os.environ.get("ITGLASSES_PAIRING_ORIGIN", "").strip()).hostname
+    parser.add_argument("--bind", default=origin_host, required=origin_host is None,
+                        help="LAN address of this PC, e.g. 192.168.1.50 (default: the host of ITGLASSES_PAIRING_ORIGIN)")
     parser.add_argument("--port", type=int, default=8443)
     parser.add_argument("--cert", default="C:/ITGlasses-Caddy/certs/server.crt")
     parser.add_argument("--key", default="C:/ITGlasses-Caddy/certs/server.key")

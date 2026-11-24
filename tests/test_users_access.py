@@ -149,7 +149,7 @@ def test_every_protected_route_has_a_permission_and_require_auth_runs_on_it(worl
     # Exactly the table: no protected route without a permission, no stale entry in the table.
     assert protected == set(access.ROUTES)
     monkeypatch.setenv("ITGLASSES_API_TOKENS", "token-v1")
-    with TestClient(client.app, base_url=LOCAL, client=("172.16.5.20", 50000)) as outside:
+    with TestClient(client.app, base_url=LOCAL, client=("192.168.50.20", 50000)) as outside:
         for method, path in sorted(protected):
             url = re.sub(r"{[^}]+}", "x", path)
             # require_auth runs before the body is validated: no credentials from outside is always 401 ...
@@ -233,7 +233,7 @@ def test_shared_token_through_caddy(world, monkeypatch, scope):
     client, _, _ = world
     monkeypatch.setenv("ITGLASSES_API_TOKENS", "token-v1")
     monkeypatch.setenv(access.BEARER_VARIABLE, scope)
-    with TestClient(client.app, base_url=LOCAL, client=("172.16.5.20", 50000)) as phone:
+    with TestClient(client.app, base_url=LOCAL, client=("192.168.50.20", 50000)) as phone:
         assert results(phone, {"Authorization": "Bearer token-v1"}) == BEARER[scope]
         assert call(phone, "chat", {"Authorization": "Bearer otro"}).status_code == 401
         assert call(phone, "chat").status_code == 401

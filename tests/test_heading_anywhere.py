@@ -14,7 +14,7 @@ from backend.app.voice.vocabulary import MAX_CHARS, from_knowledge
 from test_named_reading import INDEX_PAGE, SECTION, Insufficient
 from test_named_reference import DOCUMENTS, Knowledge, Store, ask, build, index
 
-COVER = "Training setup \nGuideline \nIT DEPARTMENT \nF.LUEVANO18452"
+COVER = "Training setup \nGuideline \nIT DEPARTMENT \nA.GOMEZ12345"
 NOTICE = "No encontré un manual llamado «Trading Sarah Guyton»; respondo desde «Training Setup Guideline»."
 
 
@@ -152,5 +152,5 @@ def test_reserve_answer_skips_cover_and_index_pages_and_is_never_empty(caplog):
         answer = reserve_answer([{"text": COVER, "page": 1}, {"text": INDEX_PAGE, "page": 2},
                                  {"text": SECTION, "page": 14}], "no_generator")
     assert answer == "Según la documentación autorizada:\n\n" + SECTION
-    assert "rows=1 index_pages_dropped=1 cover_pages_dropped=1" in caplog.text and "LUEVANO" not in caplog.text
+    assert "rows=1 index_pages_dropped=1 cover_pages_dropped=1" in caplog.text and "GOMEZ" not in caplog.text
     assert reserve_answer([{"text": COVER, "page": 1}], "no_generator").endswith(COVER)

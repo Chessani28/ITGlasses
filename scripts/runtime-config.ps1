@@ -118,7 +118,7 @@ function Set-ITGlassesRuntimeConfiguration {
         }
         if (-not [string]::IsNullOrWhiteSpace($originValue)) {
             if ($originValue -cnotmatch '^https://[a-z0-9.-]+(:[0-9]{1,5})?$' -or $originValue -match ':443$') {
-                throw 'Pairing origin must be a canonical HTTPS origin such as https://172.16.5.143:8443.'
+                throw 'Pairing origin must be a canonical HTTPS origin such as https://192.168.1.50:8443.'
             }
             [Environment]::SetEnvironmentVariable('ITGLASSES_PAIRING_ORIGIN', $originValue, 'Process')
         }

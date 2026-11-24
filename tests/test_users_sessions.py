@@ -174,7 +174,7 @@ def test_a_new_login_closes_the_previous_session_of_this_browser(client):
 @pytest.mark.parametrize("headers", [{}, {"Origin": "http://evil.test"}, {"Origin": "null"},
                                      {"Origin": LOCAL, "Sec-Fetch-Site": "cross-site"},
                                      {"Origin": LOCAL, "Sec-Fetch-Site": "same-site"},
-                                     {"Origin": "https://172.16.5.142:8443"}])
+                                     {"Origin": "https://192.168.50.142:8443"}])
 def test_login_only_from_the_backend_page(client, headers):
     response = login(client, headers=headers)
     assert response.status_code == 403 and response.json()["error"]["code"] == "origin_forbidden"

@@ -226,17 +226,17 @@ def run(path, *argv, ask=None, read=None):
 def test_create_superadmin_assigns_devices_and_is_audited(path, capsys):
     add_device(path, "phone-1", "active")
     add_device(path, "phone-2", "pending")
-    assert run(path, "create-superadmin", ask=answers("Enrique", "Enrique E."), read=answers(GOOD, GOOD)) == 0
+    assert run(path, "create-superadmin", ask=answers("Laura", "Laura L."), read=answers(GOOD, GOOD)) == 0
     out = capsys.readouterr().out
-    assert "Superadmin 'enrique' creado" in out and ": 1." in out and GOOD not in out
+    assert "Superadmin 'laura' creado" in out and ": 1." in out and GOOD not in out
     with accounts.connect(path) as db:
-        row = accounts.find(db, "enrique")
-        assert (row["role"], row["display_name"]) == ("superadmin", "Enrique E.")
+        row = accounts.find(db, "laura")
+        assert (row["role"], row["display_name"]) == ("superadmin", "Laura L.")
         assert dict(db.execute("SELECT id,user_id FROM installs").fetchall()) == {"phone-1": row["id"],
                                                                                  "phone-2": None}
         [entry] = audit.entries(db)
     assert (entry["action"], entry["actor_kind"], entry["detail"]) == (
-        "bootstrap.superadmin", "script", {"username": "enrique", "devices_assigned": 1})
+        "bootstrap.superadmin", "script", {"username": "laura", "devices_assigned": 1})
     assert not secrets_in(path, GOOD)
 
 

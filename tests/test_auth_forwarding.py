@@ -29,11 +29,11 @@ def call(app, address="127.0.0.1", headers=None, route=CHAT):
 
 @pytest.mark.parametrize("header", FORWARDING)
 def test_forwarded_request_without_token_is_refused(app, header):
-    value = "for=172.16.5.20" if header == "Forwarded" else "172.16.5.20"
+    value = "for=192.168.50.20" if header == "Forwarded" else "192.168.50.20"
     assert call(app, headers={header: value}).status_code == 401
 
 
-@pytest.mark.parametrize("address", ["172.16.5.20", "::ffff:172.16.5.20"])
+@pytest.mark.parametrize("address", ["192.168.50.20", "::ffff:192.168.50.20"])
 def test_non_loopback_client_without_token_is_refused(app, address):
     assert call(app, address=address).status_code == 401
 
@@ -52,7 +52,7 @@ def test_spoofed_loopback_forwarding_is_refused(app, header, value):
 
 def test_shared_token_still_works_through_proxy(app, monkeypatch):
     monkeypatch.setenv("ITGLASSES_API_TOKENS", "transition-test-only")
-    relayed = {"X-Forwarded-For": "172.16.5.20"}
+    relayed = {"X-Forwarded-For": "192.168.50.20"}
     assert call(app, headers={**relayed, "Authorization": "Bearer transition-test-only"}).status_code == 200
     assert call(app, headers={**relayed, "Authorization": "Bearer wrong"}).status_code == 401
 
@@ -63,7 +63,7 @@ def test_approved_phone_authenticates_through_proxy(setup):
     assert admin_client(c).post(f"{ROOT}/admin/devices/{rid}/approve").status_code == 200
     token = phone.post("/pairing/claim", rid=rid).json()["access_token"]
     path = "/assistant/chat"
-    headers = {**phone.headers("POST", path, token), "X-Forwarded-For": "172.16.5.20"}
+    headers = {**phone.headers("POST", path, token), "X-Forwarded-For": "192.168.50.20"}
     assert c.post(ROOT + path, headers=headers, json={"message": "hola"}).status_code == 200
 
 
@@ -74,11 +74,11 @@ def test_approved_phone_authenticates_through_proxy(setup):
     ("GET", "/api/v1/voice/status", None),
 ])
 def test_every_protected_route_family_fails_closed_through_proxy(app, route):
-    assert call(app, headers={"X-Forwarded-For": "172.16.5.20"}, route=route).status_code == 401
+    assert call(app, headers={"X-Forwarded-For": "192.168.50.20"}, route=route).status_code == 401
 
 
 def test_public_routes_stay_public_through_proxy(app):
-    relayed = {"X-Forwarded-For": "172.16.5.20"}
+    relayed = {"X-Forwarded-For": "192.168.50.20"}
     assert call(app, headers=relayed, route=("GET", "/health", None)).status_code == 200
     assert call(app, headers=relayed, route=("GET", "/api/v1/status", None)).status_code == 200
 
@@ -95,9 +95,9 @@ def test_auth_and_admin_share_one_local_check(setup, monkeypatch):
 
 
 # Stage 6: with a pairing origin (Caddy in front), local mode needs a direct request AND a local Host.
-STAGE6_ORIGIN = "https://172.16.5.143:8443"
+STAGE6_ORIGIN = "https://192.168.50.143:8443"
 LOCAL_BASE = f"http://127.0.0.1:{settings.port}"
-CADDY = {"Host": "172.16.5.143:8443", "X-Forwarded-For": "172.16.5.50", "X-Forwarded-Proto": "https"}
+CADDY = {"Host": "192.168.50.143:8443", "X-Forwarded-For": "192.168.50.50", "X-Forwarded-Proto": "https"}
 
 
 @pytest.fixture
@@ -128,7 +128,7 @@ def test_chat_through_caddy_is_refused_even_with_bearer(stage6):
 
 
 def test_foreign_host_is_not_local_with_pairing_origin(stage6):
-    for host in ("evil.example:8000", "172.16.5.143:8443", "127.0.0.1:9000", "testserver"):
+    for host in ("evil.example:8000", "192.168.50.143:8443", "127.0.0.1:9000", "testserver"):
         assert chat_via(stage6, headers={"Host": host}).status_code == 401, host
 
 

@@ -22,17 +22,17 @@ def seen_by_backend(peer, headers):
 
 
 def test_caddy_on_this_pc_passes_the_phone_address_and_https():
-    assert seen_by_backend("127.0.0.1", {"X-Forwarded-For": "172.16.5.50", "X-Forwarded-Proto": "https"}) == \
-        {"client": "172.16.5.50", "scheme": "https"}
+    assert seen_by_backend("127.0.0.1", {"X-Forwarded-For": "192.168.50.50", "X-Forwarded-Proto": "https"}) == \
+        {"client": "192.168.50.50", "scheme": "https"}
 
 
 def test_untrusted_peer_cannot_fake_its_address():
-    assert seen_by_backend("172.16.5.99", {"X-Forwarded-For": "203.0.113.7", "X-Forwarded-Proto": "https"}) == \
-        {"client": "172.16.5.99", "scheme": "http"}
+    assert seen_by_backend("192.168.50.99", {"X-Forwarded-For": "203.0.113.7", "X-Forwarded-Proto": "https"}) == \
+        {"client": "192.168.50.99", "scheme": "http"}
 
 
 def test_a_fake_entry_on_the_left_of_the_chain_does_not_win():
-    assert seen_by_backend("127.0.0.1", {"X-Forwarded-For": "203.0.113.7, 172.16.5.50"})["client"] == "172.16.5.50"
+    assert seen_by_backend("127.0.0.1", {"X-Forwarded-For": "203.0.113.7, 192.168.50.50"})["client"] == "192.168.50.50"
 
 
 def test_run_trusts_forwarded_headers_only_from_loopback():

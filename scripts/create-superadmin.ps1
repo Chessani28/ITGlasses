@@ -3,7 +3,7 @@ Crea el primer superadmin de la web (solo en esta PC; nunca desde la web ni con 
 Pide la contrasena en la consola sin mostrarla. Asigna al superadmin los dispositivos ya aprobados.
 
   .\scripts\create-superadmin.ps1
-  .\scripts\create-superadmin.ps1 -Username enrique -Name "Enrique"
+  .\scripts\create-superadmin.ps1 -Username laura -Name "Laura"
 #>
 param(
     [string]$Username,

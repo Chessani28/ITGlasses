@@ -48,7 +48,7 @@ def test_admin_needs_neither_https_nor_pairing_origin(setup, monkeypatch):
     assert admin_client(c).get(ROOT + "/admin/devices").status_code == 200
 
 
-@pytest.mark.parametrize("address", ["172.16.5.20", "192.168.1.10", "127.0.0.2", "testclient", "::ffff:172.16.5.20"])
+@pytest.mark.parametrize("address", ["192.168.50.20", "192.168.1.10", "127.0.0.2", "testclient", "::ffff:192.168.50.20"])
 def test_non_local_client_is_refused(setup, address):
     c, _, _ = setup
     assert admin_client(c, address=address).get(ROOT + "/admin/devices").status_code == 403
@@ -72,7 +72,7 @@ def test_missing_or_wrong_admin_header_is_refused(setup):
 
 
 @pytest.mark.parametrize("origin", ["https://evil.example", "http://127.0.0.1:9000", "null",
-                                    "https://pilot.example", "http://172.16.5.143:8000"])
+                                    "https://pilot.example", "http://192.168.50.143:8000"])
 def test_foreign_origin_is_refused(setup, origin):
     c, a, _ = setup
     rid = register(a)
@@ -86,7 +86,7 @@ def test_local_origin_is_allowed(setup):
     assert admin_client(c).post(f"{ROOT}/admin/devices/{rid}/approve", headers={"Origin": LOCAL}).status_code == 200
 
 
-@pytest.mark.parametrize("host", ["evil.example", "evil.example:8000", "172.16.5.143:8443", "127.0.0.1:9000"])
+@pytest.mark.parametrize("host", ["evil.example", "evil.example:8000", "192.168.50.143:8443", "127.0.0.1:9000"])
 def test_foreign_host_is_refused(setup, host):
     """DNS rebinding and requests relayed with the public host name."""
     c, _, _ = setup

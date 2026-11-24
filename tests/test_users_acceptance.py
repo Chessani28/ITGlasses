@@ -44,19 +44,19 @@ def test_users_and_roles_end_to_end(tmp_path, monkeypatch):
         monkeypatch.delenv(name, raising=False)
 
     # 1. Local script: migration with backup, first superadmin, existing phone assigned to it.
-    assert cli.main(["create-superadmin", "--username", "enrique", "--name", "Enrique"],
+    assert cli.main(["create-superadmin", "--username", "laura", "--name", "Laura"],
                     read=answers(ROOT_PW, ROOT_PW)) == 0
     assert [p.name.startswith("devices-v1-") for p in store.backup_dir(path).glob("*.sqlite3")] == [True]
     with closing(sqlite3.connect(path)) as db:
         assert db.execute("PRAGMA user_version").fetchone()[0] == 2
         owner = db.execute("SELECT u.username FROM installs i JOIN users u ON u.id=i.user_id WHERE i.id='rid-1'")
-        assert owner.fetchone() == ("enrique",)
+        assert owner.fetchone() == ("laura",)
 
     from backend.app.main import create_app
     from backend.app.providers.mock import MockLLM
     with TestClient(create_app(MockLLM()), base_url="https://pilot.example") as phones:
         with admin_client(phones, headers={}) as web:
-            root, _ = sign_in(web, "enrique", ROOT_PW)
+            root, _ = sign_in(web, "laura", ROOT_PW)
 
             # 2. The superadmin creates an admin; the admin creates a user.
             created = web.post(ROOT + "/admin/users", json={"username": "jefa", "role": "admin"}, headers=root).json()

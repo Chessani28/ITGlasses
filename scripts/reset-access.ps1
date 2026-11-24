@@ -2,10 +2,10 @@
 Recupera el acceso a la web desde esta PC (cualquier rol, incluido el superadmin).
 
   .\scripts\reset-access.ps1 -List                        # usuarios, rol, estado y bloqueo
-  .\scripts\reset-access.ps1 -Username enrique            # nueva contrasena (cierra sus sesiones y desbloquea)
+  .\scripts\reset-access.ps1 -Username laura            # nueva contrasena (cierra sus sesiones y desbloquea)
   .\scripts\reset-access.ps1 -Username ana -Temporary     # contrasena temporal: debera cambiarla al entrar
-  .\scripts\reset-access.ps1 -Username enrique -Unlock    # solo quitar el bloqueo por intentos
-  .\scripts\reset-access.ps1 -Username enrique -Enable    # reactivar una cuenta desactivada
+  .\scripts\reset-access.ps1 -Username laura -Unlock    # solo quitar el bloqueo por intentos
+  .\scripts\reset-access.ps1 -Username laura -Enable    # reactivar una cuenta desactivada
 #>
 param(
     [string]$Username,

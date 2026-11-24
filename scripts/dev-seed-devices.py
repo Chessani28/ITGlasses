@@ -44,21 +44,21 @@ def samples(now, many):
     base = dict(variant="phone", code=None, approved_at=None, last_seen=None, last_ip=None, expires=now + 300)
     rows = [
         dict(base, name="Pixel de prueba", model="Google Pixel 8", state="pending", code="482913",
-             created_at=now - 40, last_seen=now - 40, last_ip="172.16.5.21"),
+             created_at=now - 40, last_seen=now - 40, last_ip="192.168.50.21"),
         dict(base, name='<script>alert("xss")</script>', model="<img src=x onerror=alert(1)>", state="pending",
-             code="105377", created_at=now - 20, last_seen=now - 20, last_ip="172.16.5.22"),
+             code="105377", created_at=now - 20, last_seen=now - 20, last_ip="192.168.50.22"),
         dict(base, name="Moto G de almacén", model="Motorola moto g54", state="approved", code="770021",
-             created_at=now - 90, approved_at=now - 10, last_seen=now - 90, last_ip="172.16.5.23"),
+             created_at=now - 90, approved_at=now - 10, last_seen=now - 90, last_ip="192.168.50.23"),
         dict(base, name="Samsung de Ana", model="Samsung Galaxy A54", state="active",
-             created_at=now - 86400 * 3, approved_at=now - 86400 * 3, last_seen=now - 120, last_ip="172.16.5.24"),
+             created_at=now - 86400 * 3, approved_at=now - 86400 * 3, last_seen=now - 120, last_ip="192.168.50.24"),
         dict(base, name="Lentes recepción", model="Ray-Ban Meta", variant="meta", state="active",
-             created_at=now - 86400, approved_at=now - 86400, last_seen=now - 3 * 3600, last_ip="172.16.5.25"),
+             created_at=now - 86400, approved_at=now - 86400, last_seen=now - 3 * 3600, last_ip="192.168.50.25"),
         dict(base, name=None, model=None, state="active",
-             created_at=now - 86400 * 9, approved_at=now - 86400 * 9, last_seen=now - 86400 * 2, last_ip="172.16.5.26"),
+             created_at=now - 86400 * 9, approved_at=now - 86400 * 9, last_seen=now - 86400 * 2, last_ip="192.168.50.26"),
         dict(base, name="Celular perdido", model="Xiaomi Redmi Note 13", state="blocked",
-             created_at=now - 86400 * 20, approved_at=now - 86400 * 20, last_seen=now - 86400 * 6, last_ip="172.16.5.27"),
+             created_at=now - 86400 * 20, approved_at=now - 86400 * 20, last_seen=now - 86400 * 6, last_ip="192.168.50.27"),
         dict(base, name="Solicitud desconocida", model="Generic Android", state="denied", code="913540",
-             created_at=now - 60, last_seen=now - 60, last_ip="172.16.5.28"),
+             created_at=now - 60, last_seen=now - 60, last_ip="192.168.50.28"),
         dict(base, name="Nunca conectado", model="Google Pixel 7a", state="active",
              created_at=now - 86400 * 30, approved_at=now - 86400 * 30),
     ]
@@ -66,7 +66,7 @@ def samples(now, many):
         for n in range(20 - len(rows)):
             rows.append(dict(base, name=f"Celular de pruebas {n + 1:02d}", model="Google Pixel 6a", state="active",
                              created_at=now - 86400 * (n + 2), approved_at=now - 86400 * (n + 2),
-                             last_seen=now - 300 * (n + 1), last_ip=f"172.16.6.{n + 10}"))
+                             last_seen=now - 300 * (n + 1), last_ip=f"192.168.51.{n + 10}"))
     return rows
 
 

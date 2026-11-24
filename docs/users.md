@@ -30,10 +30,10 @@ Solo desde la consola de esta PC; nunca desde la web ni con contraseña por defe
 ```powershell
 .\scripts\create-superadmin.ps1                      # una sola vez; asigna los dispositivos ya aprobados
 .\scripts\reset-access.ps1 -List                     # usuarios, rol, estado, bloqueo y último acceso
-.\scripts\reset-access.ps1 -Username enrique         # nueva contraseña (cierra sus sesiones y desbloquea)
+.\scripts\reset-access.ps1 -Username laura         # nueva contraseña (cierra sus sesiones y desbloquea)
 .\scripts\reset-access.ps1 -Username ana -Temporary  # contraseña temporal: deberá cambiarla al entrar
-.\scripts\reset-access.ps1 -Username enrique -Unlock # quitar el bloqueo por intentos
-.\scripts\reset-access.ps1 -Username enrique -Enable # reactivar una cuenta desactivada
+.\scripts\reset-access.ps1 -Username laura -Unlock # quitar el bloqueo por intentos
+.\scripts\reset-access.ps1 -Username laura -Enable # reactivar una cuenta desactivada
 ```
 
 Las contraseñas se piden sin mostrarlas y nunca se imprimen ni se registran. Cada cambio queda en la

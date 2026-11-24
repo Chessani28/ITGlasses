@@ -14,7 +14,7 @@ CATALOG = {
             "number": 1,
             "title": "WINDOWS DEPLOYMENT PROCEDURE",
             "steps": [
-                {"number": 1, "text": "Connect the computer to Centris Network by ethernet cable.",
+                {"number": 1, "text": "Connect the computer to Northwind Network by ethernet cable.",
                  "substeps": [], "procedure": "WINDOWS DEPLOYMENT PROCEDURE"},
                 {"number": 2, "text": "Then turn off the computer. Wait until confirm the computer is off.",
                  "substeps": [], "procedure": "WINDOWS DEPLOYMENT PROCEDURE"},
@@ -232,7 +232,7 @@ def test_adjacent_procedures_on_same_page_use_the_requested_procedure():
                 "number": 2,
                 "title": "WINDOWS DEPLOYMENT PROCEDURE",
                 "steps": [
-                    {"number": 1, "text": "Connect the computer to Centris Network by ethernet cable.",
+                    {"number": 1, "text": "Connect the computer to Northwind Network by ethernet cable.",
                      "substeps": [], "procedure": "WINDOWS DEPLOYMENT PROCEDURE"},
                     {"number": 2, "text": "Then turn off the computer.", "substeps": [],
                      "procedure": "WINDOWS DEPLOYMENT PROCEDURE"},
@@ -349,7 +349,7 @@ def test_flatten_keeps_document_order():
     procedures = CATALOG["procedures"]
     steps = flatten(procedures)
     assert [step["text"] for step in steps][:3] == [
-        "Connect the computer to Centris Network by ethernet cable.",
+        "Connect the computer to Northwind Network by ethernet cable.",
         "Then turn off the computer. Wait until confirm the computer is off.",
         "Then press the power on button.",
     ]
@@ -1462,14 +1462,14 @@ def test_steps_are_not_taken_from_the_model():
     """A model that invents steps must not change the documented step list."""
     service = build(StubProvider("Este es un paso inventado."))
     answer = ask(service, "¿Cuáles son los pasos de WINDOWS DEPLOYMENT PROCEDURE?")
-    assert "Connect the computer to Centris Network by ethernet cable." in answer["answer"]
+    assert "Connect the computer to Northwind Network by ethernet cable." in answer["answer"]
     assert "Paso 4" not in answer["answer"]
 
 
 # --------------------------------------------------------------- guard tests
 VALID_SPANISH = [
-    ("Connect the computer to Centris Network by ethernet cable.",
-     "Conecte la computadora a la red Centris Network por cable Ethernet."),
+    ("Connect the computer to Northwind Network by ethernet cable.",
+     "Conecte la computadora a la red Northwind Network por cable Ethernet."),
     ("Then turn off the computer. Wait until confirm the computer is off.",
      "Luego apague la computadora. Espere hasta confirmar que la computadora este apagada."),
     ("Select IPV4 option.", "Seleccione la opcion IPV4."),
@@ -1495,8 +1495,8 @@ def test_inverted_polarity_detects_spanish_source():
 
 
 def test_invented_identifier_is_rejected():
-    source = "Connect the computer to Centris Network by ethernet cable."
-    bad = "Conecte la computadora a la red Centris Network por cable Ethernet de 16 gigabits."
+    source = "Connect the computer to Northwind Network by ethernet cable."
+    bad = "Conecte la computadora a la red Northwind Network por cable Ethernet de 16 gigabits."
     assert UnifiedAssistantService._clean_translation(source, bad) == source
 
 
@@ -1531,13 +1531,13 @@ def test_commentary_is_rejected():
 
 
 def test_invented_detail_is_rejected():
-    source = "Connect the computer to Centris Network by ethernet cable."
-    bad = "Conecte la computadora al puerto Ethernet de la red Centris Network."
+    source = "Connect the computer to Northwind Network by ethernet cable."
+    bad = "Conecte la computadora al puerto Ethernet de la red Northwind Network."
     assert UnifiedAssistantService._clean_translation(source, bad) == source
 
 
 def test_invented_coloured_socket_is_rejected():
-    source = "Connect the computer to Centris Network by ethernet cable."
+    source = "Connect the computer to Northwind Network by ethernet cable."
     bad = "Enchufe el cable Ethernet de red en la toma amarilla y espere."
     assert UnifiedAssistantService._clean_translation(source, bad) == source
 

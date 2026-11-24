@@ -71,7 +71,7 @@ def test_code_is_only_visual_confirmation(setup):
 # --- name and model --------------------------------------------------------------
 
 @pytest.mark.parametrize("sent,expected", [
-    ("Pixel de Kike", "Pixel de Kike"),
+    ("Pixel de Ana", "Pixel de Ana"),
     ("<img src=x onerror=alert(1)>", "<img src=x onerror=alert(1)>"),
     ("<script>alert(1)</script>", "<script>alert(1)</script>"),
     ("  Teléfono de Ñandú  ", "Teléfono de Ñandú"),
@@ -88,7 +88,7 @@ def test_labels_are_stored_verbatim(setup, sent, expected):
     ("name", "Pixel\x00"),
     ("model", "Pixel\nfalso"),
     ("name", "Pixel‮gnp.exe"),
-    ("name", "Pixel de Kike"),
+    ("name", "Pixel de Ana"),
     ("name", 123),
     ("name", ""),
 ])
@@ -110,11 +110,11 @@ def test_labels_are_optional_for_older_apps(setup):
 
 def test_last_ip_comes_from_the_connection(setup):
     c, _, _ = setup
-    phone = phone_at(c, "172.16.5.20")
+    phone = phone_at(c, "192.168.50.20")
     before = int(time.time())
     rid = register(phone).json()["request_id"]
     row = listed(c)[rid]
-    assert row["last_ip"] == "172.16.5.20"
+    assert row["last_ip"] == "192.168.50.20"
     assert row["created_at"] >= before and row["last_seen"] >= before
 
 
@@ -134,11 +134,11 @@ def test_last_seen_updates_at_most_once_per_minute(setup):
 
 def test_ip_is_not_identity(setup):
     c, _, _ = setup
-    office, home = phone_at(c, "172.16.5.20"), phone_at(c, "172.16.5.21")
+    office, home = phone_at(c, "192.168.50.20"), phone_at(c, "192.168.50.21")
     home.key = office.key  # Same phone, new address.
     rid, token = activate(c, office)
     assert me(c, home, token).json() == {"device_id": rid}
-    intruder = phone_at(c, "172.16.5.20")  # Same address, other key.
+    intruder = phone_at(c, "192.168.50.20")  # Same address, other key.
     assert me(c, intruder, token).status_code == 401
 
 
@@ -147,35 +147,35 @@ def test_ip_is_not_identity(setup):
 def test_pending_limit_per_ip(setup):
     c, _, _ = setup
     for _ in range(routes.PENDING_PER_IP):
-        assert register(phone_at(c, "172.16.5.30")).status_code == 201
-    refused = register(phone_at(c, "172.16.5.30"))
+        assert register(phone_at(c, "192.168.50.30")).status_code == 201
+    refused = register(phone_at(c, "192.168.50.30"))
     assert refused.status_code == 429 and 1 <= int(refused.headers["retry-after"]) <= 300
     assert len(listed(c)) == routes.PENDING_PER_IP
-    assert register(phone_at(c, "172.16.5.31")).status_code == 201
+    assert register(phone_at(c, "192.168.50.31")).status_code == 201
 
 
 def test_pending_limit_global(setup, monkeypatch):
     c, _, _ = setup
     monkeypatch.setattr(routes, "PENDING_TOTAL", 2)
-    assert register(phone_at(c, "172.16.5.40")).status_code == 201
-    assert register(phone_at(c, "172.16.5.41")).status_code == 201
-    refused = register(phone_at(c, "172.16.5.42"))
+    assert register(phone_at(c, "192.168.50.40")).status_code == 201
+    assert register(phone_at(c, "192.168.50.41")).status_code == 201
+    refused = register(phone_at(c, "192.168.50.42"))
     assert refused.status_code == 429 and int(refused.headers["retry-after"]) >= 1
 
 
 def test_expired_requests_free_the_limit(setup):
     c, _, _ = setup
-    rids = [register(phone_at(c, "172.16.5.50")).json()["request_id"] for _ in range(routes.PENDING_PER_IP)]
-    assert register(phone_at(c, "172.16.5.50")).status_code == 429
+    rids = [register(phone_at(c, "192.168.50.50")).json()["request_id"] for _ in range(routes.PENDING_PER_IP)]
+    assert register(phone_at(c, "192.168.50.50")).status_code == 429
     database("UPDATE installs SET expires=0 WHERE id=?", rids[0])
-    assert register(phone_at(c, "172.16.5.50")).status_code == 201
+    assert register(phone_at(c, "192.168.50.50")).status_code == 201
 
 
 def test_reregistering_does_not_consume_quota(setup):
     c, _, _ = setup
-    phone = phone_at(c, "172.16.5.60")
+    phone = phone_at(c, "192.168.50.60")
     first = register(phone).json()["request_id"]
     for _ in range(4):
         assert register(phone).json()["request_id"] == first
     for _ in range(routes.PENDING_PER_IP - 1):
-        assert register(phone_at(c, "172.16.5.60")).status_code == 201
+        assert register(phone_at(c, "192.168.50.60")).status_code == 201

@@ -266,7 +266,7 @@ def test_only_a_login_session_from_this_pc(people, monkeypatch):
     with web() as client:
         assert client.get(CONVERSATIONS).status_code == 401
         assert client.get(STATS).status_code == 401
-        with TestClient(client.app, base_url=LOCAL, client=("172.16.5.20", 50000)) as outside:
+        with TestClient(client.app, base_url=LOCAL, client=("192.168.50.20", 50000)) as outside:
             for method, url in (("GET", CONVERSATIONS), ("GET", STATS), ("DELETE", f"{CONVERSATIONS}/x")):
                 assert outside.request(method, url, headers={"Authorization": "Bearer token-v1"}).status_code == 403
 

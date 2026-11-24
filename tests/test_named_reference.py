@@ -35,7 +35,7 @@ h. Thermal paste replacement on processor
 
 2. WINDOWS DEPLOYMENT PROCEDURE
 
-1. Connect the computer to Centris Network by ethernet cable.
+1. Connect the computer to Northwind Network by ethernet cable.
 2. Then turn off the computer.
 3. Then press the power on button.
 

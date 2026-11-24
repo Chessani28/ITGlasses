@@ -89,9 +89,9 @@ async function boot({devices = [], server, session} = {}) {
 }
 
 function device(overrides = {}) {
-  return {id: "rid-1", variant: "phone", name: "Pixel de Kike", model: "Google Pixel 8", state: "active",
+  return {id: "rid-1", variant: "phone", name: "Pixel de Ana", model: "Google Pixel 8", state: "active",
     code: null, created_at: now() - 600, approved_at: now() - 500, last_seen: now() - 120,
-    last_ip: "172.16.5.20", expires: now() + 200, ...overrides};
+    last_ip: "192.168.50.20", expires: now() + 200, ...overrides};
 }
 
 // --- tests --------------------------------------------------------------------------
@@ -107,7 +107,7 @@ test("lista agrupada con pendientes arriba, código legible, estado, conexión r
   assert.match(rows[0].textContent, /123 456/);
   assert.match(rows[0].textContent, /Pendiente/);
   assert.match(rows[0].textContent, /Caduca en [0-4]:\d\d/);
-  assert.match(rows[1].textContent, /Activo.*hace 2 min.*IP: 172\.16\.5\.20 \(informativa\)/);
+  assert.match(rows[1].textContent, /Activo.*hace 2 min.*IP: 192\.168\.50\.20 \(informativa\)/);
   assert.match(rows[2].textContent, /Bloqueado.*Última conexión: nunca/);
   const titles = walk(panel.get("device-list")).filter(node => node.tagName === "H3").map(node => node.textContent);
   assert.deepEqual(titles, ["Pendientes (1)", "Activos (1)", "Bloqueados (1)"]);
@@ -165,7 +165,7 @@ test("bloquear pide confirmación mostrando qué dispositivo es", async () => {
   const dialog = panel.get("device-dialog");
   assert.equal(dialog.open, true);
   assert.match(panel.get("device-dialog-title").textContent, /Bloquear/);
-  assert.match(panel.get("device-dialog-details").textContent, /Pixel del almacén.*Google Pixel 8.*172\.16\.5\.20/);
+  assert.match(panel.get("device-dialog-details").textContent, /Pixel del almacén.*Google Pixel 8.*192\.168\.50\.20/);
   assert.equal(panel.doc.activeElement, panel.get("device-dialog-cancel"));
   await panel.get("device-dialog-cancel").click();
   await settle();

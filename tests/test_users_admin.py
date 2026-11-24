@@ -156,7 +156,7 @@ def test_admin_pages_need_a_login_and_the_csrf_token(world, monkeypatch):
     admin = sign_in(client, "adm")
     no_csrf = {key: value for key, value in admin.items() if key != "X-CSRF-Token"}
     assert status(client.post(USERS, json={"username": "x1"}, headers=no_csrf)) == (403, "csrf_failed")
-    with TestClient(client.app, base_url=LOCAL, client=("172.16.5.20", 50000)) as outside:
+    with TestClient(client.app, base_url=LOCAL, client=("192.168.50.20", 50000)) as outside:
         assert outside.get(USERS, headers=admin).status_code == 403
 
 

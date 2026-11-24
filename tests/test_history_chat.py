@@ -108,7 +108,7 @@ def test_without_a_login_nothing_is_saved(people, monkeypatch):
         anonymous = ask(client, {})
         assert anonymous["history_saved"] is False and anonymous["session_id"]
         assert ask(client, {}, "¿Y un router?", anonymous["session_id"])["session_id"] == anonymous["session_id"]
-        with TestClient(client.app, base_url=LOCAL, client=("172.16.5.20", 50000)) as outside:
+        with TestClient(client.app, base_url=LOCAL, client=("192.168.50.20", 50000)) as outside:
             assert ask(outside, {"Authorization": "Bearer token-v1"})["history_saved"] is False
     assert rows("SELECT id FROM conversations") == []
 
