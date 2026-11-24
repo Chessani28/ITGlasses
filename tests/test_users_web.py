@@ -25,7 +25,7 @@ def client(tmp_path, monkeypatch):
         yield test_client
 
 
-@pytest.mark.parametrize(("mode", "minimum"), [(None, None), ("legacy", "8"), ("off", "12")])
+@pytest.mark.parametrize(("mode", "minimum"), [(None, None), ("legacy", "8"), ("chat", "12")])
 def test_login_screen_settings(client, monkeypatch, mode, minimum):
     if mode:
         monkeypatch.setenv(access.LOOPBACK_VARIABLE, mode)
@@ -33,7 +33,8 @@ def test_login_screen_settings(client, monkeypatch, mode, minimum):
         monkeypatch.setenv(passwords.MIN_LENGTH_VARIABLE, minimum)
     response = client.get("/api/v1/auth/config")
     assert response.status_code == 200 and response.headers["cache-control"] == "no-store"
-    assert response.json() == {"loopback_mode": mode or "chat", "password_min_length": int(minimum or 5)}
+    # Default "off" since stage "historial" 6 (it was "chat").
+    assert response.json() == {"loopback_mode": mode or "off", "password_min_length": int(minimum or 5)}
 
 
 def test_login_screen_settings_only_from_this_pc(client):

@@ -7,15 +7,15 @@ read-only voice status (ITGLASSES_BEARER_SCOPE=mobile, the default) or everythin
 
 Credential-free requests from this PC (ITGLASSES_LOOPBACK_MODE):
   legacy  everything, as before stage 4 (the rollback value: LoopbackMode = 'legacy' in runtime-config.psd1)
-  chat    chat and voice only; documents, settings and the device panel need a login session (default since
-          stage 6, the login screen)
-  off     nothing without a login session (planned when chat history arrives)
+  chat    chat and voice only; documents, settings and the device panel need a login session (the default from
+          stage "usuarios" 6 to stage "historial" 5)
+  off     nothing without a login session (default since stage "historial" 6: every conversation has an owner)
 """
 import os
 
 from backend.app.pairing.routes import MOBILE
 
-LOOPBACK_VARIABLE, LOOPBACK_MODES, LOOPBACK_DEFAULT = "ITGLASSES_LOOPBACK_MODE", ("legacy", "chat", "off"), "chat"
+LOOPBACK_VARIABLE, LOOPBACK_MODES, LOOPBACK_DEFAULT = "ITGLASSES_LOOPBACK_MODE", ("legacy", "chat", "off"), "off"
 BEARER_VARIABLE, BEARER_SCOPES, BEARER_DEFAULT = "ITGLASSES_BEARER_SCOPE", ("mobile", "full"), "mobile"
 
 CHAT = "chat"

@@ -104,7 +104,7 @@ export function initAccounts({showPage, currentPage, onChange}) {
     const user = session.user;
     $("user-name").textContent = user ? (user.display_name || user.username) : "Sin sesión";
     $("user-role").textContent = user ? ROLE_NAMES[user.role] || user.role
-      : (session.loopbackMode === "legacy" ? "Modo local completo" : "Solo chat y voz");
+      : ({legacy: "Modo local completo", chat: "Solo chat y voz"}[session.loopbackMode] || "Inicia sesión para usarlo");
     $("user-avatar").textContent = user ? (user.display_name || user.username).slice(0, 1).toUpperCase() : "?";
     $("user-login").hidden = Boolean(user);
     $("user-password").hidden = !user;

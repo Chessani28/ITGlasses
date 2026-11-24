@@ -199,8 +199,16 @@ VRAM. Model fit depends on current workload, context and runtime version.
 The web has logins with three roles (superadmin, admin, user), server-side sessions, a login lockout, an
 audit log and device owners. The first superadmin is created on this PC with
 `.\scripts\create-superadmin.ps1`; access is recovered with `.\scripts\reset-access.ps1`. Without a login,
-this PC may only chat (`LoopbackMode = 'chat'`; `'legacy'` restores the previous behaviour). Phones are
-unchanged. Operation guide (Spanish): [docs/users.md](docs/users.md).
+this PC can do nothing (`LoopbackMode = 'off'`; `'chat'` allows chat and voice without saving, `'legacy'`
+restores the behaviour from before the users). Phones are unchanged. Operation guide (Spanish):
+[docs/users.md](docs/users.md).
+
+## Chat history
+
+Conversations are saved per user and per device (text only), survive restarts and are visible only to their
+owner; admins see metadata only. The web has a history panel (filter, open and continue, rename, delete with
+undo, restore). Deleted conversations are purged after 7 days and all of them after 90 days without messages,
+with an audit log that never holds content. Guide (Spanish): [docs/history.md](docs/history.md).
 
 ## Test
 

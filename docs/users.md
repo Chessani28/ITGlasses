@@ -58,7 +58,7 @@ auditoría como «Script local». El backend puede seguir corriendo.
 
 | Variable | Clave en `runtime-config.psd1` | Valores |
 |---|---|---|
-| `ITGLASSES_LOOPBACK_MODE` | `LoopbackMode` | `chat` (por defecto): sin login, solo chat y voz. `legacy`: sin login, todo como antes de los usuarios. `off`: nada sin login (previsto para cuando llegue el historial). |
+| `ITGLASSES_LOOPBACK_MODE` | `LoopbackMode` | `off` (por defecto desde el historial): nada sin login. `chat`: sin login, solo chat y voz, sin guardar. `legacy`: sin login, todo como antes de los usuarios. |
 | `ITGLASSES_BEARER_SCOPE` | `BearerScope` | `mobile` (por defecto): los tokens de `ITGLASSES_API_TOKENS` (app v1) solo llegan a las rutas del celular. `full`: llegan a todo, como antes. |
 
 Los celulares v3 (DPoP) no dependen de ninguno de los dos. El valor efectivo queda en el log al arrancar:
@@ -107,9 +107,9 @@ que coincida exactamente con las rutas registradas.
 Automática: `.venv\Scripts\python -m pytest -q` (incluye `tests/test_users_acceptance.py`, el flujo completo
 de punta a punta) y `node --test "tests/*.test.mjs"`. Manual, después de reiniciar el backend:
 
-1. El log dice `access loopback_mode=chat bearer_scope=mobile` (o el valor configurado).
-2. `http://127.0.0.1:8000`: aparece la pantalla de login. Sin sesión solo se ven Conversaciones y Estado del
-   sistema, y el chat responde.
+1. El log dice `access loopback_mode=off bearer_scope=mobile` (o el valor configurado).
+2. `http://127.0.0.1:8000`: aparece la pantalla de login, sin la opción de continuar sin sesión. Con
+   `LoopbackMode = 'chat'`, sin sesión solo se ven Conversaciones y Estado del sistema, y el chat responde.
 3. Con el superadmin: Documentos, Mis dispositivos, Usuarios, Dispositivos y usuarios, Auditoría y el panel de
    dispositivos.
 4. Un usuario nuevo recibe una contraseña temporal, debe cambiarla al entrar y solo ve su parte.
@@ -120,14 +120,13 @@ de punta a punta) y `node --test "tests/*.test.mjs"`. Manual, después de reinic
 
 | Si falla… | Sin tocar código | Con git |
 |---|---|---|
-| La web o los manuales | `LoopbackMode = 'legacy'` y reiniciar el backend | `git revert` de la etapa |
+| La web o los manuales | `LoopbackMode = 'chat'` o `'legacy'` y reiniciar el backend | `git revert` de la etapa |
 | La app v1 (token compartido) | `BearerScope = 'full'` y reiniciar el backend | — |
 | La app v3 (DPoP) | no hay interruptor: los usuarios no cambiaron esa ruta | volver a `voz-rapida-v3` y restaurar el respaldo v1 |
 
 ## Pendiente (etapas futuras)
 
-1. **Historial de chats** por usuario y dispositivo: tablas `conversations (user_id, device_id, …)` y
-   `messages`, con la privacidad descrita arriba; con él, `LoopbackMode` pasa a `off`.
+1. ~~Historial de chats~~: hecho, ver [history.md](history.md); `LoopbackMode` pasó a `off`.
 2. **Publicar la web por HTTPS en Caddy** para otras PCs, después del historial: subir antes
    `PasswordMinLength`, emitir el certificado para el nombre o IP de la web y revisar el bloqueo por IP
    detrás del proxy.

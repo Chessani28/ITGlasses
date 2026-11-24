@@ -381,3 +381,23 @@ audit). Rollback without code: `LoopbackMode = 'legacy'`, `BearerScope = 'full'`
 Next: chat history per user and device (then `LoopbackMode = 'off'`); afterwards, the web over HTTPS in
 Caddy for other PCs, raising the password minimum first.
 
+## Chat history — branch feature/chat-history, 2026-11-24
+
+Six stages on top of the tag usuarios-v1, each committed after its tests:
+
+1. Separate database `storage/history/history.sqlite3`, verified backups before migrations, daily backup set
+   (7 kept), `scripts/backup-data.ps1` and restore with `-History`.
+2. The assistant chat saved per user (web) and per device (phone and glasses share one conversation, 30-min
+   gap), the assistant state restored after a restart; never breaks the chat if the history fails.
+3. Context as real turns within `num_ctx` (E4); general follow-ups no longer fall into the manuals route;
+   one rule for the general-answer notice. Public search: ddgs engines in a fixed order with a time budget,
+   short cache of current facts, diagnostics in backend.log without the query.
+4. Conversation endpoints, admin metadata, retention (90 days) and purge of deleted ones (7 days of grace),
+   audit without content.
+5. Web history panel, "new conversation" per device, admin column, Vosk-instead-of-Whisper notice, voice
+   panel texts.
+6. `LoopbackMode` defaults to `off`; guide `docs/history.md`; end-to-end acceptance test.
+
+Verified by the user on the real system: web history, filters, open/continue and the Z Flip6 conversations;
+public search 26H2 with official source. Pending: history panel horizontal scroll and cut titles; the app
+showing the Vosk reason (Android stage); glasses with the locked phone.

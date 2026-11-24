@@ -118,7 +118,7 @@ def results(client, headers=None):
 def test_defaults_need_a_login_for_administration_and_limit_shared_tokens(monkeypatch):
     for name in (access.LOOPBACK_VARIABLE, access.BEARER_VARIABLE):
         monkeypatch.delenv(name, raising=False)
-    assert (access.loopback_mode(), access.bearer_scope()) == ("chat", "mobile")
+    assert (access.loopback_mode(), access.bearer_scope()) == ("off", "mobile")   # "off" since stage "historial" 6
 
 
 @pytest.mark.parametrize(("variable", "value"), [(access.LOOPBACK_VARIABLE, "abierto"),

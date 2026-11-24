@@ -14,8 +14,8 @@ import pytest
 # Tests fake the per-request speech worker; the persistent Piper (on by default) has its own tests with fake
 # processes (test_piper_persistent.py) and must never start a real Piper here.
 os.environ.setdefault("ITGLASSES_PIPER_PERSISTENT", "0")
-# Since stage "usuarios" 6 the backend defaults to ITGLASSES_LOOPBACK_MODE=chat (documents and the device panel
-# need a login). The older tests exercise those features credential-free from this PC, so they run in legacy
+# Since stage "historial" 6 the backend defaults to ITGLASSES_LOOPBACK_MODE=off (nothing without a login; "chat"
+# from stage "usuarios" 6). The older tests exercise those features credential-free from this PC, so they run in legacy
 # mode; the access tests (test_users_*.py) clear this and set every mode they check explicitly.
 os.environ.setdefault("ITGLASSES_LOOPBACK_MODE", "legacy")
 # Stage "historial" 1: no test starts the daily backup of the real databases; the backup tests turn it on with
