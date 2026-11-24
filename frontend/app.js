@@ -6,6 +6,7 @@ import {initHistory, toChatEntries} from "./history.mjs";
 import {renderMarkdown} from "./markdown.mjs";
 import {initLayout, nearBottom} from "./layout.mjs";
 import {initVoiceDock} from "./voice-dock.mjs";
+import {openInChat, startNewChat} from "./chat-nav.mjs";
 const layout = initLayout();
 let voiceActive = false;
 let accounts = null;
@@ -365,9 +366,11 @@ function titled(title) {
   chatTitle = title;
   if (currentPage === "chat") $("page-title").textContent = chatTitle || "Nueva conversación";
 }
-$("new-chat").addEventListener("click", () => {
-  state.chats[state.mode] = {messages: [], conversation: null}; titled(null); renderChat(); historyPanel?.cleared(); $("message").focus();
-});
+// From any page: back to Conversaciones (and the drawer closes) before the chat changes.
+const toChat = {currentPage: () => currentPage, showPage: page => showPage(page), closeSidebar: () => layout.picked()};
+$("new-chat").addEventListener("click", () => startNewChat({...toChat,
+  reset() { state.chats[state.mode] = {messages: [], conversation: null}; titled(null); renderChat(); historyPanel?.cleared(); },
+  focus: () => $("message").focus()}));
 $("refresh-status").addEventListener("click", refreshStatus);
 $("refresh-documents").addEventListener("click", refreshDocuments);
 $("upload-form").addEventListener("submit", upload);
@@ -392,10 +395,12 @@ setMode("assistant");
 // Stage "historial" 5: the saved conversations of the logged-in user, next to the chat.
 historyPanel = initHistory({
   open(conversation) {
-    state.chats.assistant = {messages: toChatEntries(conversation.messages), conversation: conversation.id};
-    titled(conversation.title || "Conversación sin título");
-    if (state.mode !== "assistant") setMode("assistant");
-    renderChat(true);
+    openInChat({...toChat, load() {
+      state.chats.assistant = {messages: toChatEntries(conversation.messages), conversation: conversation.id};
+      titled(conversation.title || "Conversación sin título");
+      if (state.mode !== "assistant") setMode("assistant");
+      renderChat(true);
+    }});
   },
   reset() {
     if (state.busy) return;
