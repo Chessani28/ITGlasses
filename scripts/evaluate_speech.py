@@ -1,7 +1,8 @@
 """Offline acoustic evaluation. No downloads. Synthetic audio is explicitly labelled.
 
 Run: python scripts/evaluate_speech.py --synthetic --output work/speech-eval
-For human audio: --manifest path.json (list of {path, text, kind: human}).
+For human audio: --manifest path.json (list of {path, text, kind: human}); relative paths are relative to it.
+The synthetic set used by the comparisons is versioned in tests/fixtures/speech-eval/manifest.json.
 Baseline worker is optional and must be a trusted local script.
 """
 import argparse
@@ -79,6 +80,9 @@ async def main(args):
         (output/'manifest.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2),encoding='utf-8')
     else:
         manifest=json.loads(Path(args.manifest).read_text(encoding='utf-8'))
+        # Relative paths (tests/fixtures/speech-eval/manifest.json) are relative to the manifest itself.
+        base=Path(args.manifest).resolve().parent
+        manifest=[{**item,'path':str(base/item['path'])} if not Path(item['path']).is_absolute() else item for item in manifest]
     report={'resources_before':resources(),'cases':[]}
     for item in manifest:
         row=dict(item); raw=Path(item['path']).read_bytes()

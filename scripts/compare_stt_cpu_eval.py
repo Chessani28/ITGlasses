@@ -109,7 +109,10 @@ def main():
     guard()
     sys.path.insert(0,str(ROOT/'scripts'))
     from evaluate_speech import tokens, metrics
-    manifest=json.loads((ROOT/'work/speech-eval/manifest.json').read_text(encoding='utf-8'))
+    # The synthetic set is versioned in tests/fixtures/speech-eval (its manifest names the files only).
+    fixtures=ROOT/'tests/fixtures/speech-eval'
+    manifest=[{**item,'path':str(fixtures/Path(item['path']).name)}
+              for item in json.loads((fixtures/'manifest.json').read_text(encoding='utf-8'))]
     report={'model':'Whisper base multilingual','compute_type':'int8','cpu_threads':2,
         'settings':{'language':'es','beam_size':5,'temperature':0,'vad_filter':True,'condition_on_previous_text':False,'initial_prompt':None},
         'repetitions':3,'input_kind':'synthetic Piper es_ES, NOT human Mexican Spanish',

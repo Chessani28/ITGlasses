@@ -8,7 +8,7 @@ import time
 ROOT=Path(__file__).resolve().parents[1]; sys.path[:0]=[str(ROOT),str(ROOT/'tests')]
 from test_speech_nlu_phase3 import REFERENCE_CASES
 from backend.app.assistant.references import detect_reference
-spec=importlib.util.spec_from_file_location('baseline',ROOT/'work/references-baseline.py')
+spec=importlib.util.spec_from_file_location('baseline',ROOT/'scripts/references-baseline.py')
 baseline=importlib.util.module_from_spec(spec); spec.loader.exec_module(baseline)
 def score(fn):
     rows=[]
@@ -24,7 +24,7 @@ with TestClient(create_app()) as client:
     start=time.perf_counter()
     report['status']=client.get('/api/v1/status').json()
     # No private documents or recordings used in this probe.
-    audio=(ROOT/'work/speech-eval/synthetic-07.wav').read_bytes()
+    audio=(ROOT/'tests/fixtures/speech-eval/synthetic-07.wav').read_bytes()
     stt=client.post('/api/v1/voice/transcribe',content=audio,headers={'Content-Type':'audio/wav'})
     report['stt_status']=stt.status_code; report['stt']=stt.json()
     if stt.status_code==200 and not stt.json().get('needs_clarification'):
@@ -38,5 +38,6 @@ with TestClient(create_app()) as client:
     silent=bytearray(audio); silent[44:]=bytes(len(silent)-44)
     response=client.post('/api/v1/voice/transcribe',content=bytes(silent),headers={'Content-Type':'audio/wav'})
     report['silence']=response.json()
+(ROOT/'work').mkdir(exist_ok=True)  # local output, not versioned (docs/evaluations keeps the published one)
 (ROOT/'work/phase3-probe.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf-8')
 print(json.dumps({k:v for k,v in report.items() if not k.startswith('reference_')},ensure_ascii=True,indent=2))

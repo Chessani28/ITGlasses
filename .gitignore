@@ -34,7 +34,6 @@ build/
 # Exclude work directories containing audit data, benchmarks, and temporary products
 work/
 # Exclude PowerShell activation scripts with encoded tokens
-s -ExecutionPolicy*
 # Exclude DPAPI-protected token files
 .runtime/
 
