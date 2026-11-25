@@ -220,6 +220,36 @@ def test_english_stop_words_are_ignored():
                                                                                  "hard", "disk"]
 
 
+class PickingSelector(TranslatingSelector):
+    def __init__(self, picked=(0,)):
+        super().__init__()
+        self.picked = list(picked) if picked is not None else None
+        self.candidates = []
+
+    async def pick_sentences(self, question, sentences):
+        self.candidates = sentences
+        return self.picked
+
+
+def test_an_information_answer_is_made_of_picked_manual_sentences(tmp_path):
+    selector = PickingSelector(picked=(0,))
+    svc, _ = build(tmp_path, selector)
+    result = ask(svc)
+    assert result.status == "answered"
+    first = selector.candidates[0]["text"]
+    assert result.excerpts == [{"text": first, "page": selector.candidates[0]["page"]}]
+    assert "Según la documentación autorizada" not in result.answer
+    assert first in result.answer and "Reception Printer Guide" in result.answer
+
+
+def test_without_a_pick_the_answer_is_the_clean_excerpt(tmp_path):
+    svc, _ = build(tmp_path, PickingSelector(picked=None))
+    result = ask(svc)
+    assert result.status == "answered" and result.excerpts == []
+    assert "Según la documentación autorizada" not in result.answer
+    assert "Reception Printer Guide" in result.answer
+
+
 def test_the_ollama_script_keeps_two_models_loaded():
     script = (ROOT / "scripts" / "start-ollama.ps1").read_text(encoding="utf-8")
     assert "OLLAMA_MAX_LOADED_MODELS = '2'" in script

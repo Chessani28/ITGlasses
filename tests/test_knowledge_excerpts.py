@@ -61,6 +61,51 @@ def test_limits():
     assert all(len(item["text"]) <= MAX_SENTENCE_CHARS for item in items)
 
 
+import asyncio  # noqa: E402
+import json  # noqa: E402
+
+import httpx  # noqa: E402
+
+from backend.app.knowledge.grounding import EvidenceSelector  # noqa: E402
+
+CANDIDATES = [{"id": 0, "text": "Load paper in tray two.", "page": 3},
+              {"id": 1, "text": "The only labels allowed are hostname labels.", "page": 14},
+              {"id": 2, "text": "Clean the rollers monthly.", "page": 5}]
+
+
+def pick(content=None, status=200, error=None, seen=None):
+    def handler(request):
+        if seen is not None:
+            seen.append(json.loads(request.content))
+        if error:
+            raise error
+        return httpx.Response(status, json={"done": True, "message": {"content": content}})
+    selector = EvidenceSelector("qwen-test", transport=httpx.MockTransport(handler))
+    return asyncio.run(selector.pick_sentences("¿Qué etiquetas se permiten?", CANDIDATES))
+
+
+def test_pick_sentences_returns_valid_ids_in_document_order():
+    seen = []
+    assert pick(json.dumps({"ids": ["1"]}), seen=seen) == [1]
+    assert pick(json.dumps({"ids": ["2", "0", "2"]})) == [0, 2]
+    payload = seen[0]
+    assert payload["options"]["temperature"] == 0.0 and payload["options"]["num_predict"] == 64
+    assert payload["format"]["required"] == ["ids"]
+    assert "The only labels allowed are hostname labels." in payload["messages"][-1]["content"]
+
+
+def test_pick_sentences_keeps_at_most_three():
+    assert len(pick(json.dumps({"ids": ["0", "1", "2", "1"]}))) <= 3
+
+
+def test_pick_sentences_failures_give_none():
+    assert pick(json.dumps({"ids": ["9"]})) is None          # unknown id: nothing is trusted
+    assert pick(json.dumps({"ids": []})) is None
+    assert pick("no es json") is None
+    assert pick(status=500) is None
+    assert pick(error=httpx.ReadTimeout("slow")) is None
+
+
 def test_clean_excerpt_reads_like_text():
     excerpt = clean_excerpt([{"text": PAGE_14, "page": 14}])
     assert excerpt.startswith("4. REQUIRED PERIPHERALS") is False

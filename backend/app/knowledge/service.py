@@ -198,7 +198,7 @@ class KnowledgeService:
             session["intent"] = mode
             session["turns"] = (session["turns"] + [request.message[:500]])[-4:]
 
-            def respond(status, answer, documents=(), sources=(), stats=None):
+            def respond(status, answer, documents=(), sources=(), stats=None, excerpts=()):
                 session["candidates"] = [d["id"] for d in documents]
                 session["revisions"] = {d["id"]: d["current_revision"] for d in documents}
                 if documents:
@@ -206,7 +206,8 @@ class KnowledgeService:
                     session["last_document_id"] = documents[0]["id"]
                 return KnowledgeAnswer(status=status, answer=answer, conversation_id=cid, intent=mode,
                     options=[self.option(d) for d in documents], sources=list(sources),
-                    documentation_sufficient=status == "answered", retrieval=stats or {})
+                    documentation_sufficient=status == "answered", retrieval=stats or {},
+                    excerpts=list(excerpts))
 
             def is_company_specific(text):
                 """Heuristic: does the query look like a company procedure question?"""
@@ -338,6 +339,20 @@ class KnowledgeService:
             else:
                 if mode == "steps" and not any(re.search(r"(?:^|\n)\s*(?:\d+[.)]|[-*])\s|paso\s+\d", row["text"], re.I) for row in evidence):
                     return missing()
+                if mode == "information":
+                    # Only the manual's own sentences, picked by number (never written by the model); without a
+                    # pick, the same evidence as clean text instead of the raw chunks.
+                    from .excerpts import clean_excerpt, sentences as manual_sentences
+                    title = selected_document["title"]
+                    candidates = manual_sentences(evidence)
+                    picker = getattr(self.selector, "pick_sentences", None)
+                    picked = await picker(request.message, candidates) if picker and candidates else None
+                    if picked:
+                        excerpts = [{"text": candidates[i]["text"], "page": candidates[i]["page"]} for i in picked]
+                        answer = f"Según «{title}»:\n\n" + " ".join(item["text"] for item in excerpts)
+                        return respond("answered", answer, [selected_document], sources, stats, excerpts)
+                    answer = f"Según «{title}»:\n\n" + (clean_excerpt(evidence) or reserve_answer(evidence, "empty"))
+                    return respond("answered", answer, [selected_document], sources, stats)
                 # Try grounded generation with Ollama first
                 try:
                     if hasattr(self.selector, "generate_grounded_answer"):

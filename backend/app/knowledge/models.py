@@ -39,3 +39,6 @@ class KnowledgeAnswer(BaseModel):
     documentation_sufficient: bool = False
     knowledge_type: str = "documented_evidence"
     retrieval: dict = Field(default_factory=dict)
+    # Information answers: the manual sentences that answer the question ({"text", "page"}, document order), for the
+    # assistant to translate with its guards. Empty when no sentence could be picked.
+    excerpts: list[dict] = Field(default_factory=list)
