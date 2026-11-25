@@ -1756,7 +1756,11 @@ class UnifiedAssistantService:
             heard = answer.removeprefix(GENERAL_NOTICE).strip()[:600]
             state["pending_detail"] = {"question": (message or "").strip()[:4000], "missing": bool(missing),
                                        "heard": heard}
-        return self._voice_result(state, result, short=short)
+        # A manual's procedure is heard in Spanish (one guarded translation call); the chat keeps the manual's words.
+        spoken = None
+        if result.get("route") == "knowledge" and not short:
+            spoken = await self._spanish_procedure(state, result.get("answer") or "")
+        return self._voice_result(state, result, short=short, spoken=spoken)
 
     @staticmethod
     def _with_offer(answer, offer):
@@ -1766,7 +1770,41 @@ class UnifiedAssistantService:
             return answer[:cited.start()] + "\n\n" + offer + answer[cited.start():]
         return answer + "\n\n" + offer
 
-    def _voice_result(self, state, result, short):
+    async def _translate_lines(self, state, lines):
+        """Each line in Spanish with ONE model call (numbered lines in, numbered lines out). Every line passes the
+        same guards as _translate (_clean_translation): a line that is not a faithful translation keeps its source."""
+        cache = state.setdefault("translations", {})
+        missing = [line for line in dict.fromkeys(lines) if line and line not in cache]
+        if missing:
+            prompt = ("Traduce al español cada línea numerada de abajo. Devuelve las mismas líneas, con su número, una "
+                      "por línea y en el mismo orden, solo con la traducción: sin explicaciones ni información nueva. "
+                      "Conserva tal cual los nombres de productos, carpetas, botones, comandos y números.\n\nLíneas:\n"
+                      + "\n".join(f"{n}. {line}" for n, line in enumerate(missing, start=1)))
+            try:
+                output = await self.provider.generate(prompt) or ""
+            except Exception:  # noqa: BLE001 - the steps stay as the manual wrote them
+                output = ""
+            found = {int(n): text.strip() for n, text in re.findall(r"(?m)^\s*(\d{1,3})[.)]\s+(.+)$", output)}
+            for n, line in enumerate(missing, start=1):
+                cache[line] = self._clean_translation(line, found.get(n, ""))
+        return [cache.get(line, line) for line in lines]
+
+    async def _spanish_procedure(self, state, answer):
+        """A listed procedure ("«T» (N pasos):\\n1. …") with its steps in Spanish, for the voice only; anything else
+        unchanged. The title stays as written (it is the name on the manual)."""
+        from backend.app.assistant.speech import _LIST_HEADER, _clean, _list_items
+        lines = [line.strip() for line in _clean(answer or "").splitlines() if line.strip()]
+        header = _LIST_HEADER.match(lines[0]) if lines else None
+        if not header:
+            return answer
+        items = _list_items(lines[1:])
+        if not items:
+            return answer
+        spanish = await self._translate_lines(state, items)
+        return (f"«{header.group('title')}» ({_pasos(len(spanish))}):\n"
+                + "\n".join(f"{n}. {text}" for n, text in enumerate(spanish, start=1)))
+
+    def _voice_result(self, state, result, short, spoken=None):
         """The voice result: the detail offer on a short general answer, and "speech" read by parts."""
         result = dict(result)
         answer = result.get("answer") or ""
@@ -1776,7 +1814,7 @@ class UnifiedAssistantService:
                 state.pop(key, None)
             answer = self._with_offer(answer, voice_mode.VOICE_OFFER)
             result["answer"] = answer
-        speech, rest = voice_mode.voice_speech(answer)
+        speech, rest = voice_mode.voice_speech(spoken or answer)
         if rest:
             state.pop("pending_detail", None)
             state["pending_rest"] = {"text": rest, "route": result.get("route") or "general"}

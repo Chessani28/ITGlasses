@@ -141,6 +141,61 @@ def test_a_long_voice_procedure_is_read_by_parts_and_continues_with_sigue():
     assert " ".join(heard).split() == whole.split()  # every step, in order, nothing skipped
 
 
+SPANISH_STEPS = {
+    "All ports communication": "Comunicación de todos los puertos",
+    "Keyboard (For laptops)": "Teclado (para laptops)",
+    "BIOS battery status": "Estado de la batería de la BIOS",
+    "RAM memory of 16GB": "Memoria RAM de 16GB",
+    "Installation of SSD (it also could be NVMe)": "Instalación de SSD (también puede ser NVMe)",
+    "Motherboard cleaning with isopropyl alcohol": "Limpieza de la tarjeta madre con alcohol isopropílico",
+    "Fan cleaning": "Limpieza del ventilador",
+    "Thermal paste replacement on processor": "Cambio de pasta térmica del procesador",
+}
+
+
+class BatchTranslator(StubProvider):
+    """Translates numbered lines in one call; `wrong` gives a step a changed number (rejected by the guards)."""
+
+    def __init__(self, wrong=None):
+        super().__init__()
+        self.wrong = wrong or {}
+
+    async def generate(self, message):
+        import re
+        self.calls.append(message)
+        out = []
+        for number, text in re.findall(r"(?m)^(\d+)\. (.+)$", message.split("Líneas:", 1)[-1]):
+            out.append(f"{number}. {self.wrong.get(text, SPANISH_STEPS.get(text, text))}")
+        return "\n".join(out)
+
+
+def test_a_procedure_is_spoken_in_spanish_with_one_model_call():
+    provider = BatchTranslator()
+    service = build(provider=provider)
+    result = voice(service, "¿Cuáles son los pasos de COMPUTER PREPARATION?")
+    assert len(provider.calls) == 1
+    assert "Paso 1: Comunicación de todos los puertos." in result["speech"]
+    assert "Paso 3: Estado de la batería de la BIOS." in result["speech"]
+    assert "All ports communication" in result["answer"]  # the chat keeps the manual's own words
+    more = voice(service, "sigue", result["session_id"])
+    assert "Paso 4: Memoria RAM de 16GB." in more["speech"] and len(provider.calls) == 1
+
+
+def test_a_step_whose_translation_fails_the_guards_stays_in_english():
+    provider = BatchTranslator(wrong={"RAM memory of 16GB": "Memoria RAM de 32GB"})
+    service = build(provider=provider)
+    result = voice(service, "¿Cuáles son los pasos de COMPUTER PREPARATION?")
+    more = voice(service, "sigue", result["session_id"])
+    assert "Paso 4: RAM memory of 16GB." in more["speech"]
+
+
+def test_the_text_channel_never_translates_procedures():
+    provider = BatchTranslator()
+    service = build(provider=provider)
+    asyncio.run(service.chat("¿Cuáles son los pasos de COMPUTER PREPARATION?"))
+    assert provider.calls == []
+
+
 def test_the_web_still_gets_the_whole_procedure():
     service = build()
     result = asyncio.run(service.chat("¿Cuáles son los pasos de COMPUTER PREPARATION?"))
