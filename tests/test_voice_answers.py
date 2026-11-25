@@ -75,6 +75,15 @@ def test_yes_after_the_offer_gives_the_long_version():
     assert "frase 0" in second["answer"]
 
 
+def test_the_detail_expands_what_was_heard_instead_of_repeating_it():
+    service, provider = general_service()
+    first = voice(service, "¿Qué es el DNS?")
+    voice(service, "sí", first["session_id"])
+    prompt = provider.calls[-1]["prompt"]
+    assert "El DNS traduce nombres de dominio a direcciones IP." in prompt
+    assert "no repitas" in prompt.lower() and "más detalle" in prompt.lower()
+
+
 def test_no_after_the_offer_closes_it():
     service, provider = general_service()
     first = voice(service, "¿Qué es el DNS?")

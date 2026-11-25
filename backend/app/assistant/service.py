@@ -1621,6 +1621,9 @@ class UnifiedAssistantService:
         voice_short = state.get("_channel") == "voice"
         style = (voice_mode.VOICE_RULES + " Contesta la siguiente pregunta del usuario.\n" if voice_short else
                  "Responde en español, de forma breve y clara, a la siguiente pregunta del usuario.\n")
+        if state.get("_detail_of"):
+            context += ("\n\nEl usuario ya escuchó este resumen: «" + state["_detail_of"] + "». Ahora responde con "
+                        "más detalle: cómo funciona, para qué sirve y un ejemplo práctico. No repitas el resumen.")
         prompt = (
             "Eres un asistente de soporte técnico. " + style + missing +
             "Si no sabes la respuesta, dilo claramente.\n\n" + "Mensaje del usuario: " + message +
@@ -1706,7 +1709,9 @@ class UnifiedAssistantService:
             and not _DOCUMENTATION_REFUSAL.search(_fold(answer))
         if short:
             # The detail is answered the same way: with the "manuals do not cover it" instruction when it had it.
-            state["pending_detail"] = {"question": (message or "").strip()[:4000], "missing": bool(missing)}
+            heard = answer.removeprefix(GENERAL_NOTICE).strip()[:600]
+            state["pending_detail"] = {"question": (message or "").strip()[:4000], "missing": bool(missing),
+                                       "heard": heard}
         return self._voice_result(state, result, short=short)
 
     @staticmethod
@@ -1751,11 +1756,15 @@ class UnifiedAssistantService:
             return {"answer": rest["text"], "session_id": session_id, "route": rest["route"], "sources": []}
         if detail and voice_mode.wants_detail(message):
             question = detail["question"]
-            if detail.get("missing"):
-                answer = await self._general_fallback_answer(state, question)
-            else:
-                it_topic = self._general_is_it(state, question)
-                answer = self._label_general(state, await self._general_answer(state, question), it_topic)
+            state["_detail_of"] = detail.get("heard") or ""  # the short answer already heard: expand, not repeat
+            try:
+                if detail.get("missing"):
+                    answer = await self._general_fallback_answer(state, question)
+                else:
+                    it_topic = self._general_is_it(state, question)
+                    answer = self._label_general(state, await self._general_answer(state, question), it_topic)
+            finally:
+                state.pop("_detail_of", None)
             state["active_route"] = "general"
             self.sessions.remember(state, message, answer, route="general")
             sources = [{"title": s["title"], "url": s["url"]} for s in state.get("web_sources") or []]
