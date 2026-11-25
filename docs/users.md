@@ -64,11 +64,45 @@ auditoría como «Script local». El backend puede seguir corriendo.
 Los celulares v3 (DPoP) no dependen de ninguno de los dos. El valor efectivo queda en el log al arrancar:
 `access loopback_mode=… bearer_scope=…`.
 
+## Registro de usuarios
+
+| Variable | Clave en `runtime-config.psd1` | Valores |
+|---|---|---|
+| `ITGLASSES_REGISTRATION` | `Registration` | `approval` (por defecto): la cuenta queda pendiente hasta que un admin la apruebe. `open`: entra de inmediato. `off`: no hay enlace «Crear cuenta» y `POST /api/v1/auth/register` responde 404. |
+
+Un valor no válido impide arrancar. El log dice `registration mode=…`.
+
+- **Formulario:** enlace «Crear cuenta» en el login. Pide usuario, nombre visible (opcional), contraseña y
+  confirmación, con el mínimo de `ITGLASSES_PASSWORD_MIN_LENGTH`.
+- **Rol:** siempre `user`, lo pone el servidor. Un campo de más en la petición (`role`, `status`…) se
+  rechaza con 422. Los roles se siguen cambiando como antes, en Usuarios.
+- **Solicitudes pendientes:** viven en la tabla `registrations` con su hash scrypt. Un nombre de usuario
+  es único entre `users` y `registrations`. Caducan a los 30 días.
+- **Iniciar sesión pendiente:** solo con la contraseña correcta el login responde «Tu cuenta está
+  pendiente de aprobación»; con otra, el mensaje genérico de siempre (y el mismo costo).
+- **Nombre repetido:** en `approval` la respuesta es idéntica a la de un registro nuevo, así que no dice
+  qué usuarios existen. En `open` se rechaza con un mensaje genérico (409), porque un nombre libre entra
+  directo.
+- **Aprobar / Rechazar** (admin y superadmin, página Usuarios, sección Pendientes): aprobar crea el usuario
+  activo con el mismo hash, sin volver a calcularlo, y borra la solicitud en una sola transacción. Rechazar
+  borra la solicitud; el nombre queda libre.
+- **Seguridad:** misma puerta que el login (solo la página de esta PC: `Origin` y `Sec-Fetch-Site`; aún no
+  hay sesión, así que no hay token CSRF). Aprobar y rechazar sí piden sesión de admin y CSRF. Límite de 5
+  solicitudes por hora por dirección del cliente, contadas aunque fallen. La dirección es la que ve
+  uvicorn, que solo acepta `X-Forwarded-For` del proxy de confianza `127.0.0.1`; una petición con
+  cabeceras de proxy nunca pasa la puerta de la página local.
+- **Auditoría:** `user.register` (también los intentos con nombre repetido, como `denied`),
+  `user.approve` y `user.reject`, con el nombre de usuario. Nunca la contraseña ni el hash.
+
 ## Base de datos, respaldo y restauración
 
 Los usuarios, las sesiones web y la auditoría viven en `storage/pairing/devices.sqlite3` (esquema v2),
 junto con los dispositivos. Antes de migrar una base existente se guarda una copia verificada en
 `storage/pairing/backups/devices-v<N>-<fecha>.sqlite3`; si la copia falla, no se migra.
+
+La tabla `registrations` (registro de usuarios) se agrega sin cambiar la versión: la base sigue en v2 y un
+tag anterior arranca igual, ignorando la tabla. La primera vez que se crea en una base existente se guarda
+antes la copia `devices-v2-registrations-<fecha>.sqlite3`.
 
 ```powershell
 .\scripts\stop-backend.ps1
@@ -94,6 +128,8 @@ solo lectura (página «Auditoría» y `GET /api/v1/admin/audit`).
 | Ruta | Quién |
 |---|---|
 | `POST /api/v1/auth/login`, `POST /logout`, `GET /me`, `POST /password`, `GET /config` | web de esta PC |
+| `POST /api/v1/auth/register` (404 con `Registration = 'off'`) | web de esta PC, sin sesión |
+| `GET /api/v1/admin/users/pending`; `POST …/pending/{id}/approve`, `…/reject` | admin o superadmin con sesión |
 | `GET, POST /api/v1/admin/users`; `PATCH /admin/users/{id}`; `POST …/{id}/reset-password`, `…/unlock`, `…/role` | admin o superadmin con sesión |
 | `POST /api/v1/admin/devices/{id}/assign`; `…/approve` acepta `{user_id}` opcional | admin o superadmin con sesión |
 | `GET /api/v1/admin/audit?limit=&before_id=` | admin o superadmin con sesión |

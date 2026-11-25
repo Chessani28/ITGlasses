@@ -15,7 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from backend.app.knowledge.models import KnowledgeError
 from backend.app.pairing.store import transaction
-from . import accounts, audit, audit_web
+from . import accounts, audit, audit_web, registration
 from .web import current_session
 
 users_router = APIRouter(prefix="/api/v1/admin/users")
@@ -105,6 +105,42 @@ def create_user(body: NewUser, request: Request, response: Response):
     response.headers["Cache-Control"] = "no-store"
     # Shown once: never stored in clear, never logged, never in the audit log.
     return {"user": _public(row, session), "temporary_password": temporary}
+
+
+@users_router.get("/pending")
+def list_pending(request: Request, response: Response):
+    """Self-registration requests waiting for approval (admin and superadmin)."""
+    _admin(request)
+    response.headers["Cache-Control"] = "no-store"
+    with transaction() as db:
+        return {"pending": registration.pending(db), "mode": registration.mode()}
+
+
+@users_router.post("/pending/{registration_id}/approve")
+def approve_pending(registration_id: str, request: Request):
+    session = _admin(request, write=True)
+    try:
+        with transaction() as db:
+            request_row = registration.get(db, registration_id)
+            user_id = registration.approve(db, registration_id, session.user_id)
+            if user_id is None:
+                raise KnowledgeError("registration_not_found", "Esa solicitud ya no existe o caducó.", 404)
+            audit_web.record(db, request, "user.approve", "user", user_id,
+                             {"username": request_row["username"], "registration": registration_id})
+            return {"user": _public(accounts.get(db, user_id), session)}
+    except accounts.AccountError as error:
+        raise _account_error(error) from None
+
+
+@users_router.post("/pending/{registration_id}/reject")
+def reject_pending(registration_id: str, request: Request):
+    _admin(request, write=True)
+    with transaction() as db:
+        row = registration.reject(db, registration_id)
+        if row is None:
+            raise KnowledgeError("registration_not_found", "Esa solicitud ya no existe o caducó.", 404)
+        audit_web.record(db, request, "user.reject", "registration", registration_id, {"username": row["username"]})
+    return {"rejected": registration_id}
 
 
 @users_router.patch("/{user_id}")

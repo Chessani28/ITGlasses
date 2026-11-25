@@ -68,7 +68,8 @@ function Set-ITGlassesRuntimeConfiguration {
                 'WhisperPython', 'WhisperModel', 'RequireAuth', 'AllowLanBinding', 'PairingOrigin',
                 'WhisperKeepRamGiB', 'WhisperHintMode', 'SttCorrection',
                 'WhisperDevice', 'WhisperComputeType', 'WhisperFallbackModel', 'WhisperPreload',
-                'WhisperMinVramMiB', 'WhisperIdleSeconds', 'PasswordMinLength', 'LoopbackMode', 'BearerScope'
+                'WhisperMinVramMiB', 'WhisperIdleSeconds', 'PasswordMinLength', 'LoopbackMode', 'BearerScope',
+                'Registration'
             )
             $unknownKeys = @($config.Keys | Where-Object { $_ -notin $allowedKeys })
             if ($unknownKeys.Count -gt 0) {
@@ -126,7 +127,8 @@ function Set-ITGlassesRuntimeConfiguration {
         # Access modes (stage usuarios 4): what this PC may do without a login, and what shared tokens reach.
         foreach ($setting in @(
             @{ Key = 'LoopbackMode'; Variable = 'ITGLASSES_LOOPBACK_MODE'; Allowed = @('legacy', 'chat', 'off') },
-            @{ Key = 'BearerScope'; Variable = 'ITGLASSES_BEARER_SCOPE'; Allowed = @('mobile', 'full') }
+            @{ Key = 'BearerScope'; Variable = 'ITGLASSES_BEARER_SCOPE'; Allowed = @('mobile', 'full') },
+            @{ Key = 'Registration'; Variable = 'ITGLASSES_REGISTRATION'; Allowed = @('off', 'approval', 'open') }
         )) {
             $environmentValue = [Environment]::GetEnvironmentVariable($setting.Variable, 'Process')
             if ([string]::IsNullOrWhiteSpace($environmentValue) -and $config.Contains($setting.Key)) {

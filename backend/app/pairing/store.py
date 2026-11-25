@@ -91,6 +91,20 @@ V2_INSTALL_COLUMNS = (
 )
 V2_INDEXES = ("CREATE INDEX IF NOT EXISTS install_user ON installs(user_id)",)
 
+# Self-registration requests waiting for an admin (users/registration.py). Additive and outside the version number
+# on purpose: SCHEMA_VERSION stays 2, so an older tag still starts on this database and just ignores the table.
+# The first time it is created on an existing database, a copy is taken first (ensure_database).
+REGISTRATIONS_SCHEMA = (
+    """CREATE TABLE IF NOT EXISTS registrations (
+ id TEXT PRIMARY KEY,
+ username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+ display_name TEXT NOT NULL,
+ pw_salt BLOB NOT NULL, pw_hash BLOB NOT NULL, pw_params TEXT NOT NULL,
+ created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, ip TEXT
+)""",
+    "CREATE INDEX IF NOT EXISTS registration_exp ON registrations(expires_at)",
+)
+
 _ready = set()
 _ready_lock = threading.Lock()
 
@@ -160,11 +174,17 @@ def migrate(db):
                     db.execute(f"ALTER TABLE installs ADD COLUMN {name} {kind}")
             for statement in V2_INDEXES:
                 db.execute(statement)
+        for statement in REGISTRATIONS_SCHEMA:
+            db.execute(statement)
         db.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
         db.execute("COMMIT")
     except BaseException:
         db.execute("ROLLBACK")
         raise
+
+
+def has_table(db, name):
+    return db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,)).fetchone() is not None
 
 
 def ensure_database(path=None):
@@ -180,10 +200,16 @@ def ensure_database(path=None):
         existed = path.is_file() and path.stat().st_size > 0
         with closing(sqlite3.connect(path, timeout=5, isolation_level=None)) as db:
             version = db.execute("PRAGMA user_version").fetchone()[0]
+            # A newer database is refused before anything is copied or written (no backup, no new table).
+            if version > SCHEMA_VERSION:
+                raise SchemaError(f"device database version {version} is newer than {SCHEMA_VERSION}")
             if existed and version < SCHEMA_VERSION:
                 copy = backup_database(db, path, version)
                 logger.info("Device database backed up before migration from=%d to=%d file=%s",
                             version, SCHEMA_VERSION, copy.name)
+            elif existed and not has_table(db, "registrations"):
+                copy = backup_database(db, path, version, "registrations")
+                logger.info("Device database backed up before adding the registrations table file=%s", copy.name)
             migrate(db)
         _ready.add(path)
     return path

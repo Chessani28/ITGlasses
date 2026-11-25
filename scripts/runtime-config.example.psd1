@@ -22,4 +22,5 @@
     # PasswordMinLength = 5          # 5 to 256; raise it before publishing the web to other PCs
     # LoopbackMode = 'off'           # this PC without a login: 'off' (nothing), 'chat' (chat and voice) or 'legacy'
     # BearerScope = 'mobile'         # shared tokens (app v1): 'mobile' (phone routes) or 'full' (rollback)
+    # Registration = 'approval'      # self-registration: 'off', 'approval' (an admin approves) or 'open'
 }

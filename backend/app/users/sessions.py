@@ -26,6 +26,8 @@ TOKEN_MAX = 128
 MAX_FAILURES = 5
 LOCK_SECONDS, LOCK_MAX_SECONDS = 15 * 60, 24 * 3600
 LOGIN_IP_FAILURES, LOGIN_IP_WINDOW = 20, 15 * 60
+# authenticate() result for the right password of a registration still waiting for approval.
+PENDING = "pending"
 GENERIC_FAILURE = "Usuario o contraseña incorrectos, o la cuenta está bloqueada temporalmente."
 
 _dummy = None
@@ -165,7 +167,16 @@ def authenticate(db, username, password, ip=None, now=None):
         row = db.execute("SELECT id,username,role,status,pw_salt,pw_hash,pw_params,failed_count,locked_until "
                          "FROM users WHERE username=?", (name,)).fetchone()
     if row is None:
-        passwords.verify_password(password, *_dummy_hash())
+        # A request waiting for approval is checked instead of the dummy hash: one scrypt either way.
+        from . import registration
+        waiting = registration.find_for_login(db, name, now) if name else None
+        if waiting is not None:
+            if passwords.verify_password(password, waiting["pw_salt"], waiting["pw_hash"], waiting["pw_params"]):
+                audit.record(db, "auth.login", actor_kind="user", outcome="denied", ip=ip, now=now,
+                             target_type="registration", target_id=waiting["id"], detail={"reason": "pending"})
+                return PENDING
+        else:
+            passwords.verify_password(password, *_dummy_hash())
         _ip_failure(db, ip, now)
         # The typed name is not stored: people sometimes type their password in the user field.
         audit.record(db, "auth.login", actor_kind="user", outcome="denied", ip=ip, now=now,

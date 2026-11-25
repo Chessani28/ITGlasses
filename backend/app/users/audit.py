@@ -8,7 +8,7 @@ import time
 ACTIONS = frozenset({
     "bootstrap.superadmin",
     "user.create", "user.update", "user.disable", "user.enable", "user.unlock", "user.role",
-    "user.password_reset", "user.password_change",
+    "user.password_reset", "user.password_change", "user.register", "user.approve", "user.reject",
     "device.approve", "device.deny", "device.block", "device.unblock", "device.delete", "device.assign",
     "document.upload", "document.replace", "document.authorize", "document.withdraw", "document.delete",
     "document.reindex",

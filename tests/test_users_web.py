@@ -19,7 +19,7 @@ LOCAL = "http://127.0.0.1:8000"
 def client(tmp_path, monkeypatch):
     monkeypatch.setenv("ITGLASSES_PAIRING_DB", str(tmp_path / "devices.sqlite3"))
     monkeypatch.setattr(store, "_ready", set())
-    for name in (access.LOOPBACK_VARIABLE, passwords.MIN_LENGTH_VARIABLE):
+    for name in (access.LOOPBACK_VARIABLE, passwords.MIN_LENGTH_VARIABLE, "ITGLASSES_REGISTRATION"):
         monkeypatch.delenv(name, raising=False)
     with TestClient(create_app(MockLLM()), base_url=LOCAL, client=("127.0.0.1", 50000)) as test_client:
         yield test_client
@@ -34,7 +34,8 @@ def test_login_screen_settings(client, monkeypatch, mode, minimum):
     response = client.get("/api/v1/auth/config")
     assert response.status_code == 200 and response.headers["cache-control"] == "no-store"
     # Default "off" since stage "historial" 6 (it was "chat").
-    assert response.json() == {"loopback_mode": mode or "off", "password_min_length": int(minimum or 5)}
+    assert response.json() == {"loopback_mode": mode or "off", "password_min_length": int(minimum or 5),
+                               "registration": "approval"}
 
 
 def test_login_screen_settings_only_from_this_pc(client):

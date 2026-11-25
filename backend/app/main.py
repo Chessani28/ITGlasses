@@ -62,6 +62,8 @@ def _check_password_settings():
         logger.info("password_policy min_length=%d session_idle_min=%d session_max_h=%d", min_length(),
                     idle // 60, absolute // 3600)
         logger.info("access loopback_mode=%s bearer_scope=%s", loopback_mode(), bearer_scope())
+        from backend.app.users.registration import mode as registration_mode
+        logger.info("registration mode=%s", registration_mode())
         enabled, keep = backup_settings()
         logger.info("daily_backup enabled=%s keep=%d", enabled, keep)
         saving, gap = history_settings()
