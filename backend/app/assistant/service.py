@@ -939,6 +939,16 @@ class UnifiedAssistantService:
         cache[text] = answer
         return answer
 
+    async def _excerpt_answer(self, state, result):
+        """An information answer made only of the manual sentences the knowledge service picked, each translated by
+        _translate (its guards keep the original sentence when a translation is not faithful), with title and page."""
+        excerpts = result.excerpts
+        title = (result.sources[0].get("title") if result.sources else None) or "el manual"
+        pages = list(dict.fromkeys(item.get("page") for item in excerpts if item.get("page")))
+        where = f"«{title}»" + (f", p. {' y '.join(str(page) for page in pages)}" if pages else "")
+        sentences = [await self._translate(state, item["text"], "") for item in excerpts]
+        return f"Según {where}: " + " ".join(sentence.strip() for sentence in sentences if sentence.strip())
+
     @classmethod
     def _clean_translation(cls, source, answer):
         """Return a safe translation of ``source`` or the source itself.
@@ -2167,6 +2177,8 @@ class UnifiedAssistantService:
                 answer = self._answer_document(state)
             if answer is None and kind == "procedure":
                 answer = self._answer_procedure(state)
+            if answer is None and getattr(result, "excerpts", None):
+                answer = await self._excerpt_answer(state, result)
             if answer is None:
                 answer = result.answer
             self.sessions.remember(state, message, answer)
