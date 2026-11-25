@@ -18,6 +18,7 @@ from urllib.parse import urlsplit
 
 from backend.app.assistant.memory import SessionStore
 from backend.app.assistant import context as chat_context
+from backend.app.assistant import voice_mode
 from backend.app.providers.base import ModelUnavailableError, ProviderTimeoutError, ProviderUnavailableError
 from backend.app.assistant.procedures import flatten
 from backend.app.assistant import named as named_reference
@@ -1616,20 +1617,26 @@ class UnifiedAssistantService:
             "Los manuales autorizados no cubren esta pregunta. Respóndela con conocimiento general de TI; no te "
             "niegues por falta de documentación.\n" if documentation_missing else ""
         )
+        # Voice mode (a phone or the glasses): one or two spoken sentences; "sí" asks for the usual answer.
+        voice_short = state.get("_channel") == "voice"
+        style = (voice_mode.VOICE_RULES + " Contesta la siguiente pregunta del usuario.\n" if voice_short else
+                 "Responde en español, de forma breve y clara, a la siguiente pregunta del usuario.\n")
         prompt = (
-            "Eres un asistente de soporte técnico. Responde en español, de forma "
-            "breve y clara, a la siguiente pregunta del usuario.\n" + missing +
+            "Eres un asistente de soporte técnico. " + style + missing +
             "Si no sabes la respuesta, dilo claramente.\n\n" + "Mensaje del usuario: " + message +
             context + web_block
         )
         try:
             # The general chat may be longer than /api/v1/chat (OllamaProvider.generate_general: 768 tokens, and
             # the text generated so far plus a note when it reaches the limit). Other providers: generate().
+            limit = {"num_predict": voice_mode.VOICE_MAX_TOKENS} if voice_short else {}
             if as_turns:
-                answer = await self.provider.generate_general_turns(prompt, general[-chat_context.MAX_TURNS:])
+                answer = await self.provider.generate_general_turns(prompt, general[-chat_context.MAX_TURNS:],
+                                                                    **limit)
+            elif hasattr(self.provider, "generate_general"):
+                answer = await self.provider.generate_general(prompt, **limit)
             else:
-                generate = getattr(self.provider, "generate_general", None) or self.provider.generate
-                answer = await generate(prompt)
+                answer = await self.provider.generate(prompt)
         except (ProviderTimeoutError, ProviderUnavailableError) as exc:
             import logging
             logging.getLogger("assistant").error("general provider failed error_type=%s", type(exc).__name__)
@@ -1648,6 +1655,9 @@ class UnifiedAssistantService:
                 )
             return GENERAL_UNAVAILABLE
         answer = (answer or "").strip()
+        if voice_short and answer:
+            answer = voice_mode.trim_short(answer)
+            state["_voice_short"] = bool(answer)
         if self._needs_web(message):
             self._log_public_search_diagnostics(
                 self.web_search,
@@ -1665,7 +1675,83 @@ class UnifiedAssistantService:
         state["_general_content"] = bool(answer)
         return answer or GENERAL_UNAVAILABLE
 
-    async def chat(self, message, session_id=None):
+    async def chat(self, message, session_id=None, channel="text"):
+        """The answer to one message. channel "voice" (a paired phone or the glasses): short general answers with
+        voice_mode.VOICE_OFFER, long ones read in parts with voice_mode.REST_OFFER, and the result always carries
+        "speech". Any other channel: exactly as before (no "speech" key; the route computes it)."""
+        if channel != "voice":
+            return await self._chat_with_topic(message, session_id)
+        session_id, state = self.sessions.get(session_id)
+        reply = await self._voice_offer_reply(state, session_id, message)
+        if reply is not None:
+            return self._voice_result(state, reply, short=False)
+        state["_channel"] = "voice"
+        try:
+            result = await self._chat_with_topic(message, session_id)
+        finally:
+            state.pop("_channel", None)
+            short = state.pop("_voice_short", False)
+        if result.get("session_id") and result["session_id"] != session_id:
+            _, state = self.sessions.get(result["session_id"])
+        # Only a general answer with content gets the offer: never a fixed message or another offer.
+        answer = result.get("answer") or ""
+        short = short and result.get("route") == "general" and answer != GENERAL_OFFER \
+            and answer not in GENERAL_FAILURES and not state.get("pending_general")
+        if short:
+            state["pending_detail"] = {"question": (message or "").strip()[:4000]}
+        return self._voice_result(state, result, short=short)
+
+    @staticmethod
+    def _with_offer(answer, offer):
+        """The answer with the offer as its last spoken line: before a sources block, which is never read aloud."""
+        cited = re.search(r"\n\n(?:Fuentes(?: públicas)? consultadas|Fuente oficial:)", answer)
+        if cited:
+            return answer[:cited.start()] + "\n\n" + offer + answer[cited.start():]
+        return answer + "\n\n" + offer
+
+    def _voice_result(self, state, result, short):
+        """The voice result: the detail offer on a short general answer, and "speech" read by parts."""
+        result = dict(result)
+        answer = result.get("answer") or ""
+        if short:
+            # One offer at a time: the detail offer replaces any other pending question.
+            for key in ("pending_general", "pending_alternative", "pending_section", "pending_rest"):
+                state.pop(key, None)
+            answer = self._with_offer(answer, voice_mode.VOICE_OFFER)
+            result["answer"] = answer
+        speech, rest = voice_mode.voice_speech(answer)
+        if rest:
+            state.pop("pending_detail", None)
+            state["pending_rest"] = {"text": rest, "route": result.get("route") or "general"}
+        result["speech"] = speech
+        return result
+
+    async def _voice_offer_reply(self, state, session_id, message):
+        """The answer to a pending voice offer ("sí" to more detail, "sigue" to the rest), or None. Any other
+        message drops both offers and is answered as usual."""
+        detail = state.pop("pending_detail", None)
+        rest = state.pop("pending_rest", None)
+        if not detail and not rest:
+            return None
+        if voice_mode.declines(message):
+            answer = "De acuerdo."
+            self.sessions.remember(state, message, answer, route="social")
+            return {"answer": answer, "session_id": session_id, "route": "social", "sources": []}
+        if rest and voice_mode.wants_rest(message):
+            # The rest of an answer already generated: read as it is, never through the model.
+            self.sessions.remember(state, message, rest["text"], route=rest["route"])
+            return {"answer": rest["text"], "session_id": session_id, "route": rest["route"], "sources": []}
+        if detail and voice_mode.wants_detail(message):
+            question = detail["question"]
+            it_topic = self._general_is_it(state, question)
+            answer = self._label_general(state, await self._general_answer(state, question), it_topic)
+            state["active_route"] = "general"
+            self.sessions.remember(state, message, answer, route="general")
+            sources = [{"title": s["title"], "url": s["url"]} for s in state.get("web_sources") or []]
+            return {"answer": answer, "session_id": session_id, "route": "general", "sources": sources}
+        return None
+
+    async def _chat_with_topic(self, message, session_id=None):
         """_chat, then keep whether this exchange was about IT (topic_it) so that a follow-up inherits it: a manual
         answer is always IT, a general one as _general_is_it decided; social and clarifying replies change nothing."""
         result = await self._chat(message, session_id)
