@@ -1658,6 +1658,7 @@ class UnifiedAssistantService:
         if voice_short and answer:
             answer = voice_mode.trim_short(answer)
             state["_voice_short"] = bool(answer)
+            state["_voice_missing"] = documentation_missing
         if self._needs_web(message):
             self._log_public_search_diagnostics(
                 self.web_search,
@@ -1680,6 +1681,10 @@ class UnifiedAssistantService:
         voice_mode.VOICE_OFFER, long ones read in parts with voice_mode.REST_OFFER, and the result always carries
         "speech". Any other channel: exactly as before (no "speech" key; the route computes it)."""
         if channel != "voice":
+            if session_id:  # a voice offer is answered only by the next voice message, never from the web
+                _, state = self.sessions.get(session_id)
+                state.pop("pending_detail", None)
+                state.pop("pending_rest", None)
             return await self._chat_with_topic(message, session_id)
         session_id, state = self.sessions.get(session_id)
         reply = await self._voice_offer_reply(state, session_id, message)
@@ -1691,14 +1696,17 @@ class UnifiedAssistantService:
         finally:
             state.pop("_channel", None)
             short = state.pop("_voice_short", False)
+            missing = state.pop("_voice_missing", False)
         if result.get("session_id") and result["session_id"] != session_id:
             _, state = self.sessions.get(result["session_id"])
-        # Only a general answer with content gets the offer: never a fixed message or another offer.
+        # Only a general answer with content gets the offer: never a fixed message, a refusal or another offer.
         answer = result.get("answer") or ""
         short = short and result.get("route") == "general" and answer != GENERAL_OFFER \
-            and answer not in GENERAL_FAILURES and not state.get("pending_general")
+            and answer not in GENERAL_FAILURES and not state.get("pending_general") \
+            and not _DOCUMENTATION_REFUSAL.search(_fold(answer))
         if short:
-            state["pending_detail"] = {"question": (message or "").strip()[:4000]}
+            # The detail is answered the same way: with the "manuals do not cover it" instruction when it had it.
+            state["pending_detail"] = {"question": (message or "").strip()[:4000], "missing": bool(missing)}
         return self._voice_result(state, result, short=short)
 
     @staticmethod
@@ -1743,8 +1751,11 @@ class UnifiedAssistantService:
             return {"answer": rest["text"], "session_id": session_id, "route": rest["route"], "sources": []}
         if detail and voice_mode.wants_detail(message):
             question = detail["question"]
-            it_topic = self._general_is_it(state, question)
-            answer = self._label_general(state, await self._general_answer(state, question), it_topic)
+            if detail.get("missing"):
+                answer = await self._general_fallback_answer(state, question)
+            else:
+                it_topic = self._general_is_it(state, question)
+                answer = self._label_general(state, await self._general_answer(state, question), it_topic)
             state["active_route"] = "general"
             self.sessions.remember(state, message, answer, route="general")
             sources = [{"title": s["title"], "url": s["url"]} for s in state.get("web_sources") or []]

@@ -6,7 +6,7 @@ ya generado, sin pasar por el modelo. Los procedimientos se leen como siempre (s
 """
 import re
 
-from backend.app.assistant.speech import MAX_SPEECH, REST, _clean, spoken_summary
+from backend.app.assistant.speech import REST, _clean, spoken_summary
 from backend.app.knowledge.store import normalize
 from backend.app.providers.ollama import TRUNCATED_NOTE
 
@@ -22,7 +22,7 @@ VOICE_RULES = (
 
 _YES = r"(?:si|claro|vale|ok|okay|de acuerdo|dale|por favor|si por favor|si claro|claro que si)"
 _DETAIL = re.compile(_YES + r"|(?:si )?(?:explicame|dime|cuentame|dame) mas(?: detalle(?:s)?)?|mas detalles?"
-                     r"|ampliar?(?:lo)?|amplia(?:lo)?|con detalle")
+                     r"|ampliar?(?:lo)?|amplia(?:lo)?|con detalle|continua(?: por favor)?")
 _REST = re.compile(_YES + r"|sigue(?: leyendo)?|siguele|continua(?: leyendo)?|y luego|que mas|y despues")
 _DECLINE = re.compile(r"no|no gracias|ahora no|despues|asi esta bien|asi esta bien gracias|no hace falta")
 _ENDS = re.compile(r"[.!?…]\s*$")
@@ -64,7 +64,8 @@ def trim_short(answer):
 
 
 def _flat(answer):
-    return re.sub(r"\s+", " ", _clean(answer or "")).strip()
+    """The answer as it is heard: clean, in one line, without the truncation note (never read aloud)."""
+    return re.sub(r"\s+", " ", _clean((answer or "").replace(TRUNCATED_NOTE, ""))).strip()
 
 
 def split_spoken(text, limit=REST_LIMIT):
@@ -86,13 +87,12 @@ def split_spoken(text, limit=REST_LIMIT):
 
 
 def voice_speech(answer):
-    """(speech, resto) de una respuesta en canal voice. speech None: la app lee la respuesta tal cual."""
+    """(speech, resto) de una respuesta en canal voice. speech nunca es None cuando hay texto: con None la app
+    recorta la respuesta a 450 caracteres y dice "El resto está en el chat."."""
     summary = spoken_summary(answer)
     if summary is not None and not summary.endswith(REST):
         return summary, ""  # procedimientos, listas y secciones: como siempre
     head, rest = split_spoken(answer)
     if rest:
         return f"{head} {REST_OFFER}", rest
-    if len(head) <= MAX_SPEECH:
-        return None, ""
-    return head, ""
+    return head or None, ""

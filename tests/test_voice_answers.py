@@ -148,7 +148,8 @@ def test_the_saved_state_has_no_transient_channel():
     _, state = service.sessions.get(result["session_id"])
     saved = json.loads(snapshot(state))
     assert "_channel" not in saved and "_voice_short" not in saved
-    assert saved["pending_detail"] == {"question": "¿Qué es el DNS?"}
+    assert saved["pending_detail"]["question"] == "¿Qué es el DNS?"
+    assert "_voice_missing" not in saved
 
 
 def test_the_offer_is_not_kept_in_the_model_history():
@@ -156,6 +157,42 @@ def test_the_offer_is_not_kept_in_the_model_history():
     result = voice(service, "¿Qué es el DNS?")
     _, state = service.sessions.get(result["session_id"])
     assert VOICE_OFFER not in state["history"][-1][1]
+
+
+MISSING = "Los manuales autorizados no cubren esta pregunta"
+
+
+def test_detail_after_a_missing_manual_keeps_the_missing_manual_instruction():
+    service, provider = general_service()
+    first = voice(service, "¿Cómo configuro el proxy en Windows?")
+    assert MISSING in provider.calls[-1]["prompt"]
+    assert first["answer"].endswith(VOICE_OFFER)
+    voice(service, "sí", first["session_id"])
+    assert MISSING in provider.calls[-1]["prompt"]
+    assert provider.calls[-1]["num_predict"] is None
+
+
+def test_a_web_turn_drops_pending_voice_offers():
+    service, _ = general_service()
+    first = voice(service, "¿Qué es el DNS?")
+    text(service, "¿Qué es un firewall?", first["session_id"])
+    _, state = service.sessions.get(first["session_id"])
+    assert not state.get("pending_detail") and not state.get("pending_rest")
+
+
+def test_a_refusal_gets_no_detail_offer():
+    refusal = "No tengo acceso a la documentación de tu empresa."
+    service, _ = general_service(RecordingGeneralProvider(short=refusal, long=refusal))
+    first = voice(service, "¿Cómo configuro la impresora de la oficina?")
+    second = voice(service, "sí", first["session_id"])  # answers GENERAL_OFFER: the second refusal is returned
+    assert VOICE_OFFER not in second["answer"]
+
+
+def test_continua_asks_for_detail():
+    service, provider = general_service()
+    first = voice(service, "¿Qué es el DNS?")
+    voice(service, "continúa", first["session_id"])
+    assert provider.calls[-1]["num_predict"] is None and "¿Qué es el DNS?" in provider.calls[-1]["prompt"]
 
 
 def test_stub_provider_without_generate_general_still_works_in_voice():

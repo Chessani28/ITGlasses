@@ -31,7 +31,7 @@ def test_trim_short_drops_the_truncation_note_and_cuts_at_a_sentence():
 
 
 @pytest.mark.parametrize("message", ["sí", "Sí.", "si", "claro", "ok", "explícame más", "Más detalle", "dime más",
-                                     "cuéntame más", "sí, por favor"])
+                                     "cuéntame más", "sí, por favor", "continúa"])
 def test_wants_detail(message):
     assert wants_detail(message)
 
@@ -86,5 +86,14 @@ def test_voice_speech_medium_answer_is_read_whole():
     assert voice_speech(text) == (text, "")
 
 
-def test_voice_speech_short_answer_is_left_to_the_app():
-    assert voice_speech("Una VPN cifra tu conexión.") == (None, "")
+def test_voice_speech_always_says_what_to_read():
+    # Never None: with None the app caps the answer at 450 characters and says "El resto está en el chat."
+    assert voice_speech("Una VPN cifra tu conexión.") == ("Una VPN cifra tu conexión.", "")
+    lines = "\n".join(f"Línea {n} sin punto final" for n in range(18))  # ~440 here, more in the app
+    speech, rest = voice_speech(lines)
+    assert speech and rest == ""
+
+
+def test_voice_speech_never_reads_the_truncation_note():
+    speech, rest = voice_speech("Una explicación larga.\n\n" + TRUNCATED_NOTE)
+    assert "recortada" not in speech and "recortada" not in rest
