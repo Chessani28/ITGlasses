@@ -476,7 +476,13 @@ class WebSearchService:
 
 
 _WEB_NEED_QUERY = re.compile(
-    r"busca.*(?:internet|web)|b[uú]squeda.*(?:internet|web)|search.*(?:internet|web)|versi[oó]n\s+(m[áa]s|more\s+recent)|reciente|últim|última|last\s+version|latest|what\s+is\s+the\s+current",
+    r"busca.*(?:internet|web)|b[uú]squeda.*(?:internet|web)|search.*(?:internet|web)|versi[oó]n\s+(m[áa]s|more\s+recent)|reciente|últim|última|last\s+version|latest|what\s+is\s+the\s+current"
+    # Facts that change with time: today/now, price, outages, support still in force, news.
+    r"|\bhoy\b|\bahora mismo\b|\bright now\b|\btoday\b"
+    r"|\bprecio\b|\bcu[aá]nto cuesta\b|\bhow much (?:is|does)\b|\bprice\b"
+    r"|\bca[ií]d[ao]s?\b|\best[aá] ca[ií]do\b|\bis \w+ down\b|\boutage\b"
+    r"|\btodav[ií]a tiene soporte\b|\bsigue teniendo soporte\b|\b(?:termina|acaba|fin de)l? (?:el )?soporte\b"
+    r"|\bend of (?:support|life)\b|\bnoticias\b|\bnews\b|\besta semana\b|\beste mes\b",
     re.IGNORECASE,
 )
 
