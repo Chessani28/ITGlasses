@@ -459,3 +459,15 @@ Para que no vuelva a pasar: quitar el inicio automático de la app de Ollama o f
 
 Examen: total 88/102, manuales 22/30 (estable entre corridas). Lo que falta en manuales depende de la selección del
 modelo de 4B (elige la página vecina) y del filtro de relevancia ("etiquetas" 0.42, "secpol" 0.52).
+
+## Arranque único, secretos y mejoras sin lentes — 2026-11-25
+
+- `start-all.ps1` / `stop-all.ps1` (rama `feature/arranque-unico`): Ollama + backend + Caddy con un comando, aviso de
+  IP cambiada y de RAM insuficiente para Whisper.
+- Secretos de los manuales ocultos como `[OCULTO]` al subir y al leer (`feature/secretos-manuales`).
+- `feature/mejoras-sin-lentes`: búsqueda web para hechos que cambian (hoy, precio, caídas, soporte, noticias), pasos de
+  procedimientos en español en la voz (una llamada, con candados), limpieza de código muerto.
+- Android `feature/lint-meta`: `android:exported` del flavor meta; 292 pruebas por flavor pasando.
+
+Examen final: **92/102** (internet 15/15, manuales 23/30, voz 12/12, conceptos 24/25). Costo: la mediana de manuales
+subió a ~4.9 s porque el modelo de embeddings se descarga tras cada búsqueda para dejar RAM a Whisper.
