@@ -446,3 +446,16 @@ con ambas, 4 pedazos al selector, filtro intermedio con las palabras del usuario
 \* voz re-medida después del arreglo del detalle. Faltan: 8 de manuales (respuestas de información que salen como
 extracto literal en inglés; "etiquetas" queda bajo el filtro), y la web solo busca con "versión"/"última".
 Para que no vuelva a pasar: quitar el inicio automático de la app de Ollama o fijar `OLLAMA_MODELS`.
+
+## Respuestas de manuales en español y búsqueda — rama feature/respuestas-manuales, 2026-11-25
+
+- Respuestas de información con frases del manual elegidas por número (`pick_sentences`) y traducidas con los
+  candados de `_translate`, con título y página; sin selección, extracto limpio (sin portadas, índices, páginas sueltas
+  ni viñetas). Candado nuevo: los nombres en pantalla (varias palabras con mayúscula, texto entre comillas) se conservan.
+- Selector de evidencia con la pregunta también en inglés, sin portadas/índices entre sus 4 pedazos, y con un reintento
+  ante JSON inválido (el segundo fallo es "sin evidencia", no "No se pudo consultar").
+- Una pregunta que nombra un término de los manuales (nombres y siglas: Dominos, SUMMIT, CPU) los consulta primero.
+- Intención: "qué es lo primero…", "que esté…" y "cómo se llama la carpeta" ya no son preguntas de identificación.
+
+Examen: total 88/102, manuales 22/30 (estable entre corridas). Lo que falta en manuales depende de la selección del
+modelo de 4B (elige la página vecina) y del filtro de relevancia ("etiquetas" 0.42, "secpol" 0.52).
