@@ -44,6 +44,16 @@ def test_missing_ollama_models_are_listed():
     assert run(f"@(Get-ITGlassesMissingModels -Available {complete} -Required {required}).Count") == 0
 
 
+def test_the_memory_line_warns_below_what_whisper_needs():
+    assert run("Get-ITGlassesMemoryStatus -AvailableMB 7577") == "OK  7.4 GB libres"
+    low = run("Get-ITGlassesMemoryStatus -AvailableMB 2900")
+    assert low.startswith("POCA") and "2.8 GB" in low and "Vosk" in low
+
+
+def test_start_all_reports_memory():
+    assert "Get-ITGlassesMemoryStatus" in (SCRIPTS / "start-all.ps1").read_text(encoding="utf-8")
+
+
 @pytest.mark.parametrize("name", ["start-all.ps1", "stop-all.ps1", "itglasses-services.ps1", "stop-backend.ps1"])
 def test_the_scripts_parse(name):
     path = SCRIPTS / name

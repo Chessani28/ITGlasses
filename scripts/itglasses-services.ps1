@@ -40,6 +40,18 @@ function Test-ITGlassesPort {
     [bool](Get-NetTCPConnection -State Listen -LocalPort $Port -ErrorAction SilentlyContinue)
 }
 
+$script:ITGlassesWhisperMinMB = 3072   # Whisper Small on the CPU refuses to load below 3 GiB available
+
+function Get-ITGlassesMemoryStatus {
+    # One summary line about available RAM; below the Whisper minimum the phone falls back to Vosk.
+    param([double]$AvailableMB = ((Get-Counter '\Memory\Available MBytes').CounterSamples[0].CookedValue))
+    $gb = '{0:N1} GB' -f ($AvailableMB / 1024)
+    if ($AvailableMB -lt $script:ITGlassesWhisperMinMB) {
+        return "POCA  $gb libres: Whisper necesita 3 GB y la voz caera a Vosk. Cierra Chrome o reproductores."
+    }
+    return "OK  $gb libres"
+}
+
 function Get-ITGlassesChatModel {
     # The chat model the backend is configured to use (config.toml / Settings).
     param([string]$ProjectRoot)

@@ -78,6 +78,8 @@ if (-not $bind -or -not (Test-Path -LiteralPath $caddy)) {
         "NO: no arranco; revisa $logs\caddy-$stamp.err.log" }
 }
 
+$summary['RAM'] = Get-ITGlassesMemoryStatus
+
 Write-Host ''
 Write-Host 'ITGlasses:'
 foreach ($item in $summary.GetEnumerator()) { Write-Host ('  {0,-8} {1}' -f $item.Key, $item.Value) }
