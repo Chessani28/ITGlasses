@@ -1,4 +1,5 @@
-import {api, chatPayload, documentState, elapsed, jsonOptions, limits, sourcePath, validateFile} from "./core.mjs";
+import {api, chatPayload, connectionBadge, documentState, elapsed, jsonOptions, limits, sourcePath,
+  validateFile} from "./core.mjs";
 
 import {initVoice} from "./voice-ui.mjs";
 import {initAccounts} from "./accounts.mjs";
@@ -229,8 +230,10 @@ async function refreshStatus() {
   ]);
   const [health, provider, knowledge] = results;
   const online = health.status === "fulfilled" && health.value.data.status === "ok";
-  $("connection").textContent = online ? "● Backend conectado" : "Backend no disponible";
-  $("connection").className = `badge ${online ? "good" : "bad"}`;
+  const badge = connectionBadge(online, knowledge.status === "fulfilled" ? knowledge.value.data : null);
+  $("connection").textContent = badge.text;
+  $("connection").className = `badge ${badge.style}`;
+  $("connection").title = badge.title;
   $("backend-status").textContent = online ? `Disponible · ${elapsed(health.value.ms)}` : "No disponible";
   $("provider-status").textContent = provider.status === "fulfilled" ?
     `${provider.value.data.provider} · ${provider.value.data.status === "ready" ? "disponible" : "no disponible"} · ${elapsed(provider.value.ms)}` : "No se pudo consultar";

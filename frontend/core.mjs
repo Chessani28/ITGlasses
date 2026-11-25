@@ -22,6 +22,21 @@ export function chatPayload(mode, message, conversationId, choiceId) {
   }
   return payload;
 }
+/** The top-bar connection badge. A backend without the embedding model still answers, but manual search silently
+ * degrades to words only (BM25): that must be visible, not hidden in the status panel. */
+export function connectionBadge(online, knowledge) {
+  if (!online) return {text: "Backend no disponible", style: "bad", title: ""};
+  if (knowledge && knowledge.embedding_available === false && knowledge.eligible_documents > 0) {
+    return {
+      text: "⚠ Manuales: solo búsqueda por palabras",
+      style: "warning",
+      title: "El modelo de embeddings (qwen3-embedding:0.6b) no está disponible en Ollama, así que los manuales se " +
+        "buscan solo por palabras y pueden no encontrarse (sobre todo en inglés). Detén otros Ollama y arráncalo con " +
+        "scripts\\start-ollama.ps1.",
+    };
+  }
+  return {text: "● Backend conectado", style: "good", title: ""};
+}
 export function sourcePath(id) {
   if (typeof id !== "string" || !/^[a-f0-9-]{36}$/i.test(id)) throw new Error("Identificador de fuente inválido.");
   return `/api/v1/knowledge/sources/${encodeURIComponent(id)}`;
