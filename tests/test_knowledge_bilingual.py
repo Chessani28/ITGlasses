@@ -168,6 +168,58 @@ def test_exact_identifiers_skip_the_translation(tmp_path):
     assert selector.translated == []
 
 
+class BandEmbeddings(EnglishOnlyEmbeddings):
+    """The English translation lands in the 0.42–0.55 band (or above it with high=True); Spanish matches nothing."""
+
+    def __init__(self, high=False):
+        super().__init__()
+        self.high = high
+
+    async def embed(self, texts, query=False):
+        vectors = []
+        for text in texts:
+            text = normalize(text)
+            if not query:
+                vector = [1.0, 0.0, 0.0] if "toner" in text else [0.0, 0.0, 1.0]
+            elif "cartridge" in text:
+                vector = [0.6, 0.8, 0.0] if self.high else [0.45, 0.893, 0.0]
+            else:
+                vector = [0.0, 1.0, 0.0]
+            array = np.array(vector, dtype=np.float32)
+            vectors.append(array / np.linalg.norm(array))
+        return np.array(vectors)
+
+
+def band_service(tmp_path, high):
+    svc = KnowledgeService(tmp_path, BandEmbeddings(high), TranslatingSelector())
+    asyncio.run(svc.ingest("printer.md", MANUAL.encode(), Metadata(
+        title="Reception Printer Guide", procedure_id="77", version="1", authorized=True)))
+    return svc
+
+
+def test_words_shared_only_with_the_translation_do_not_open_the_middle_band(tmp_path):
+    # 0.45 with the translation, and its words (cartridge, printer, reception) are in the manual; the user's own
+    # Spanish words are not: as before the translation, this is not enough evidence.
+    assert ask(band_service(tmp_path, high=False)).status == "insufficient_evidence"
+
+
+def test_a_strong_match_through_the_translation_is_enough(tmp_path):
+    assert ask(band_service(tmp_path, high=True)).status == "answered"
+
+
+def test_search_reports_the_overlap_of_the_original_question(tmp_path):
+    svc, _ = build(tmp_path, TranslatingSelector())
+    best = asyncio.run(svc.retriever.search(QUESTION, alternates=(ENGLISH,)))[0]
+    assert best["overlap"] >= 2 and best["overlap_original"] == 0
+
+
+def test_english_stop_words_are_ignored():
+    from backend.app.knowledge.retrieval import tokens
+    assert tokens("And how do I change it in Windows?") == ["change", "windows"]
+    assert tokens("What is the difference between an SSD and a hard disk?") == ["difference", "between", "ssd",
+                                                                                 "hard", "disk"]
+
+
 def test_the_ollama_script_keeps_two_models_loaded():
     script = (ROOT / "scripts" / "start-ollama.ps1").read_text(encoding="utf-8")
     assert "OLLAMA_MAX_LOADED_MODELS = '2'" in script

@@ -279,7 +279,10 @@ class KnowledgeService:
             if first_doc and first_doc.get("lexical_only"):
                 relevant = [r for r in best_by_doc.values() if r["overlap"] >= 2]
             else:
-                relevant = [r for r in best_by_doc.values() if r["semantic"] >= 0.55 or (r["semantic"] >= 0.42 and r["overlap"] >= 2)]
+                # The middle band needs two of the USER'S words in the chunk: words shared only with the English
+                # translation ("SSD", "disk", "Windows") let general questions into unrelated manual pages.
+                relevant = [r for r in best_by_doc.values() if r["semantic"] >= 0.55 or
+                            (r["semantic"] >= 0.42 and r.get("overlap_original", r["overlap"]) >= 2)]
             if exact:
                 relevant = list(best_by_doc.values())[:1]
             if not relevant:

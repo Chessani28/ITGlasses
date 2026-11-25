@@ -4,6 +4,10 @@ from .store import normalize, procedure_id
 from .models import KnowledgeError
 
 STOP = set("de del la las los el un una unos unas que cual cuales como se es son en para por con al lo le les y o a mi me tengo necesito pero no recuerdo ese eso donde quiero empresa proceso procedimiento pasos hacer please the what is it to for of my how".split())
+# English function words: with the English translation of a question they inflated the word overlap ("and", "do").
+STOP |= set("an and are be do does did in on at by as or if which who whom where when why should would could can "
+            "will was were this that these those with from you your we our they their he she its there here "
+            "about into than then so".split())
 
 
 def tokens(text):
@@ -64,12 +68,16 @@ class Retriever:
             semantic_order = sorted(range(len(rows)), key=lambda i: (-float(scores[i]), rows[i]["id"]))
             ranks = {i: rank + 1 for rank, i in enumerate(semantic_order)}
             query_tokens = set(words)
+            original_tokens = set(tokens(question))
             result = []
             for index, row in enumerate(rows):
-                overlap = len(query_tokens & set(tokens(row["title"] + " " + row["scope"] + " " + row["text"])))
+                chunk_tokens = set(tokens(row["title"] + " " + row["scope"] + " " + row["text"]))
+                overlap = len(query_tokens & chunk_tokens)
                 lexical_rank = lexical.get(row["id"])
                 score = 1 / (60 + ranks[index]) + (1 / (60 + lexical_rank) if lexical_rank else 0)
-                result.append({**row, "semantic": round(float(scores[index]), 6), "hybrid": score, "overlap": overlap})
+                # overlap_original: only the user's own words (what the relevance gates were calibrated on).
+                result.append({**row, "semantic": round(float(scores[index]), 6), "hybrid": score, "overlap": overlap,
+                               "overlap_original": len(original_tokens & chunk_tokens)})
             return sorted(result, key=lambda r: (-r["hybrid"], -r["semantic"], r["id"]))
         # Fallback: lexical-only BM25 ranking without semantic scoring
         words = tokens(" ".join([question, *alternates]))
