@@ -323,6 +323,22 @@ def test_what_is_the_first_thing_is_not_an_identification_question():
     assert intent("¿Qué es formatear?") == "identify"
 
 
+def test_manual_terms_are_the_names_and_acronyms_of_the_manuals(tmp_path):
+    svc = KnowledgeService(tmp_path, EnglishOnlyEmbeddings(), TranslatingSelector())
+    text = ("For Dominos CS install Chrome first. The CPU must be higher than 2.20 GHz.\n"
+            "Then open SUMMIT and Haven OS.")
+    asyncio.run(svc.ingest("guide.md", text.encode(), Metadata(title="Training Guide", procedure_id="9",
+                                                               version="1", authorized=True)))
+    terms = svc.manual_terms()
+    assert {"dominos", "cs", "chrome", "cpu", "ghz", "summit", "haven", "os"} <= terms
+    assert not {"for", "the", "then", "install", "first", "must"} & terms
+
+
+def test_confirm_that_it_is_running_is_not_an_identification_question():
+    from backend.app.knowledge.retrieval import intent
+    assert intent("¿Qué servicio debo confirmar que esté corriendo después de instalar Windows?") != "identify"
+
+
 def test_the_ollama_script_keeps_two_models_loaded():
     script = (ROOT / "scripts" / "start-ollama.ps1").read_text(encoding="utf-8")
     assert "OLLAMA_MAX_LOADED_MODELS = '2'" in script

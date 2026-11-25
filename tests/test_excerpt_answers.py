@@ -94,6 +94,28 @@ def test_several_sentences_keep_their_order_and_pages():
                                       "hostname. Confirma la velocidad, debe ser mayor a 2.20 GHz.")
 
 
+class TermsKnowledge(ExcerptKnowledge):
+    def manual_terms(self):
+        return {"dominos", "cs", "cpu", "ghz", "summit"}
+
+
+def test_a_question_naming_a_manual_term_queries_the_manuals_first():
+    for question in ("Para Dominos CS, ¿qué es lo primero que instalo?",
+                     "¿Qué hago si la frecuencia del CPU es menor a 2.20 GHz?"):
+        knowledge = TermsKnowledge([{"text": CPU, "page": 56}])
+        service = build(provider=TranslatingProvider({}), knowledge=knowledge)
+        result = ask(service, question)
+        assert knowledge.queries, question
+        assert result["route"] == "knowledge"
+
+
+def test_a_concept_without_manual_terms_stays_general():
+    knowledge = TermsKnowledge([])
+    service = build(provider=StubProvider("El phishing es un engaño."), knowledge=knowledge)
+    result = ask(service, "¿Qué es el phishing?")
+    assert result["route"] == "general" and not knowledge.queries
+
+
 def test_without_excerpts_the_answer_is_the_knowledge_answer_as_before():
     service = build(provider=StubProvider(), knowledge=ExcerptKnowledge([]))
     assert ask(service)["answer"] == "Según «Training Setup Guideline»:\n\nEnglish text."

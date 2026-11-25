@@ -1373,6 +1373,19 @@ class UnifiedAssistantService:
             return False
         return CONCEPTUAL_QUESTION.search(text) is not None
 
+    def _names_manual_term(self, message):
+        """True when the message names a manual's own term ("Dominos CS", "SUMMIT", "CPU"): a fixed IT word list
+        cannot know each company's product names, so such a question must reach the manuals first."""
+        terms_of = getattr(self.knowledge, "manual_terms", None)
+        if not callable(terms_of):
+            return False
+        try:
+            terms = terms_of()
+        except Exception:  # noqa: BLE001 - never block the chat on this hint
+            return False
+        from backend.app.knowledge.retrieval import tokens
+        return bool(terms and set(tokens(message or "")) & terms)
+
     @staticmethod
     def _is_it_related(message):
         folded = _fold(message or "")
@@ -2108,6 +2121,7 @@ class UnifiedAssistantService:
         needs_knowledge = (
             needs_web or documentation_only or self._is_it_related(message)
             or self._continues_it(state, message) or not ordinary_general
+            or self._names_manual_term(message)
         )
 
         # Non-IT conceptual questions and ordinary follow-ups retain the fast,

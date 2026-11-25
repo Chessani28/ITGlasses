@@ -14,7 +14,7 @@ from .extract import validate, chunks
 from .models import KnowledgeAnswer, KnowledgeError, Metadata
 from .retrieval import Retriever, exact_ids, intent
 from .social import detect_social_intent, social_response
-from .store import Store
+from .store import Store, normalize
 
 
 def reserve_answer(evidence, reason):
@@ -178,6 +178,32 @@ class KnowledgeService:
             "procedure_id": row["procedure_id"], "page": row["page"], "section": row["section"],
             "paragraph": row["paragraph"], "sha256": row["sha256"], "quote": row["text"],
             "url": "/api/v1/knowledge/sources/" + row["id"]}
+
+    # A word, or the end of a sentence ("." of "2.20" is not one).
+    _TERM = re.compile(r"[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9_]*|[.!?:;](?=\s|$)|[>\n]")
+
+    def manual_terms(self):
+        """Names and acronyms of the authorized manuals (folded): all-caps words ("CPU", "SUMMIT") and capitalized
+        words in the middle of a sentence ("Dominos", "Haven"). A question that names one belongs to the manuals
+        even when no generic IT word gives it away. Cached per set of current revisions."""
+        documents = self.store.documents(eligible_only=True)
+        key = tuple(sorted((d["id"], d["current_revision"]) for d in documents))
+        cached = getattr(self, "_manual_terms_cache", None)
+        if cached and cached[0] == key:
+            return cached[1]
+        terms = set()
+        for row in self.store.eligible_chunks():
+            sentence_start = True
+            for match in self._TERM.finditer(row["title"] + ".\n" + (row["text"] or "")):
+                word = match.group()
+                if word in ".!?:;>\n":
+                    sentence_start = True
+                    continue
+                if len(word) >= 2 and (word.isupper() or (word[0].isupper() and not sentence_start)):
+                    terms.add(normalize(word))
+                sentence_start = False
+        self._manual_terms_cache = (key, terms)
+        return terms
 
     async def _select(self, question, rows, question_en=None):
         """The evidence selection, given the English question when the selector takes it. An invalid answer from the
