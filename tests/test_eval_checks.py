@@ -82,6 +82,11 @@ def test_speech_checks_use_speech_or_answer():
     assert check_turn({"max_speech_chars": 20}, unspoken, {})
 
 
+def test_the_offer_is_not_counted_as_a_sentence_of_the_answer():
+    result = {"answer": "Uno. Dos. Tres.\n\n¿Quieres más detalle?", "speech": None, "sources": []}
+    assert check_turn({"max_sentences": 3}, result, {}) == []
+
+
 def test_ends_with_offer():
     for text in ("Es un túnel. ¿Quieres más detalle?", "Primera parte. ¿Sigo?"):
         assert check_turn({"ends_with_offer": True}, {"answer": text, "speech": None, "sources": []}, {}) == []

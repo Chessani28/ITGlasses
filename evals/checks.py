@@ -52,7 +52,10 @@ def check_turn(expect, result, document_texts):
     if "max_speech_chars" in expect and len(spoken) > expect["max_speech_chars"]:
         failures.append(f"max_speech_chars: {len(spoken)} > {expect['max_speech_chars']}")
     if "max_sentences" in expect:
-        count = sentence_count(spoken)
+        answer_part = spoken.strip()
+        for offer in OFFERS:  # the offer is the app's question, not a sentence of the answer
+            answer_part = answer_part.removesuffix(offer).strip()
+        count = sentence_count(answer_part)
         if count > expect["max_sentences"]:
             failures.append(f"max_sentences: {count} > {expect['max_sentences']}")
     if expect.get("ends_with_offer") and not spoken.strip().endswith(OFFERS):
