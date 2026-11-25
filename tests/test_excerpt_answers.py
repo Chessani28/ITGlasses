@@ -58,6 +58,33 @@ def test_a_translation_rejected_by_the_guards_keeps_the_original_sentence():
     assert ask(service)["answer"] == f"Según «Training Setup Guideline», p. 56: {CPU}"
 
 
+AD = "Move the computer in AD from Newly Added file to its corresponding file."
+MIC = 'Right click on "Microphone Array" and select "Disable".'
+
+
+def test_a_translation_that_renames_a_screen_name_keeps_the_original_sentence():
+    # "Newly Added" is the folder name on screen: translating it would send the technician to a folder that
+    # does not exist.
+    provider = TranslatingProvider({AD: "Mueve la computadora en AD de Recién Añadido a su archivo correspondiente."})
+    service = build(provider=provider, knowledge=ExcerptKnowledge([{"text": AD, "page": 5}]))
+    assert ask(service)["answer"] == f"Según «Training Setup Guideline», p. 5: {AD}"
+
+
+def test_a_translation_that_keeps_the_screen_name_is_used():
+    provider = TranslatingProvider({AD: "Mueve la computadora en AD de Newly Added a su archivo correspondiente."})
+    service = build(provider=provider, knowledge=ExcerptKnowledge([{"text": AD, "page": 5}]))
+    assert ask(service)["answer"].endswith("Mueve la computadora en AD de Newly Added a su archivo correspondiente.")
+
+
+def test_quoted_labels_must_survive_the_translation():
+    renamed = TranslatingProvider({MIC: 'Haz clic derecho en "Matriz de micrófonos" y elige "Deshabilitar".'})
+    service = build(provider=renamed, knowledge=ExcerptKnowledge([{"text": MIC, "page": 38}]))
+    assert ask(service)["answer"].endswith(MIC)
+    kept = TranslatingProvider({MIC: 'Haz clic derecho en "Microphone Array" y elige "Disable".'})
+    service = build(provider=kept, knowledge=ExcerptKnowledge([{"text": MIC, "page": 38}]))
+    assert ask(service)["answer"].endswith('Haz clic derecho en "Microphone Array" y elige "Disable".')
+
+
 def test_several_sentences_keep_their_order_and_pages():
     provider = TranslatingProvider({LABELS: "Solo se permiten etiquetas del hostname.",
                                     CPU: "Confirma la velocidad, debe ser mayor a 2.20 GHz."})

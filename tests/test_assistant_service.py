@@ -1550,8 +1550,15 @@ def test_detail_present_in_source_is_accepted():
 
 def test_quoted_translation_is_accepted_when_source_is_quoted():
     source = "Confirm the probe «Inline Networks Support Remote» is running."
-    translation = "Confirma que el probe «Soporte remoto de Inline Networks» está ejecutándose."
+    translation = "Confirma que el probe «Inline Networks Support Remote» está ejecutándose."
     assert UnifiedAssistantService._clean_translation(source, translation) == translation
+
+
+def test_a_translated_screen_name_keeps_the_original():
+    # The probe is found on screen by its English name: a translated name points at something that does not exist.
+    source = "Confirm the probe «Inline Networks Support Remote» is running."
+    translation = "Confirma que el probe «Soporte remoto de Inline Networks» está ejecutándose."
+    assert UnifiedAssistantService._clean_translation(source, translation) == source
 
 
 def test_quoted_translation_is_rejected_when_source_is_not_quoted():

@@ -1019,7 +1019,22 @@ class UnifiedAssistantService:
             return False
         if cls._invents_detail(source, translation):
             return False
+        if cls._drops_name(source, translation):
+            return False
         return True
+
+    _MULTIWORD_NAME = re.compile(r"(?<![.!?:]\s)(?<!^)\b([A-Z][A-Za-z0-9]+(?:\s+[A-Z][A-Za-z0-9]+)+)\b")
+    _QUOTED = re.compile(r"[\"“«]([^\"”»]{2,60})[\"”»]")
+
+    @classmethod
+    def _drops_name(cls, source, translation):
+        """A name on screen must survive the translation: multiword capitalized names in the middle of a sentence
+        ("Newly Added", "Centris Network") and quoted labels ("Recording"). A technician looks for that exact text;
+        a translated folder or button name points at something that does not exist."""
+        names = [match.group(1) for match in cls._MULTIWORD_NAME.finditer(source or "")]
+        names += [match.group(1).strip() for match in cls._QUOTED.finditer(source or "")]
+        folded = (translation or "").casefold()
+        return any(name.casefold() not in folded for name in names if name.strip())
 
     @classmethod
     def _polarity_changed(cls, source, translation):
