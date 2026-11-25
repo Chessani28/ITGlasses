@@ -28,6 +28,9 @@ publicado en la LAN con Caddy + HTTPS (CA piloto).
 ## Cómo correrlo (PowerShell, desde D:\ITGlasses)
 ```powershell
 Set-Location D:\ITGlasses
+.\scripts\start-all.ps1     # todo de una vez: Ollama (con embeddings), backend y Caddy; reutiliza lo que ya corre
+.\scripts\stop-all.ps1      # apaga los tres (solo procesos de esta instalacion)
+# Por separado:
 .\scripts\check-resources.ps1
 .\scripts\start-ollama.ps1                       # terminal 1
 .\scripts\start-backend.ps1 -Provider ollama     # terminal 2  (o -Provider mock sin modelo)
