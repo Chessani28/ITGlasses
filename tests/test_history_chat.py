@@ -204,6 +204,33 @@ def test_a_device_without_owner_is_not_saved_and_works_as_before(setup):
     assert rows("SELECT * FROM conversations") == []
 
 
+def test_a_device_gets_the_voice_channel(setup, people):
+    c, phone, _ = setup
+    _, token = paired(c, phone, owner=people["ana"])
+    answer = phone_ask(c, phone, token)
+    assert answer["route"] == "general"
+    assert answer["answer"].endswith("¿Quieres más detalle?")
+    assert "speech" in answer and answer["history_saved"] is True
+    [saved] = rows("SELECT content FROM messages WHERE role='assistant'")
+    assert saved["content"].endswith("¿Quieres más detalle?")
+
+
+def test_a_device_without_owner_also_gets_the_voice_channel(setup):
+    c, phone, _ = setup
+    _, token = paired(c, phone, owner=None)
+    answer = phone_ask(c, phone, token, session_id="shared")
+    assert answer["history_saved"] is False
+    assert answer["answer"].endswith("¿Quieres más detalle?")
+
+
+def test_the_web_keeps_the_text_channel(people):
+    with web() as client:
+        ana = sign_in(client, "ana")
+        answer = ask(client, ana)
+    assert answer["route"] == "general"
+    assert "¿Quieres más detalle?" not in answer["answer"]
+
+
 def test_a_reassigned_device_starts_a_conversation_for_its_new_owner(setup, people):
     c, phone, _ = setup
     rid, token = paired(c, phone, owner=people["ana"])

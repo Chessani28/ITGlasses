@@ -53,7 +53,10 @@ async def assistant_chat(payload: AssistantRequest, request: Request):
     result = await history_chat(request, assistant, request.app.state.conversation_locks, payload.message,
                                 payload.session_id)
     from backend.app.assistant.speech import spoken_summary
-    return AssistantResponse(**result, speech=spoken_summary(result.get("answer")))
+    # In voice mode the assistant says what is read aloud (always the "speech" key, possibly None); otherwise the
+    # usual summary of the answer.
+    speech = result.pop("speech") if "speech" in result else spoken_summary(result.get("answer"))
+    return AssistantResponse(**result, speech=speech)
 
 
 def _assistant(request, knowledge):

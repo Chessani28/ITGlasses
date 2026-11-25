@@ -5,9 +5,11 @@ Never breaks the chat: if the history cannot be used (ITGLASSES_HISTORY=off, dat
 runs exactly as before stage "historial", in memory only, and the answer says history_saved=false.
 """
 import asyncio
+import inspect
 import logging
 from dataclasses import dataclass
 
+from backend.app.assistant.voice_mode import channel_for
 from backend.app.knowledge.models import KnowledgeError
 from . import conversations, store
 
@@ -104,6 +106,13 @@ def _save(assistant, target, message, result):
                                       result.get("route"), result.get("sources"), state)
 
 
+def _accepts_channel(assistant):
+    try:
+        return "channel" in inspect.signature(assistant.chat).parameters
+    except (TypeError, ValueError):
+        return False
+
+
 async def chat(request, assistant, locks, message, session_id):
     """The assistant's answer (dict), with session_id = the saved conversation and history_saved."""
     target = await asyncio.to_thread(resolve, request, session_id)
@@ -114,7 +123,13 @@ async def chat(request, assistant, locks, message, session_id):
                 await asyncio.to_thread(_hydrate, assistant, target)
             except store.HistoryUnavailable:
                 saved = False
-        result = await assistant.chat(message, target.key)
+        # A paired phone or the glasses (with or without an owner) get the voice mode; the web and the API token
+        # do not. An assistant without the channel parameter (a test double) is asked as before.
+        channel = channel_for(getattr(request.state, "device_id", None))
+        if _accepts_channel(assistant):
+            result = await assistant.chat(message, target.key, channel=channel)
+        else:
+            result = await assistant.chat(message, target.key)
         if saved:
             try:
                 await asyncio.to_thread(_save, assistant, target, message, result)
