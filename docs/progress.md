@@ -401,3 +401,30 @@ Six stages on top of the tag usuarios-v1, each committed after its tests:
 Verified by the user on the real system: web history, filters, open/continue and the Z Flip6 conversations;
 public search 26H2 with official source. Pending: history panel horizontal scroll and cut titles; the app
 showing the Vosk reason (Android stage); glasses with the locked phone.
+
+## Examen del cerebro y modo voz — rama feature/examen-modo-voz, 2026-11-25
+
+1. Examen del cerebro (`evals/`, `scripts/run-eval.ps1`): 102 casos en JSON (conceptos, internet, social,
+   conversaciones, voz y manuales; los de manuales en `evals/cases/local/`, no versionados), revisiones automáticas y
+   reporte con aciertos por categoría, latencias y cambios contra la corrida anterior. Corre en proceso con una copia
+   del índice; nunca escribe en `storage/` ni usa el puerto 8000.
+2. Modo voz para celular y lentes (`backend/app/assistant/voice_mode.py`): respuesta general de 1–2 frases con
+   "¿Quieres más detalle?", detalle que amplía lo escuchado, "¿Sigo?" en vez de "El resto está en el chat", procedimientos
+   sin cambios, web sin cambios. Detalle en `docs/voice-assistant.md`.
+
+Medición con Ollama real (qwen3:4b-instruct, backend activo a la vez):
+
+| Categoría | Línea base | Modo voz |
+|---|---|---|
+| Total | 68/102 | 72/102 (voz re-medida después: 12/12) |
+| voz | 6/12 (p90 9.9 s) | 12/12 (mediana 1.1 s, p90 3.7 s) |
+| conceptos | 23/25 | 24/25 |
+| conversaciones | 13/15 | 13/15 |
+| internet | 12/15 | 12/15 |
+| manuales | 9/30 | 9/30 |
+| social | 5/5 | 5/5 |
+
+Hallazgos para lo siguiente: (a) **manuales 9/30**: preguntas en español sobre el manual en inglés (Training Setup
+Guideline) no recuperan evidencia, caen a conocimiento general y el modelo inventa (16 de 21 fallos); 3 fallos más eran
+un error del examen ya corregido (`source_document`). (b) La búsqueda web solo se activa con palabras como "versión" o
+"última": "¿Windows 10 tiene soporte?", "precio de un SSD" y "¿Teams tiene una caída?" no buscan.
