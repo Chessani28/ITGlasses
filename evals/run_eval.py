@@ -56,13 +56,22 @@ def _document_texts(knowledge):
     return {title: "\n".join(parts) for title, parts in texts.items()}
 
 
+class OfflineWebSearch:
+    """Búsqueda pública vacía para --provider mock: el examen de prueba nunca sale a internet."""
+
+    last_error = None
+
+    async def search(self, query, max_results=5):
+        return []
+
+
 def build_assistant(provider_name, work_dir):
     """El asistente como lo arma el backend, contra una copia del índice; y título → texto de cada manual."""
     from backend.app.assistant.service import UnifiedAssistantService
     work_dir = Path(work_dir)
     if provider_name == "mock":
         from backend.app.providers.mock import MockLLM
-        return UnifiedAssistantService(None, MockLLM()), {}
+        return UnifiedAssistantService(None, MockLLM(), web_search=OfflineWebSearch()), {}
     from backend.app.assistant.web_search import WebSearchService
     from backend.app.core.config import settings
     from backend.app.knowledge.embeddings import OllamaEmbeddings

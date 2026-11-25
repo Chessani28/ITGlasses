@@ -1,0 +1,7 @@
+[
+  {"id": "soc-hola", "category": "social", "turns": [{"message": "Hola", "expect": {"route": "social", "max_chars": 200}}]},
+  {"id": "soc-como-estas", "category": "social", "turns": [{"message": "Hola, ¿cómo estás?", "expect": {"route": "social", "max_chars": 200}}]},
+  {"id": "soc-gracias", "category": "social", "turns": [{"message": "Muchas gracias", "expect": {"route": "social", "max_chars": 200}}]},
+  {"id": "soc-adios", "category": "social", "turns": [{"message": "Adiós", "expect": {"route": "social", "max_chars": 200}}]},
+  {"id": "soc-gracias-voz", "category": "social", "channel": "voice", "turns": [{"message": "Gracias", "expect": {"route": "social", "max_speech_chars": 200, "not_contains": ["¿Quieres más detalle?"]}}]}
+]

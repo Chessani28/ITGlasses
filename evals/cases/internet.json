@@ -1,0 +1,17 @@
+[
+  {"id": "web-win11-version", "category": "internet", "turns": [{"message": "¿Cuál es la versión más reciente de Windows 11?", "expect": {"route": "general", "web_used": true, "contains_any": ["windows 11", "24h2", "25h2", "26h"]}}]},
+  {"id": "web-chrome-latest", "category": "internet", "turns": [{"message": "¿Cuál es la última versión de Google Chrome?", "expect": {"route": "general", "web_used": true}}]},
+  {"id": "web-android-latest", "category": "internet", "turns": [{"message": "¿Cuál es la versión más reciente de Android?", "expect": {"route": "general", "web_used": true, "contains_any": ["android"]}}]},
+  {"id": "web-iphone-ios", "category": "internet", "turns": [{"message": "¿Cuál es la última versión de iOS?", "expect": {"route": "general", "web_used": true, "contains_any": ["ios"]}}]},
+  {"id": "web-office-latest", "category": "internet", "turns": [{"message": "¿Cuál es la versión más reciente de Microsoft Office?", "expect": {"route": "general", "web_used": true}}]},
+  {"id": "web-busca-explicito", "category": "internet", "turns": [{"message": "Busca en internet qué es Microsip", "expect": {"route": "general", "web_used": true, "contains_any": ["sip", "voip", "softphone", "llamadas"]}}]},
+  {"id": "web-busca-rufus", "category": "internet", "turns": [{"message": "Busca en la web para qué sirve Rufus", "expect": {"route": "general", "web_used": true, "contains_any": ["usb", "booteable", "arranque"]}}]},
+  {"id": "web-win10-soporte", "category": "internet", "turns": [{"message": "¿Windows 10 todavía tiene soporte de Microsoft?", "expect": {"route": "general", "web_used": true}}]},
+  {"id": "web-noticias-ti", "category": "internet", "turns": [{"message": "¿Cuáles son las noticias más recientes de ciberseguridad?", "expect": {"route": "general", "web_used": true}}]},
+  {"id": "web-precio-ssd", "category": "internet", "turns": [{"message": "¿Cuánto cuesta hoy un SSD de 1 TB?", "expect": {"route": "general", "web_used": true}}]},
+  {"id": "web-teams-caida", "category": "internet", "turns": [{"message": "¿Microsoft Teams tiene una caída hoy?", "expect": {"route": "general", "web_used": true}}]},
+  {"id": "web-debian-latest", "category": "internet", "turns": [{"message": "¿Cuál es la última versión estable de Debian?", "expect": {"route": "general", "web_used": true, "contains_any": ["debian"]}}]},
+  {"id": "web-latest-english", "category": "internet", "turns": [{"message": "What is the latest version of Python?", "expect": {"route": "general", "web_used": true, "contains_any": ["python"]}}]},
+  {"id": "web-ollama-latest", "category": "internet", "turns": [{"message": "¿Cuál es la versión más reciente de Ollama?", "expect": {"route": "general", "web_used": true}}]},
+  {"id": "web-rayban-meta", "category": "internet", "turns": [{"message": "¿Cuáles son las funciones más recientes de los lentes Ray-Ban Meta?", "expect": {"route": "general", "web_used": true}}]}
+]

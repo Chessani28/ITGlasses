@@ -1,0 +1,48 @@
+[
+  {"id": "conv-dns-seguimiento", "category": "conversaciones", "turns": [
+    {"message": "¿Qué es el DNS?", "expect": {"route": "general"}},
+    {"message": "¿Y cómo lo cambio en Windows?", "expect": {"route": "general", "contains_any": ["adaptador", "red", "propiedades", "configuración"]}}]},
+  {"id": "conv-pronombre-sin-contexto", "category": "conversaciones", "turns": [
+    {"message": "¿Cómo configuro eso?", "expect": {"max_chars": 400, "contains_any": ["?"]}}]},
+  {"id": "conv-no-funciona-sin-contexto", "category": "conversaciones", "turns": [
+    {"message": "No funciona", "expect": {"max_chars": 300, "contains_any": ["?"]}}]},
+  {"id": "conv-cambio-tema", "category": "conversaciones", "turns": [
+    {"message": "¿Qué es el phishing?", "expect": {"route": "general"}},
+    {"message": "Ahora otra cosa: ¿qué es la memoria RAM?", "expect": {"route": "general", "contains_any": ["memoria", "ram"], "not_contains": ["phishing"]}}]},
+  {"id": "conv-explica-mas", "category": "conversaciones", "turns": [
+    {"message": "¿Qué es un firewall?", "expect": {"route": "general"}},
+    {"message": "Explícalo más sencillo", "expect": {"route": "general", "contains_any": ["firewall", "cortafuegos", "tráfico", "puerta", "guardia"]}}]},
+  {"id": "conv-ejemplo", "category": "conversaciones", "turns": [
+    {"message": "¿Qué es el ransomware?", "expect": {"route": "general"}},
+    {"message": "Dame un ejemplo", "expect": {"route": "general", "contains_any": ["wannacry", "ejemplo", "archivos"]}}]},
+  {"id": "conv-vpn-pasos-y-siguiente", "category": "conversaciones", "turns": [
+    {"message": "Dame los pasos para solucionar un problema de conexión VPN", "expect": {"route": "knowledge", "has_sources": true}},
+    {"message": "Explícame el paso 3", "expect": {"route": "knowledge", "contains_any": ["credenciales", "usuario", "contraseña"]}},
+    {"message": "¿Y el siguiente?", "expect": {"route": "knowledge", "contains_any": ["servidor"]}}]},
+  {"id": "conv-reinicio-anterior", "category": "conversaciones", "turns": [
+    {"message": "¿Cuáles son los pasos para reiniciar el servidor?", "expect": {"route": "knowledge"}},
+    {"message": "Explícame el paso dos", "expect": {"route": "knowledge", "contains_any": ["30 segundos", "esperar"]}},
+    {"message": "¿Y el anterior?", "expect": {"route": "knowledge", "contains_any": ["apagar"]}}]},
+  {"id": "conv-general-luego-manual", "category": "conversaciones", "turns": [
+    {"message": "¿Qué es el DHCP?", "expect": {"route": "general"}},
+    {"message": "Dame los pasos de la guía de instalación", "expect": {"route": "knowledge", "contains_any": ["instalador", "administrador"]}}]},
+  {"id": "conv-manual-luego-general", "category": "conversaciones", "turns": [
+    {"message": "Dame los pasos para reiniciar el servidor", "expect": {"route": "knowledge"}},
+    {"message": "¿Qué es un servidor?", "expect": {"route": "general", "contains_any": ["servicio", "red", "computadora", "equipo"]}}]},
+  {"id": "conv-gracias-tras-pasos", "category": "conversaciones", "turns": [
+    {"message": "Dame los pasos de la guía de instalación", "expect": {"route": "knowledge"}},
+    {"message": "Gracias", "expect": {"route": "social"}},
+    {"message": "¿Y el paso 2?", "expect": {"route": "knowledge", "contains_any": ["administrador"]}}]},
+  {"id": "conv-ssd-por-que", "category": "conversaciones", "turns": [
+    {"message": "¿Qué es un SSD?", "expect": {"route": "general"}},
+    {"message": "¿Por qué es más rápido?", "expect": {"route": "general", "contains_any": ["mecánic", "partes móviles", "flash", "giratori"]}}]},
+  {"id": "conv-mfa-apps", "category": "conversaciones", "turns": [
+    {"message": "¿Qué es la autenticación de dos factores?", "expect": {"route": "general"}},
+    {"message": "¿Qué aplicaciones se usan para eso?", "expect": {"route": "general", "contains_any": ["authenticator", "autenticador"]}}]},
+  {"id": "conv-ping-como", "category": "conversaciones", "turns": [
+    {"message": "¿Para qué sirve el ping?", "expect": {"route": "general"}},
+    {"message": "¿Cómo lo uso?", "expect": {"route": "general", "contains_any": ["cmd", "símbolo del sistema", "terminal", "ping "]}}]},
+  {"id": "conv-no-gracias", "category": "conversaciones", "turns": [
+    {"message": "¿Cómo configuro la impresora de la oficina?"},
+    {"message": "No, gracias", "expect": {"max_chars": 200}}]}
+]

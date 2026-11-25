@@ -1,0 +1,31 @@
+[
+  {"id": "voz-dns", "category": "voz", "channel": "voice", "turns": [
+    {"message": "¿Qué es el DNS?", "expect": {"route": "general", "max_sentences": 3, "max_speech_chars": 300, "ends_with_offer": true}},
+    {"message": "sí", "expect": {"route": "general", "min_chars": 300, "not_contains": ["El resto está en el chat"]}}]},
+  {"id": "voz-dns-texto", "category": "voz", "turns": [
+    {"message": "¿Qué es el DNS?", "expect": {"route": "general", "not_contains": ["¿Quieres más detalle?"]}}]},
+  {"id": "voz-phishing", "category": "voz", "channel": "voice", "turns": [
+    {"message": "¿Qué es el phishing?", "expect": {"route": "general", "max_sentences": 3, "max_speech_chars": 300, "ends_with_offer": true}},
+    {"message": "explícame más", "expect": {"route": "general", "min_chars": 300, "not_contains": ["El resto está en el chat"]}}]},
+  {"id": "voz-phishing-texto", "category": "voz", "turns": [
+    {"message": "¿Qué es el phishing?", "expect": {"route": "general", "not_contains": ["¿Quieres más detalle?"]}}]},
+  {"id": "voz-firewall", "category": "voz", "channel": "voice", "turns": [
+    {"message": "¿Qué hace un firewall?", "expect": {"route": "general", "max_sentences": 3, "max_speech_chars": 300, "ends_with_offer": true}},
+    {"message": "sí", "expect": {"route": "general", "min_chars": 300}}]},
+  {"id": "voz-firewall-texto", "category": "voz", "turns": [
+    {"message": "¿Qué hace un firewall?", "expect": {"route": "general", "not_contains": ["¿Quieres más detalle?"]}}]},
+  {"id": "voz-mfa-no", "category": "voz", "channel": "voice", "turns": [
+    {"message": "¿Qué es la autenticación de dos factores?", "expect": {"route": "general", "max_sentences": 3, "ends_with_offer": true}},
+    {"message": "no, gracias", "expect": {"max_chars": 40}}]},
+  {"id": "voz-ram-otro-tema", "category": "voz", "channel": "voice", "turns": [
+    {"message": "¿Para qué sirve la memoria RAM?", "expect": {"route": "general", "ends_with_offer": true}},
+    {"message": "¿Qué es un SSD?", "expect": {"route": "general", "max_sentences": 3, "ends_with_offer": true, "contains_any": ["ssd", "almacenamiento", "disco"]}}]},
+  {"id": "voz-sin-listas", "category": "voz", "channel": "voice", "turns": [
+    {"message": "¿Cómo debe ser una contraseña segura?", "expect": {"route": "general", "max_sentences": 3, "not_contains": ["**", "- ", "1."], "ends_with_offer": true}}]},
+  {"id": "voz-procedimiento-completo", "category": "voz", "channel": "voice", "turns": [
+    {"message": "Dame los pasos para reiniciar el servidor", "expect": {"route": "knowledge", "contains_all": ["apagar", "esperar", "encender"], "not_contains": ["¿Quieres más detalle?", "El resto está en el chat"]}}]},
+  {"id": "voz-vpn-pasos-sin-cortar", "category": "voz", "channel": "voice", "turns": [
+    {"message": "Dame los pasos para solucionar un problema de conexión VPN", "expect": {"route": "knowledge", "not_contains": ["El resto está en el chat", "¿Quieres más detalle?"]}}]},
+  {"id": "voz-saludo", "category": "voz", "channel": "voice", "turns": [
+    {"message": "Hola", "expect": {"route": "social", "not_contains": ["¿Quieres más detalle?"]}}]}
+]

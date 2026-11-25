@@ -128,6 +128,11 @@ def test_main_with_mock_writes_json_and_md(tmp_path, monkeypatch):
     assert not (tmp_path / "work").exists() or not any((tmp_path / "work").iterdir())
 
 
+def test_the_mock_assistant_never_searches_the_web(tmp_path):
+    assistant, _ = run_eval.build_assistant("mock", tmp_path)
+    assert asyncio.run(assistant.web_search.search("última versión de Windows")) == []
+
+
 def test_build_assistant_never_writes_storage(tmp_path, monkeypatch):
     original = tmp_path / "root" / "storage" / "knowledge" / "knowledge.sqlite3"
     original.parent.mkdir(parents=True)
