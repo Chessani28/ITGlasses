@@ -250,6 +250,79 @@ def test_without_a_pick_the_answer_is_the_clean_excerpt(tmp_path):
     assert "Reception Printer Guide" in result.answer
 
 
+class EnglishAwareSelector(TranslatingSelector):
+    async def select(self, question, rows, question_en=None):
+        self.selected.append((question, len(rows), question_en))
+        return [0]
+
+
+def test_the_evidence_selector_also_gets_the_english_question(tmp_path):
+    selector = EnglishAwareSelector()
+    svc, _ = build(tmp_path, selector)
+    ask(svc)
+    assert selector.selected[0][0] == QUESTION and selector.selected[0][2] == ENGLISH
+
+
+def test_the_evidence_selector_payload_carries_the_english_question():
+    seen = []
+
+    def handler(request):
+        seen.append(json.loads(request.content))
+        return httpx.Response(200, json={"done": True, "message": {"content": json.dumps(
+            {"sufficient": True, "ids": ["0"]})}})
+    selector = EvidenceSelector("qwen-test", transport=httpx.MockTransport(handler))
+    rows = [{"title": "T", "text": "Use only the HP 58A toner cartridge."}]
+    assert asyncio.run(selector.select(QUESTION, rows, question_en=ENGLISH)) == [0]
+    content = json.loads(seen[0]["messages"][-1]["content"])
+    assert content["question"] == QUESTION and content["question_en"] == ENGLISH
+    asyncio.run(selector.select(QUESTION, rows))
+    assert "question_en" not in json.loads(seen[1]["messages"][-1]["content"])
+
+
+class FlakySelector(TranslatingSelector):
+    def __init__(self, failures):
+        super().__init__()
+        self.failures, self.calls = failures, 0
+
+    async def select(self, question, rows):
+        from backend.app.knowledge.models import KnowledgeError
+        self.calls += 1
+        if self.calls <= self.failures:
+            raise KnowledgeError("grounding_error", "invalid selection", 502)
+        return [0]
+
+
+def test_an_invalid_selection_is_retried_once(tmp_path):
+    selector = FlakySelector(failures=1)
+    svc, _ = build(tmp_path, selector)
+    assert ask(svc).status == "answered" and selector.calls == 2
+
+
+def test_two_invalid_selections_mean_no_evidence_not_an_error(tmp_path):
+    selector = FlakySelector(failures=2)
+    svc, _ = build(tmp_path, selector)
+    assert ask(svc).status == "insufficient_evidence" and selector.calls == 2
+
+
+def test_cover_and_index_pages_are_not_given_to_the_selector():
+    from backend.app.knowledge.service import evidence_rows
+    cover = {"document_id": "d", "page": 1, "text": "Training setup\nGuideline\nIT DEPARTMENT"}
+    index = {"document_id": "d", "page": 2, "text": "INDEX\n1. PREPARATION ........ Page 2\n2. DEPLOY ........ Page 3"}
+    body = [{"document_id": "d", "page": page, "text": f"Real sentence on page {page}."} for page in (56, 30, 34, 32)]
+    other = {"document_id": "x", "page": 9, "text": "Another document."}
+    rows = evidence_rows([cover, index, other, *body], "d", 4)
+    assert [row["page"] for row in rows] == [56, 30, 34, 32]
+    only_cover = evidence_rows([cover], "d", 4)
+    assert only_cover == [cover]  # never empty when the document has nothing else
+
+
+def test_what_is_the_first_thing_is_not_an_identification_question():
+    from backend.app.knowledge.retrieval import intent
+    assert intent("Para Dominos CS, ¿qué es lo primero que instalo?") == "information"
+    assert intent("¿Qué es lo que debo revisar después?") == "information"
+    assert intent("¿Qué es formatear?") == "identify"
+
+
 def test_the_ollama_script_keeps_two_models_loaded():
     script = (ROOT / "scripts" / "start-ollama.ps1").read_text(encoding="utf-8")
     assert "OLLAMA_MAX_LOADED_MODELS = '2'" in script

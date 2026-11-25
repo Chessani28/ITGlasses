@@ -1,6 +1,7 @@
 import asyncio
 from dataclasses import asdict
 import hashlib
+import inspect
 import json
 import logging
 from pathlib import Path
@@ -42,6 +43,16 @@ _ASKED_ABOUT = (
     (re.compile(r"\b(?:procedimientos?|pasos?|instrucciones|protocolos?)\b", re.I),
      ("ese procedimiento", "un procedimiento")),
 )
+
+
+def evidence_rows(ranked, document_id, limit):
+    """The best chunks of the chosen document for the evidence selector, without cover and index pages (they matched
+    the title words and pushed the real answer out of the four), unless the document has nothing else."""
+    from backend.app.assistant.procedures import is_cover_page, is_index_page
+    own = [row for row in ranked if row["document_id"] == document_id]
+    content = [row for row in own
+               if not is_cover_page(row.get("text"), row.get("page")) and not is_index_page(row.get("text"))]
+    return (content or own)[:limit]
 
 
 def unverified_message(question):
@@ -167,6 +178,25 @@ class KnowledgeService:
             "procedure_id": row["procedure_id"], "page": row["page"], "section": row["section"],
             "paragraph": row["paragraph"], "sha256": row["sha256"], "quote": row["text"],
             "url": "/api/v1/knowledge/sources/" + row["id"]}
+
+    async def _select(self, question, rows, question_en=None):
+        """The evidence selection, given the English question when the selector takes it. An invalid answer from the
+        model is retried once; a second one means "no evidence" (None) instead of an error that the assistant would
+        report as "could not consult the documentation"."""
+        select = self.selector.select
+        try:
+            takes_english = "question_en" in inspect.signature(select).parameters
+        except (TypeError, ValueError):
+            takes_english = False
+        extra = {"question_en": question_en} if takes_english and question_en else {}
+        for attempt in range(2):
+            try:
+                return await select(question, rows, **extra)
+            except KnowledgeError as exc:
+                if exc.code != "grounding_error":
+                    raise
+                logging.getLogger("knowledge").warning("evidence selection invalid attempt=%d", attempt + 1)
+        return None
 
     async def query(self, request):
         async with self.lock:
@@ -299,7 +329,7 @@ class KnowledgeService:
             if rivals and not exact:
                 return respond("clarification_required", "Encontré varias coincidencias plausibles. ¿Cuál corresponde a tu caso?", [selected_document] + [available[r["document_id"]] for r in rivals])
             # Explicit selection still cannot resolve a missing requested fact by itself.
-            rows = [r for r in ranked if r["document_id"] == selected_document["id"]][:EVIDENCE_PIECES]
+            rows = evidence_rows(ranked, selected_document["id"], EVIDENCE_PIECES)
             stats = {"retrieval_ms": retrieval_ms, "semantic_score": best["semantic"], "hybrid_score": best["hybrid"], "candidate_documents": len(best_by_doc)}
             if len(request.message) > 1800:
                 return respond("clarification_required", "La consulta es extensa. Encontré este candidato; confirma si buscas su nombre o sus pasos y acota la pregunta para verificar la evidencia.", [selected_document], stats=stats)
@@ -318,8 +348,10 @@ class KnowledgeService:
                 selection_question = request.message
                 if mode == "identify":
                     selection_question = "Identifica el procedimiento que coincide con esta descripción, sin dar pasos: " + request.message
-                selected = await self.selector.select(selection_question, rows)
+                selected = await self._select(selection_question, rows, alternates[0] if alternates else None)
                 stats["evidence_check_ms"] = round((time.perf_counter() - start) * 1000, 2)
+                if selected is None:
+                    return missing()
             if not selected:
                 return missing()
             # Reauthorize each citation after the asynchronous model operation.
