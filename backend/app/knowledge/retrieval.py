@@ -32,7 +32,10 @@ class Retriever:
     def __init__(self, store, embeddings):
         self.store, self.embeddings = store, embeddings
 
-    async def search(self, question, candidates=None):
+    async def search(self, question, candidates=None, alternates=()):
+        """Chunks ranked for the question. Alternates (e.g. its English translation) count as more ways to say it:
+        each chunk keeps its best semantic score over all of them, and their words join the lexical search."""
+        alternates = [text for text in alternates if text and text.strip() and text.strip() != question.strip()]
         rows = self.store.eligible_chunks()
         if candidates is not None:
             rows = [r for r in rows if r["document_id"] in candidates]
@@ -50,16 +53,17 @@ class Retriever:
             if any(r["embedding_digest"] != fingerprint or r["embedding_model"] != self.embeddings.model for r in rows):
                 raise KnowledgeError("reindex_required", "The embedding model changed. Reindex the eligible documents before querying.", 409)
             # All query segments contribute; no silent truncation of long questions.
-            segments = [question[i:i + 1000] for i in range(0, len(question), 1000)]
+            segments = [text[i:i + 1000] for text in [question, *alternates] for i in range(0, len(text), 1000)]
             query_vectors = await self.embeddings.embed(segments, query=True)
             vectors = np.asarray([np.frombuffer(r["vector"], dtype="<f4") for r in rows])
             if vectors.ndim != 2 or vectors.shape[1] != query_vectors.shape[1]:
                 raise KnowledgeError("reindex_required", "Embedding dimensions differ. Reindex documents.", 409)
             scores = (vectors @ query_vectors.T).max(axis=1)
-            lexical = self.store.lexical(tokens(question))
+            words = tokens(" ".join([question, *alternates]))
+            lexical = self.store.lexical(words)
             semantic_order = sorted(range(len(rows)), key=lambda i: (-float(scores[i]), rows[i]["id"]))
             ranks = {i: rank + 1 for rank, i in enumerate(semantic_order)}
-            query_tokens = set(tokens(question))
+            query_tokens = set(words)
             result = []
             for index, row in enumerate(rows):
                 overlap = len(query_tokens & set(tokens(row["title"] + " " + row["scope"] + " " + row["text"])))
@@ -68,8 +72,9 @@ class Retriever:
                 result.append({**row, "semantic": round(float(scores[index]), 6), "hybrid": score, "overlap": overlap})
             return sorted(result, key=lambda r: (-r["hybrid"], -r["semantic"], r["id"]))
         # Fallback: lexical-only BM25 ranking without semantic scoring
-        lexical = self.store.lexical(tokens(question))
-        query_tokens = set(tokens(question))
+        words = tokens(" ".join([question, *alternates]))
+        lexical = self.store.lexical(words)
+        query_tokens = set(words)
         result = []
         for index, row in enumerate(rows):
             overlap = len(query_tokens & set(tokens(row["title"] + " " + row["scope"] + " " + row["text"])))

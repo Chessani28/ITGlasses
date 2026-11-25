@@ -9,7 +9,9 @@ $settings = @{
     OLLAMA_NO_CLOUD = '1'
     OLLAMA_CONTEXT_LENGTH = '2048'
     OLLAMA_NUM_PARALLEL = '1'
-    OLLAMA_MAX_LOADED_MODELS = '1'
+    # 2: the chat model on the GPU plus the embedding model on the CPU (num_gpu 0, no extra VRAM). With 1, every
+    # manual search evicted the chat model and each question reloaded it.
+    OLLAMA_MAX_LOADED_MODELS = '2'
     OLLAMA_MAX_QUEUE = '1'
     OLLAMA_KEEP_ALIVE = '30s'
     OLLAMA_LOAD_TIMEOUT = '120s'

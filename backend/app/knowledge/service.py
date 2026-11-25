@@ -34,6 +34,9 @@ def reserve_answer(evidence, reason):
 
 
 # What a company question asked about, for the refusal without evidence: (this, a) in Spanish.
+# Best chunks of the chosen document given to the evidence selector (2 was too few: a wrong order meant "no evidence").
+EVIDENCE_PIECES = 4
+
 _ASKED_ABOUT = (
     (re.compile(r"\bpol[ií]ticas?\b", re.I), ("esa política", "una política")),
     (re.compile(r"\b(?:procedimientos?|pasos?|instrucciones|protocolos?)\b", re.I),
@@ -250,10 +253,19 @@ class KnowledgeService:
                 return respond("clarification_required", "Hay varios procedimientos con ese identificador. ¿A cuál te refieres? Indica título, ámbito o selecciona una opción.", candidates)
 
             search_start = time.perf_counter()
-            try:
-                ranked = await self.retriever.search(request.message, [d["id"] for d in candidates] if candidates is not None else None)
-            finally:
-                await self.embeddings.unload()
+            # The manuals may be in English while the question is in Spanish: search with both. Never for exact
+            # identifiers; a failed translation means searching with the original only.
+            translate = getattr(self.selector, "translate_query", None)
+            alternates = []
+            if translate and not exact:
+                english = await translate(request.message)
+                if english:
+                    alternates.append(english)
+            # The embedding model stays loaded (CPU, its own keep_alive): unloading it after every search made
+            # Ollama reload a model on every question.
+            ranked = await self.retriever.search(request.message,
+                                                 [d["id"] for d in candidates] if candidates is not None else None,
+                                                 alternates=alternates)
             retrieval_ms = round((time.perf_counter() - search_start) * 1000, 2)
             if not ranked:
                 return missing()
@@ -283,7 +295,7 @@ class KnowledgeService:
             if rivals and not exact:
                 return respond("clarification_required", "Encontré varias coincidencias plausibles. ¿Cuál corresponde a tu caso?", [selected_document] + [available[r["document_id"]] for r in rivals])
             # Explicit selection still cannot resolve a missing requested fact by itself.
-            rows = [r for r in ranked if r["document_id"] == selected_document["id"]][:2]
+            rows = [r for r in ranked if r["document_id"] == selected_document["id"]][:EVIDENCE_PIECES]
             stats = {"retrieval_ms": retrieval_ms, "semantic_score": best["semantic"], "hybrid_score": best["hybrid"], "candidate_documents": len(best_by_doc)}
             if len(request.message) > 1800:
                 return respond("clarification_required", "La consulta es extensa. Encontré este candidato; confirma si buscas su nombre o sus pasos y acota la pregunta para verificar la evidencia.", [selected_document], stats=stats)
