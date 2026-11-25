@@ -6,6 +6,8 @@ import sqlite3
 import unicodedata
 import uuid
 
+from .redaction import redact_row
+
 
 def normalize(text: str) -> str:
     return "".join(c for c in unicodedata.normalize("NFKD", text.casefold()) if not unicodedata.combining(c)).strip()
@@ -96,8 +98,9 @@ class Store:
             return dict(row) if row else None
 
     def eligible_chunks(self):
+        # Secrets are hidden on every read too: manuals indexed before redaction existed still hold them.
         with self.connect() as db:
-            return [dict(row) for row in db.execute('''SELECT c.*,d.title,d.scope,d.procedure_id,
+            return [redact_row(dict(row)) for row in db.execute('''SELECT c.*,d.title,d.scope,d.procedure_id,
                 d.procedure_key,r.version,r.sha256,r.filename,r.embedding_model,r.embedding_digest
                 FROM chunks c JOIN documents d ON c.document_id=d.id AND c.revision=d.current_revision
                 JOIN revisions r ON r.document_id=d.id AND r.revision=c.revision
@@ -106,7 +109,7 @@ class Store:
     def document_chunks(self, document_id):
         """Return every eligible chunk of a document, ordered by page/paragraph."""
         with self.connect() as db:
-            return [dict(row) for row in db.execute('''SELECT c.*,d.title,d.scope,d.procedure_id,
+            return [redact_row(dict(row)) for row in db.execute('''SELECT c.*,d.title,d.scope,d.procedure_id,
                 d.procedure_key,r.version,r.sha256,r.filename
                 FROM chunks c JOIN documents d ON d.id=c.document_id AND d.current_revision=c.revision
                 JOIN revisions r ON r.document_id=d.id AND r.revision=c.revision

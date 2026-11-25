@@ -111,7 +111,9 @@ class KnowledgeService:
                     raise KnowledgeError("procedure_metadata_required", "Multiple procedure identifiers were found. Supply the primary procedure ID explicitly or split the document.", 422)
                 if discovered:
                     metadata = metadata.model_copy(update={"procedure_id": discovered[0]})
-            pieces = chunks(result["blocks"])
+            # Secrets in the manual (tokens, keys, passwords) are never stored, embedded or answered.
+            from .redaction import redact
+            pieces = [{**piece, "text": redact(piece["text"])[0]} for piece in chunks(result["blocks"])]
             if len(pieces) > 1000:
                 raise KnowledgeError("chunk_limit", "Documents are limited to 1000 chunks.", 413)
             fingerprint = await self.embeddings.fingerprint()
