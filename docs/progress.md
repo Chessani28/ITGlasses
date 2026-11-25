@@ -428,3 +428,21 @@ Hallazgos para lo siguiente: (a) **manuales 9/30**: preguntas en español sobre 
 Guideline) no recuperan evidencia, caen a conocimiento general y el modelo inventa (16 de 21 fallos); 3 fallos más eran
 un error del examen ya corregido (`source_document`). (b) La búsqueda web solo se activa con palabras como "versión" o
 "última": "¿Windows 10 tiene soporte?", "precio de un SSD" y "¿Teams tiene una caída?" no buscan.
+
+## Manuales en inglés con preguntas en español — rama feature/manuales-bilingues, 2026-11-25
+
+Causa raíz encontrada con el examen: el Ollama en uso lo había arrancado la app de escritorio de Ollama con su carpeta
+de modelos por defecto, sin `qwen3-embedding:0.6b`; la búsqueda funcionaba solo por palabras. Se reinició con
+`start-ollama.ps1`. Luego, para preguntas en español sobre manuales en inglés: traducción de la consulta y búsqueda
+con ambas, 4 pedazos al selector, filtro intermedio con las palabras del usuario, y sin intercambio de modelos
+(`OLLAMA_MAX_LOADED_MODELS=2`, embeddings en CPU sin descargarse). Detalle en `docs/knowledge.md`.
+
+| Examen (Ollama real) | Total | Manuales | Conceptos | Voz | Mediana manuales |
+|---|---|---|---|---|---|
+| Sin embeddings (Ollama de la app) | 72/102* | 9/30 | 24/25 | 12/12* | 1.6 s |
+| Con embeddings, sin traducción | 80/102 | 16/30 | 23/25 | 12/12 | 6.0 s |
+| Con traducción y sin intercambio | 88/102 | 22/30 | 24/25 | 12/12 | 1.9 s |
+
+\* voz re-medida después del arreglo del detalle. Faltan: 8 de manuales (respuestas de información que salen como
+extracto literal en inglés; "etiquetas" queda bajo el filtro), y la web solo busca con "versión"/"última".
+Para que no vuelva a pasar: quitar el inicio automático de la app de Ollama o fijar `OLLAMA_MODELS`.

@@ -179,14 +179,30 @@ normalized embedding cosine similarity. Exact procedure-ID ambiguity is resolved
 before any embedding or LLM call. Retrieval filters eligible current revisions.
 
 `qwen3-embedding:0.6b` runs with `num_gpu=0`, four CPU threads, batches of four,
-2048 context tokens, and truncation disabled. Embeddings are unloaded before
-evidence selection to reduce concurrent memory pressure. Index entries retain
-the model digest; a changed digest requires reindexing.
+2048 context tokens, and truncation disabled. It stays loaded in RAM between
+questions (its own 15-minute `keep_alive`; only an upload unloads it), and
+`start-ollama.ps1` keeps two models loaded (`OLLAMA_MAX_LOADED_MODELS=2`) so the
+chat model is never evicted from the GPU by a search. Index entries retain the
+model digest; a changed digest requires reindexing. Ollama must be started with
+`start-ollama.ps1` (models in `storage\models`): an Ollama started elsewhere
+(e.g. the Ollama desktop app at Windows startup) may lack the embedding model,
+and retrieval silently degrades to lexical-only BM25.
 
-The existing Qwen3 Instruct model receives only a bounded question and two
-retrieved chunks with instructions to treat all input as untrusted data. Its
-output is validated against existing passage IDs. A second authorization check
-precedes response assembly. No document command is executed.
+**Spanish questions, English manuals.** Before searching (never for exact
+procedure IDs), `EvidenceSelector.translate_query` asks the chat model for the
+question in English (JSON, temperature 0, 96 tokens, 10 s; any failure means
+searching with the original only; the log keeps the outcome and time, never the
+text). `Retriever.search(question, alternates=[english])` keeps each chunk's best
+cosine over both and adds the English words to BM25. The relevance gates do not
+change, and the middle band (0.42–0.55) still needs two of the **user's own**
+words in the chunk (`overlap_original`): words shared only with the translation
+("SSD", "disk", "Windows") let general questions into unrelated pages. English
+function words are ignored in the word overlap.
+
+The existing Qwen3 Instruct model receives only a bounded question and the four
+best chunks of the chosen document with instructions to treat all input as
+untrusted data. Its output is validated against existing passage IDs. A second
+authorization check precedes response assembly. No document command is executed.
 
 ## Limits and deployment boundaries
 
