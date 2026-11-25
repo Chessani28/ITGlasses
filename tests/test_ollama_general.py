@@ -59,6 +59,17 @@ def test_general_chat_gets_768_tokens_and_keeps_what_was_generated_at_the_limit(
     assert chat["options"]["num_ctx"] == 2048
 
 
+def test_general_accepts_a_shorter_output_limit():
+    seen = []
+    provider = adapter(length, seen=seen)
+    asyncio.run(provider.generate_general("pregunta", num_predict=160))
+    asyncio.run(provider.generate_general_turns("pregunta", [("q", "a")], num_predict=160))
+    asyncio.run(provider.generate_general("pregunta"))
+    asyncio.run(provider.generate_general_turns("pregunta", [("q", "a")], num_predict=5000))
+    limits = [payload["options"]["num_predict"] for path, payload in seen if path == "/api/chat"]
+    assert limits == [160, 160, 768, 768]
+
+
 def test_api_v1_chat_keeps_256_tokens_and_the_explicit_output_limit_error():
     seen = []
     provider = adapter(length, seen=seen)

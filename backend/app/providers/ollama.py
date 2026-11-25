@@ -90,16 +90,20 @@ class OllamaProvider:
         """/api/v1/chat: max_output_tokens, and an explicit error at the output limit (as before)."""
         return await self._chat("chat", message, self.config.max_output_tokens, allow_partial=False)
 
-    async def generate_general(self, message: str) -> str:
-        """Assistant general chat: GENERAL_MAX_OUTPUT_TOKENS; at the limit, what was generated + TRUNCATED_NOTE."""
+    def _general_limit(self, num_predict=None):
+        """GENERAL_MAX_OUTPUT_TOKENS (or a smaller num_predict, e.g. the short voice answer), within num_ctx / 2."""
         limit = min(GENERAL_MAX_OUTPUT_TOKENS, self.config.context_length // 2)
-        return await self._chat("general", message, limit, allow_partial=True)
+        return limit if num_predict is None else max(1, min(int(num_predict), limit))
 
-    async def generate_general_turns(self, message: str, turns) -> str:
+    async def generate_general(self, message: str, num_predict: int | None = None) -> str:
+        """Assistant general chat: GENERAL_MAX_OUTPUT_TOKENS; at the limit, what was generated + TRUNCATED_NOTE."""
+        return await self._chat("general", message, self._general_limit(num_predict), allow_partial=True)
+
+    async def generate_general_turns(self, message: str, turns, num_predict: int | None = None) -> str:
         """Like generate_general, with the previous (question, answer) exchanges as real user/assistant turns
         (E4), as many of the most recent as fit in num_ctx next to the answer's tokens."""
         from backend.app.assistant.context import fit_turns
-        limit = min(GENERAL_MAX_OUTPUT_TOKENS, self.config.context_length // 2)
+        limit = self._general_limit(num_predict)
         fitted = fit_turns(turns, self.config.context_length, limit, SYSTEM_PROMPT + message)
         return await self._chat("general", message, limit, allow_partial=True, history=fitted)
 
