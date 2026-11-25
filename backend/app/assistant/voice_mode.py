@@ -86,12 +86,32 @@ def split_spoken(text, limit=REST_LIMIT):
     return head, ""
 
 
+STEPS_PER_PART = 3
+_STEP = re.compile(r"Paso \d+: ")
+
+
+def _steps(spoken):
+    """(encabezado, pasos) de un texto hablado con "Paso N: …"; ([], ) si no tiene pasos."""
+    starts = [match.start() for match in _STEP.finditer(spoken or "")]
+    if not starts:
+        return spoken, []
+    head = spoken[:starts[0]].strip()
+    steps = [spoken[start:end].strip() for start, end in zip(starts, starts[1:] + [len(spoken)])]
+    return head, steps
+
+
 def voice_speech(answer):
     """(speech, resto) de una respuesta en canal voice. speech nunca es None cuando hay texto: con None la app
-    recorta la respuesta a 450 caracteres y dice "El resto está en el chat."."""
+    recorta la respuesta a 450 caracteres y dice "El resto está en el chat.". Un procedimiento largo se lee de
+    STEPS_PER_PART en STEPS_PER_PART pasos con "¿Sigo?": todos, en orden, sin saltarse ninguno."""
     summary = spoken_summary(answer)
-    if summary is not None and not summary.endswith(REST):
-        return summary, ""  # procedimientos, listas y secciones: como siempre
+    listed = summary is not None and not summary.endswith(REST)
+    head, steps = _steps(summary if listed else _flat(answer))
+    if len(steps) > STEPS_PER_PART:
+        now = " ".join(part for part in [head, *steps[:STEPS_PER_PART]] if part)
+        return f"{now} {REST_OFFER}", " ".join(steps[STEPS_PER_PART:])
+    if listed:
+        return summary, ""  # procedimientos cortos, listas y secciones: como siempre
     head, rest = split_spoken(answer)
     if rest:
         return f"{head} {REST_OFFER}", rest

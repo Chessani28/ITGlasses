@@ -270,9 +270,10 @@ Código: `backend/app/assistant/voice_mode.py`; el canal lo decide `history/chat
 - **"¿Sigo?" en vez de "El resto está en el chat".** Una respuesta en voz que pasa de 1200 caracteres se lee hasta la
   última frase completa y termina con **"¿Sigo?"**; "sigue" / "sí" lee el resto ya generado tal cual, sin pasar por el
   modelo (nunca reescribe un manual). El resto largo también se lee por partes.
-- **Sin cambios:** procedimientos de los manuales (se leen completos, paso por paso), mensajes sociales y mensajes
-  fijos de error. Nunca se combinan dos ofertas: "¿Quieres más detalle?" no se añade a "¿Quieres que te lo explique de
-  forma general?".
+- **Procedimientos por partes:** uno de más de 3 pasos se lee de 3 en 3 con "¿Sigo?" ("sigue"/"sí" lee los
+  siguientes); todos los pasos, en orden, sin saltarse ninguno. La web y el texto del chat los muestran completos.
+- **Sin cambios:** mensajes sociales y mensajes fijos de error. Nunca se combinan dos ofertas: "¿Quieres más
+  detalle?" no se añade a "¿Quieres que te lo explique de forma general?" ni a una respuesta que pide aclarar.
 - En voz la respuesta trae siempre `speech` (o `null` si la app debe leer la respuesta tal cual); la app Android no
   necesita cambios. El historial guarda la respuesta con su oferta; el contexto del modelo, sin ella.
 

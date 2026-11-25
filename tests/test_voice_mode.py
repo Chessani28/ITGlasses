@@ -65,9 +65,30 @@ def test_split_spoken_cleans_markdown_and_links():
     assert head == "Hola sitio." and rest == ""
 
 
-def test_voice_speech_keeps_procedures_as_today():
+def test_a_short_procedure_is_read_whole():
     answer = "«Reinicio» (3 pasos):\n1. Apagar el servidor.\n2. Esperar 30 segundos.\n3. Encender el servidor."
     assert voice_speech(answer) == (spoken_summary(answer), "")
+
+
+TEN = "«Despliegue» (10 pasos):\n" + "\n".join(f"{n}. Haz la acción número {n}." for n in range(1, 11))
+
+
+def test_a_long_procedure_is_read_three_steps_at_a_time_without_skipping_any():
+    speech, rest = voice_speech(TEN)
+    assert speech.startswith("«Despliegue» tiene 10 pasos.")
+    assert "Paso 1:" in speech and "Paso 3:" in speech and "Paso 4:" not in speech
+    assert speech.endswith(REST_OFFER)
+    assert rest.startswith("Paso 4:")
+    heard, parts = [speech], 1
+    while rest:
+        speech, rest = voice_speech(rest)
+        heard.append(speech)
+        parts += 1
+    assert parts == 4  # 3 + 3 + 3 + 1
+    assert not heard[-1].endswith(REST_OFFER)
+    spoken = " ".join(heard)
+    assert all(f"Paso {n}: Haz la acción número {n}." in spoken for n in range(1, 11))
+    assert "Paso 10:" in heard[-1]
 
 
 def test_voice_speech_never_says_rest_is_in_the_chat():

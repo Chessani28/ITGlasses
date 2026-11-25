@@ -123,12 +123,34 @@ def test_long_voice_answer_offers_to_continue_and_reads_the_stored_rest():
     assert all(len(part) <= 1200 + len(REST_OFFER) + 1 for part in heard)
 
 
-def test_voice_procedure_is_read_as_today():
+def test_a_long_voice_procedure_is_read_by_parts_and_continues_with_sigue():
     service = build()
-    result = voice(service, "¿Cuáles son los pasos de WINDOWS DEPLOYMENT PROCEDURE?")
+    result = voice(service, "¿Cuáles son los pasos de COMPUTER PREPARATION?")  # 8 steps
     assert result["route"] == "knowledge"
-    assert result["speech"] == spoken_summary(result["answer"])
     assert VOICE_OFFER not in result["answer"]
+    assert "Paso 1:" in result["speech"] and "Paso 4:" not in result["speech"]
+    assert result["speech"].endswith(REST_OFFER)
+    whole = spoken_summary(result["answer"])  # what was read before, all at once
+    heard = [result["speech"].removesuffix(REST_OFFER).strip()]
+    for _ in range(5):
+        more = voice(service, "sigue", result["session_id"])
+        assert more["route"] == "knowledge"
+        heard.append((more["speech"] or more["answer"]).removesuffix(REST_OFFER).strip())
+        if not (more["speech"] or "").endswith(REST_OFFER):
+            break
+    assert " ".join(heard).split() == whole.split()  # every step, in order, nothing skipped
+
+
+def test_the_web_still_gets_the_whole_procedure():
+    service = build()
+    result = asyncio.run(service.chat("¿Cuáles son los pasos de COMPUTER PREPARATION?"))
+    assert "speech" not in result and REST_OFFER not in result["answer"]
+
+
+def test_a_short_voice_procedure_is_read_whole():
+    service = build()
+    result = voice(service, "¿Cuáles son los pasos de WINDOWS DEPLOYMENT PROCEDURE?")  # 3 steps
+    assert result["speech"] == spoken_summary(result["answer"])
 
 
 def test_failure_messages_get_no_offer():
