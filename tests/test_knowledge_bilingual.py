@@ -334,6 +334,14 @@ def test_manual_terms_are_the_names_and_acronyms_of_the_manuals(tmp_path):
     assert not {"for", "the", "then", "install", "first", "must"} & terms
 
 
+def test_the_name_of_a_folder_is_information_not_a_procedure_name():
+    from backend.app.knowledge.retrieval import intent
+    assert intent("Para SUMMIT, ¿cómo se llama la carpeta que creo en el escritorio?") == "information"
+    assert intent("¿Cómo se llama el proceso? Dame su nombre.") == "identify"
+    assert intent("¿Cómo se llama el procedimiento para formatear?") == "identify"
+    assert intent("No recuerdo cómo se llama") == "identify"
+
+
 def test_confirm_that_it_is_running_is_not_an_identification_question():
     from backend.app.knowledge.retrieval import intent
     assert intent("¿Qué servicio debo confirmar que esté corriendo después de instalar Windows?") != "identify"

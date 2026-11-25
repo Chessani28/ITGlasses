@@ -26,7 +26,9 @@ def intent(text):
         return "steps"
     # "qué es lo primero / lo que…" asks for information, not for a name.
     # "que es" as whole words: "confirmar que esté corriendo" (folded "que este") is not a definition question.
-    if re.search(r"como se llama|nombre|que (?:es\b(?! lo\b)|significa)|definicion|no recuerdo", text):
+    # "cómo se llama la carpeta / el botón" asks for a fact of the manual; only the process itself is a name question.
+    if re.search(r"como se llama(?!\s+(?:la|las|los|el)\s+(?!proceso|procedimiento))|nombre"
+                 r"|que (?:es\b(?! lo\b)|significa)|definicion|no recuerdo", text):
         return "identify"
     ids = exact_ids(text)
     if ids and {procedure_id(t) for t in tokens(text) if t != "numero"} <= set(ids):
