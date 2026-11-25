@@ -207,6 +207,12 @@ GENERAL_OFFER = "No encontré esto en los manuales autorizados. ¿Quieres que te
 MISSING_OFFER = ("¿Quieres que te lo explique de forma general? Si existe ese manual, un administrador puede subirlo "
                  "en Documentos.")
 # A general answer that still refuses because documentation is missing.
+# An answer that asks the user to clarify (often a misheard question): "more detail" would make no sense after it.
+_CLARIFYING = re.compile(
+    r"\bno (?:entiendo|entendi|comprendo|reconozco|se que es)\b|\breformula|\baclara(?:lo|la|r)?\b|\baclaralo\b"
+    r"|^\W*¿?\s*te refieres\b|\bpuedes (?:repetir|aclarar|reformular)"
+)
+
 _DOCUMENTATION_REFUSAL = re.compile(
     r"\bno (?:tengo|dispongo de|cuento con) acceso a (?:la |una |ninguna |los |las )?(?:documentacion|manual|document)"
     r"|\bno puedo (?:explicar|responder|ayudar|dar)[^.]{0,120}\b(?:documentacion|manual(?:es)?|documentos?)\b"
@@ -1744,7 +1750,7 @@ class UnifiedAssistantService:
         answer = result.get("answer") or ""
         short = short and result.get("route") == "general" and answer != GENERAL_OFFER \
             and answer not in GENERAL_FAILURES and not state.get("pending_general") \
-            and not _DOCUMENTATION_REFUSAL.search(_fold(answer))
+            and not _DOCUMENTATION_REFUSAL.search(_fold(answer)) and not _CLARIFYING.search(_fold(answer))
         if short:
             # The detail is answered the same way: with the "manuals do not cover it" instruction when it had it.
             heard = answer.removeprefix(GENERAL_NOTICE).strip()[:600]

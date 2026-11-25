@@ -179,10 +179,11 @@ normalized embedding cosine similarity. Exact procedure-ID ambiguity is resolved
 before any embedding or LLM call. Retrieval filters eligible current revisions.
 
 `qwen3-embedding:0.6b` runs with `num_gpu=0`, four CPU threads, batches of four,
-2048 context tokens, and truncation disabled. It stays loaded in RAM between
-questions (its own 15-minute `keep_alive`; only an upload unloads it), and
-`start-ollama.ps1` keeps two models loaded (`OLLAMA_MAX_LOADED_MODELS=2`) so the
-chat model is never evicted from the GPU by a search. Index entries retain the
+2048 context tokens, and truncation disabled. It is unloaded after every search:
+kept in RAM (~0.9 GB) it left Whisper Small below its 3 GiB minimum and the phone
+fell back to Vosk. `start-ollama.ps1` keeps two models loaded
+(`OLLAMA_MAX_LOADED_MODELS=2`) so loading it for a search never evicts the chat
+model from the GPU. Index entries retain the
 model digest; a changed digest requires reindexing. Ollama must be started with
 `start-ollama.ps1` (models in `storage\models`): an Ollama started elsewhere
 (e.g. the Ollama desktop app at Windows startup) may lack the embedding model,

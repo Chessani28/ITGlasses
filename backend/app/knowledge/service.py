@@ -318,11 +318,14 @@ class KnowledgeService:
                 english = await translate(request.message)
                 if english:
                     alternates.append(english)
-            # The embedding model stays loaded (CPU, its own keep_alive): unloading it after every search made
-            # Ollama reload a model on every question.
-            ranked = await self.retriever.search(request.message,
-                                                 [d["id"] for d in candidates] if candidates is not None else None,
-                                                 alternates=alternates)
+            # The embedding model is unloaded after every search: kept in RAM (~0.9 GB) it left Whisper Small below
+            # its 3 GiB minimum. With OLLAMA_MAX_LOADED_MODELS=2 this no longer evicts the chat model from the GPU.
+            try:
+                ranked = await self.retriever.search(request.message,
+                                                     [d["id"] for d in candidates] if candidates is not None else None,
+                                                     alternates=alternates)
+            finally:
+                await self.embeddings.unload()
             retrieval_ms = round((time.perf_counter() - search_start) * 1000, 2)
             if not ranked:
                 return missing()

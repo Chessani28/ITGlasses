@@ -204,6 +204,17 @@ def test_continua_asks_for_detail():
     assert provider.calls[-1]["num_predict"] is None and "¿Qué es el DNS?" in provider.calls[-1]["prompt"]
 
 
+def test_a_clarifying_question_gets_no_detail_offer():
+    for short in ('No entiendo qué es el "fin sin". No es un término reconocido. Por favor, aclaralo.',
+                  "No entiendo la pregunta. ¿Puedes reformularla?",
+                  "¿Te refieres al phishing?"):
+        service, _ = general_service(RecordingGeneralProvider(short=short))
+        result = voice(service, "¿qué es el fin sin?")
+        assert VOICE_OFFER not in result["answer"], short
+        _, state = service.sessions.get(result["session_id"])
+        assert not state.get("pending_detail")
+
+
 def test_stub_provider_without_generate_general_still_works_in_voice():
     service = build(provider=StubProvider("El DNS traduce nombres."), knowledge=StubKnowledge(**NO_EVIDENCE))
     result = voice(service, "¿Qué es el DNS?")

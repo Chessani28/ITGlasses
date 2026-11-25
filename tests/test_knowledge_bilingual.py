@@ -153,12 +153,28 @@ def test_up_to_four_pieces_reach_the_selector(tmp_path):
     assert selector.selected[0][1] == min(4, chunks) and chunks > 2
 
 
-def test_the_embedding_model_is_not_unloaded_after_each_search(tmp_path):
+def test_the_embedding_model_is_unloaded_after_each_search(tmp_path):
+    # Kept loaded, its ~0.9 GB of RAM left Whisper Small below its 3 GiB minimum and the phone fell back to Vosk.
+    # With OLLAMA_MAX_LOADED_MODELS=2 unloading it no longer evicts the chat model from the GPU.
     svc, embeddings = build(tmp_path, TranslatingSelector())
-    embeddings.unloads = 0  # uploading a manual still frees the model afterwards; questions do not
+    embeddings.unloads = 0
     ask(svc)
     ask(svc)
-    assert embeddings.unloads == 0
+    assert embeddings.unloads == 2
+
+
+def test_the_embedding_model_is_unloaded_even_when_the_search_fails(tmp_path):
+    svc, embeddings = build(tmp_path, TranslatingSelector())
+    embeddings.unloads = 0
+
+    async def broken(*args, **kwargs):
+        raise RuntimeError("search failed")
+    svc.retriever.search = broken
+    try:
+        ask(svc)
+    except RuntimeError:
+        pass
+    assert embeddings.unloads == 1
 
 
 def test_exact_identifiers_skip_the_translation(tmp_path):
