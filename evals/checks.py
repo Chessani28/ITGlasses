@@ -60,7 +60,7 @@ def check_turn(expect, result, document_texts):
     if expect.get("has_sources") and not sources:
         failures.append("has_sources: sin fuentes")
     if "source_document" in expect and not any(
-            source.get("document") == expect["source_document"] for source in sources):
+            expect["source_document"] in (source.get("document"), source.get("title")) for source in sources):
         failures.append(f"source_document: no cita {expect['source_document']}")
     if expect.get("steps_verbatim"):
         corpus = " ".join(_flat(text) for text in document_texts.values())

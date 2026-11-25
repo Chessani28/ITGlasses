@@ -100,6 +100,12 @@ def test_sources_and_verbatim_steps():
     assert check_turn({"steps_verbatim": True}, invented, documents)
 
 
+def test_source_document_accepts_the_assistant_title_key():
+    # The assistant's manual sources carry "title" (the HTTP schema renames it to "document").
+    result = {"answer": "x", "speech": None, "sources": [{"title": "VPN", "document_id": "d1", "page": 1}]}
+    assert check_turn({"has_sources": True, "source_document": "VPN"}, result, {}) == []
+
+
 def test_web_used():
     web = {"answer": "x", "speech": None, "sources": [{"title": "t", "url": "https://example.com"}]}
     assert check_turn({"web_used": True}, web, {}) == []

@@ -115,7 +115,10 @@ async def run_case(assistant, case, document_texts):
         session_id = result.get("session_id") or session_id
         failures = [error] if error else (check_turn(turn.expect, result, document_texts) if turn.expect else [])
         turns.append({"message": turn.message, "answer": result.get("answer"), "speech": speech,
-                      "route": result.get("route"), "latency_ms": latency, "failures": failures})
+                      "route": result.get("route"), "latency_ms": latency, "failures": failures,
+                      "sources": [{key: source.get(key) for key in ("title", "document", "url", "page")
+                                   if source.get(key) is not None}
+                                  for source in result.get("sources") or [] if isinstance(source, dict)]})
         if error:
             break
     return {"id": case.id, "category": case.category, "channel": case.channel,
