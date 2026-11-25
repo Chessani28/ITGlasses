@@ -66,3 +66,7 @@ work/whisper-eval/model/
 .idea/
 *.bak
 debug_*.py
+
+# Examen del cerebro: reportes y casos con contenido interno de los manuales
+evals/results/
+evals/cases/local/
