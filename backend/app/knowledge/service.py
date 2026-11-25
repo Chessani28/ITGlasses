@@ -416,12 +416,6 @@ class KnowledgeService:
                         return respond("answered", answer, [selected_document], sources, stats, excerpts)
                     answer = f"Según «{title}»:\n\n" + (clean_excerpt(evidence) or reserve_answer(evidence, "empty"))
                     return respond("answered", answer, [selected_document], sources, stats)
-                # Try grounded generation with Ollama first
-                try:
-                    if hasattr(self.selector, "generate_grounded_answer"):
-                        answer = await self.selector.generate_grounded_answer(request.message, evidence)
-                    else:
-                        answer = reserve_answer(evidence, "no_generator")
-                except Exception as exc:  # noqa: BLE001 - the reserve answer is the selected evidence itself
-                    answer = reserve_answer(evidence, type(exc).__name__)
+                # The selected evidence itself: the model never writes what a manual says.
+                answer = reserve_answer(evidence, "steps")
             return respond("answered", answer, [selected_document], sources, stats)
