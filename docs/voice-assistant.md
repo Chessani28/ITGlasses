@@ -256,6 +256,28 @@ with an explicit general-knowledge disclaimer. Citation UUIDs are omitted from
 speech while the original answer and references remain visible. Answers exceeding
 the speech limit are not silently truncated; the full text remains in the chat.
 
+## Modo voz (celular y lentes)
+
+Las preguntas que llegan de un dispositivo emparejado (`request.state.device_id`: el celular o los lentes, tenga o no
+dueño y se guarde o no su historial) usan el canal `voice`; la web y el token de API siguen en `text`, sin cambios.
+Código: `backend/app/assistant/voice_mode.py`; el canal lo decide `history/chat.py`.
+
+- **Respuesta general corta.** El prompt pide una o dos frases para el oído (máximo ~40 palabras, sin listas ni
+  símbolos) con un límite de 160 tokens. Si el modelo se corta, se lee hasta la última frase completa (nunca la nota
+  "Respuesta recortada"). El backend añade al final **"¿Quieres más detalle?"**.
+- **Detalle a demanda.** "sí", "explícame más", "más detalle"… generan la respuesta de siempre (prompt y 768 tokens
+  de la web) para la pregunta original. "no" / "no, gracias" → "De acuerdo.". Cualquier otro mensaje descarta la oferta.
+- **"¿Sigo?" en vez de "El resto está en el chat".** Una respuesta en voz que pasa de 1200 caracteres se lee hasta la
+  última frase completa y termina con **"¿Sigo?"**; "sigue" / "sí" lee el resto ya generado tal cual, sin pasar por el
+  modelo (nunca reescribe un manual). El resto largo también se lee por partes.
+- **Sin cambios:** procedimientos de los manuales (se leen completos, paso por paso), mensajes sociales y mensajes
+  fijos de error. Nunca se combinan dos ofertas: "¿Quieres más detalle?" no se añade a "¿Quieres que te lo explique de
+  forma general?".
+- En voz la respuesta trae siempre `speech` (o `null` si la app debe leer la respuesta tal cual); la app Android no
+  necesita cambios. El historial guarda la respuesta con su oferta; el contexto del modelo, sin ella.
+
+El examen del cerebro (`evals/README.md`) mide esto con la categoría `voz`.
+
 ## Verification and resources
 
 Initial measured baseline: 6415.55 MiB free RAM; GPU 1655 MiB used and 4299 MiB free.
