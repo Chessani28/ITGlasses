@@ -153,18 +153,43 @@ def test_up_to_four_pieces_reach_the_selector(tmp_path):
     assert selector.selected[0][1] == min(4, chunks) and chunks > 2
 
 
-def test_the_embedding_model_is_unloaded_after_each_search(tmp_path):
+GIB = 1024 ** 3
+
+
+def test_with_little_ram_the_embedding_model_is_unloaded_after_each_search(tmp_path):
     # Kept loaded, its ~0.9 GB of RAM left Whisper Small below its 3 GiB minimum and the phone fell back to Vosk.
-    # With OLLAMA_MAX_LOADED_MODELS=2 unloading it no longer evicts the chat model from the GPU.
     svc, embeddings = build(tmp_path, TranslatingSelector())
+    svc.available_memory = lambda: 3 * GIB
     embeddings.unloads = 0
     ask(svc)
     ask(svc)
     assert embeddings.unloads == 2
 
 
+def test_with_ram_to_spare_the_embedding_model_stays_loaded(tmp_path):
+    # Reloading it on every manual question cost ~2-3 s; with enough RAM for Whisper it stays.
+    svc, embeddings = build(tmp_path, TranslatingSelector())
+    svc.available_memory = lambda: 8 * GIB
+    embeddings.unloads = 0
+    ask(svc)
+    ask(svc)
+    assert embeddings.unloads == 0
+
+
+def test_when_ram_cannot_be_measured_the_model_is_unloaded(tmp_path):
+    svc, embeddings = build(tmp_path, TranslatingSelector())
+
+    def broken():
+        raise OSError("no counter")
+    svc.available_memory = broken
+    embeddings.unloads = 0
+    ask(svc)
+    assert embeddings.unloads == 1
+
+
 def test_the_embedding_model_is_unloaded_even_when_the_search_fails(tmp_path):
     svc, embeddings = build(tmp_path, TranslatingSelector())
+    svc.available_memory = lambda: 3 * GIB
     embeddings.unloads = 0
 
     async def broken(*args, **kwargs):

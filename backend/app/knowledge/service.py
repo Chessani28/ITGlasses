@@ -35,6 +35,15 @@ def reserve_answer(evidence, reason):
 
 
 # What a company question asked about, for the refusal without evidence: (this, a) in Spanish.
+def embeddings_keep_min_bytes():
+    """Available RAM needed to keep the embedding model loaded after a search: Whisper's 3 GiB plus a margin.
+    ITGLASSES_EMBEDDINGS_KEEP_MIN_MB overrides the default 4608 MB."""
+    import os
+    raw = os.environ.get("ITGLASSES_EMBEDDINGS_KEEP_MIN_MB", "").strip()
+    megabytes = int(raw) if raw.isdigit() else 4608
+    return megabytes * 1024 * 1024
+
+
 # Best chunks of the chosen document given to the evidence selector (2 was too few: a wrong order meant "no evidence").
 EVIDENCE_PIECES = 4
 
@@ -182,6 +191,18 @@ class KnowledgeService:
             "url": "/api/v1/knowledge/sources/" + row["id"]}
 
     # A word, or the end of a sentence ("." of "2.20" is not one).
+    def _ram_is_short(self):
+        """True when keeping the embedding model loaded could leave Whisper without room (or RAM cannot be read)."""
+        try:
+            return self.available_memory() < embeddings_keep_min_bytes()
+        except Exception:  # noqa: BLE001 - unknown means "free it", as before
+            return True
+
+    @staticmethod
+    def available_memory():
+        from backend.app.voice.persistent_worker import available_system_memory
+        return available_system_memory()
+
     _TERM = re.compile(r"[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9_]*|[.!?:;](?=\s|$)|[>\n]")
 
     def manual_terms(self):
@@ -320,14 +341,16 @@ class KnowledgeService:
                 english = await translate(request.message)
                 if english:
                     alternates.append(english)
-            # The embedding model is unloaded after every search: kept in RAM (~0.9 GB) it left Whisper Small below
-            # its 3 GiB minimum. With OLLAMA_MAX_LOADED_MODELS=2 this no longer evicts the chat model from the GPU.
+            # The embedding model (~0.9 GB of RAM) stays loaded while RAM is plentiful (reloading it cost 2-3 s per
+            # manual question) and is unloaded when Whisper Small (3 GiB minimum) would not fit next to it. The voice
+            # service also unloads it before giving up on Whisper.
             try:
                 ranked = await self.retriever.search(request.message,
                                                      [d["id"] for d in candidates] if candidates is not None else None,
                                                      alternates=alternates)
             finally:
-                await self.embeddings.unload()
+                if self._ram_is_short():
+                    await self.embeddings.unload()
             retrieval_ms = round((time.perf_counter() - search_start) * 1000, 2)
             if not ranked:
                 return missing()

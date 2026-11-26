@@ -46,6 +46,31 @@ VOICE_NAME = "es_ES-sharvard-medium"
 STT_ENGINES = {"vosk", "whisper-small"}
 WHISPER_MIN_LOAD_RAM = 3 * 1024**3
 WHISPER_ABORT_RAM = int(1.5 * 1024**3)
+
+
+async def _free_ollama_embeddings():
+    """Ask Ollama to unload the embedding model (kept loaded when RAM was plentiful). True if the request went out."""
+    try:
+        from backend.app.core.config import settings
+        from backend.app.knowledge.embeddings import OllamaEmbeddings
+        await OllamaEmbeddings(settings.ollama_url).unload()
+        logger.info("Embedding model unloaded to make room for Whisper")
+        return True
+    except Exception:  # noqa: BLE001 - freeing is best effort; the RAM check decides
+        return False
+
+
+async def ram_for_whisper_load(measure=None, free=None):
+    """Available RAM for loading Whisper. Whisper comes before speed: when it does not fit, the embedding model is
+    unloaded first and the RAM measured again."""
+    measure = measure or _available_system_memory
+    available = measure()
+    if available >= WHISPER_MIN_LOAD_RAM:
+        return available
+    if await (free or _free_ollama_embeddings)():
+        await asyncio.sleep(0.5)  # Ollama releases the memory asynchronously
+        available = measure()
+    return available
 # Keep the persistent Whisper loaded between voice questions only with plenty of free RAM (chat and speech
 # synthesis otherwise unload it so Ollama and Piper get the memory). Conservative default; never below the load
 # limit. ITGLASSES_WHISPER_KEEP_RAM_GIB overrides it.
@@ -925,7 +950,7 @@ class VoiceService:
                     "Whisper was stopped because available system memory fell below 1.5 GiB.",
                     503,
                 )
-        elif available_ram < WHISPER_MIN_LOAD_RAM:
+        elif available_ram < WHISPER_MIN_LOAD_RAM and await ram_for_whisper_load() < WHISPER_MIN_LOAD_RAM:
             raise KnowledgeError(
                 "voice_resource_limit",
                 "Whisper Small requires at least 3 GiB of available system memory.",
