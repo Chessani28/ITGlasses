@@ -171,9 +171,29 @@ def _product_name(text: str) -> tuple[str, list[Correction]]:
     return fixed, [Correction(heard.strip(), PRODUCT, 1.0, True)]
 
 
+# A fast "Qué es…" at the very start, heard as an acronym in real recordings ("AS Active Directory", "CES, una
+# dirección IP"). Only at the start, only these non-words ("As" in title case is the Spanish "ace": left alone).
+_QUE_ES = re.compile(r"^(?P<lead>[\s¿]*)(?:AS|[Kk][Ss]|[Kk][Ee][Ss]|[Cc][Ee][Ss])\b[,.]?\s+(?P<rest>\w.*)$", re.S)
+_ARTICLES = {"un", "una", "el", "la", "los", "las"}
+
+
+def _que_es(text: str) -> tuple[str, list[Correction]]:
+    match = _QUE_ES.match(text or "")
+    if not match:
+        return text, []
+    rest = match.group("rest")
+    first, _, tail = rest.partition(" ")
+    if first.casefold() in _ARTICLES:
+        rest = first.casefold() + (" " + tail if tail else "")
+    heard = text[:match.start("rest")].strip()
+    return "¿Qué es " + rest, [Correction(heard, "¿Qué es", 1.0, True)]
+
+
 def correct(text: str, vocabulary: Vocabulary) -> tuple[str, list[Correction]]:
     """Corrected text and the corrections made (empty list: text unchanged)."""
     text, named = _product_name(text)
+    text, asked = _que_es(text)
+    named = named + asked
     candidates = vocabulary.candidates
     if not text or not candidates:
         return text, named

@@ -540,3 +540,8 @@ Con el vocabulario de pistas (como en producción) y las 20 grabaciones reales:
   del que cabe en el audio → se transcribe otra vez sin pistas.
 - "ITGlasses" en las pistas y corregido tras un saludo ("Oye, ¿y qué clases?" → "Oye, ITGlasses"), también para Vosk.
 - Quedan: el arranque de algunas frases ("Qué es" → "AS"/"KS", "Cómo puedo" → "No puedo").
+- Inicio de frase: las grabaciones no están cortadas (0.7–1.2 s de silencio antes de la voz); Whisper oye un "Qué es"
+  rápido como sigla ("AS Active Directory", "CES, una dirección IP"). Corrección al inicio de la frase: "AS/KS/KES/CES"
+  → "¿Qué es". Probado y descartado: `initial_prompt` (igual) y prompt con preguntas de ejemplo (+1 frase, no vale el
+  riesgo). Turbo en producción: **9.3%** de error (16.4% sin pistas ni correcciones). Queda "Cómo puedo" → "No puedo",
+  ambiguo (también es una queja válida).

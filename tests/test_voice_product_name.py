@@ -36,6 +36,23 @@ def test_the_name_is_a_whisper_hint():
     assert "ITGlasses" in FIXED_TERMS
 
 
+@pytest.mark.parametrize("heard,expected", [
+    ("AS Active Directory", "¿Qué es Active Directory"),
+    ("KS Active Directory", "¿Qué es Active Directory"),
+    ("CES, Una Dirección IP", "¿Qué es una Dirección IP"),
+    ("Kes una VPN?", "¿Qué es una VPN?"),
+])
+def test_a_misheard_que_es_at_the_start_is_fixed(heard, expected):
+    assert fix(heard) == expected
+
+
+@pytest.mark.parametrize("text", [
+    "As de bastos", "Es una VPN corporativa", "Ase falta reiniciar", "ASUS no enciende", "No puedo hacer un ping",
+])
+def test_other_starts_are_untouched(text):
+    assert fix(text) == text
+
+
 def test_the_fix_is_reported_as_a_correction():
     text, made = correct("Oye, ¿y qué clases? ¿Puedes ayudarme?", build([], []))
     assert text.startswith("Oye, ITGlasses") and made and made[0].replacement == "ITGlasses"
