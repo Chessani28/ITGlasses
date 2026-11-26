@@ -219,6 +219,20 @@ def read_audit(request: Request, response: Response, limit: int = Query(100, ge=
             "next_before_id": entries[-1]["id"] if len(entries) == limit else None}
 
 
+@audit_router.get("/metrics")
+def read_metrics(request: Request, response: Response):
+    """Monitoring for admins: per-stage times and codes of the last hour (no conversation content) and free RAM."""
+    _admin(request)
+    from backend.app.core import metrics
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        from backend.app.voice.persistent_worker import available_system_memory
+        ram_mb = round(available_system_memory() / 1024 / 1024)
+    except Exception:  # noqa: BLE001 - not measurable here
+        ram_mb = None
+    return {**metrics.summary(), "ram_available_mb": ram_mb}
+
+
 @me_router.get("/devices")
 def my_devices(request: Request, response: Response):
     session = current_session(request)

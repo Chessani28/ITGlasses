@@ -1,4 +1,4 @@
-import {api, chatPayload, connectionBadge, documentState, elapsed, jsonOptions, limits, sourcePath,
+import {api, chatPayload, connectionBadge, documentState, elapsed, jsonOptions, limits, metricsLines, sourcePath,
   validateFile} from "./core.mjs";
 
 import {initVoice} from "./voice-ui.mjs";
@@ -252,6 +252,17 @@ async function refreshStatus() {
     $("document-count").textContent = "—";
   }
   $("status-updated").textContent = `Última comprobación: ${new Date().toLocaleTimeString("es-MX")}. Actualización manual.`;
+  refreshMetrics();
+}
+async function refreshMetrics() {
+  // Admins only: for anyone else the endpoint answers 401/403 and the card stays hidden.
+  try {
+    const {data} = await api("/api/v1/admin/metrics", {}, 10000);
+    $("metrics-list").replaceChildren(...metricsLines(data).map(line => node("li", "", line)));
+    $("metrics-panel").hidden = false;
+  } catch {
+    $("metrics-panel").hidden = true;
+  }
   $("refresh-status").disabled = false;
 }
 async function refreshDocuments() {

@@ -1,3 +1,5 @@
+import time
+
 from fastapi import APIRouter, Depends, Request
 
 from backend.app.api.auth import require_auth
@@ -49,9 +51,16 @@ async def assistant_chat(payload: AssistantRequest, request: Request):
     assistant = _assistant(request, knowledge)
     # Stage "historial" 2: the conversation is saved (web with a login, devices with an owner) and survives restarts;
     # a device's open app and glasses mode share one conversation. Anything else runs in memory, as before.
+    from backend.app.core import metrics
     from backend.app.history.chat import chat as history_chat
-    result = await history_chat(request, assistant, request.app.state.conversation_locks, payload.message,
-                                payload.session_id)
+    started = time.perf_counter()
+    try:
+        result = await history_chat(request, assistant, request.app.state.conversation_locks, payload.message,
+                                    payload.session_id)
+    except Exception as error:
+        metrics.record("chat", (time.perf_counter() - started) * 1000, outcome=type(error).__name__)
+        raise
+    metrics.record("chat", (time.perf_counter() - started) * 1000, detail=result.get("route"))
     from backend.app.assistant.speech import spoken_summary
     # In voice mode the assistant says what is read aloud (always the "speech" key, possibly None); otherwise the
     # usual summary of the answer.

@@ -471,3 +471,13 @@ modelo de 4B (elige la página vecina) y del filtro de relevancia ("etiquetas" 0
 
 Examen final: **92/102** (internet 15/15, manuales 23/30, voz 12/12, conceptos 24/25). Costo: la mediana de manuales
 subió a ~4.9 s porque el modelo de embeddings se descarga tras cada búsqueda para dejar RAM a Whisper.
+
+## Velocidad, seguimientos y monitoreo — rama feature/velocidad-y-monitoreo, 2026-11-25
+
+- Manuales más rápidos: los embeddings se quedan cargados con ≥3.5 GB libres; si Whisper no cabe, la voz los libera
+  primero. Mediana de manuales 4.9 s → 2.8 s con la misma precisión.
+- Seguimientos: procedimientos sin título conservan sus pasos; listas bajo encabezados distintos ya no se pisan
+  (manual de VPN); se elige la lista que coincide claramente. Conversaciones 13/15 → 15/15.
+- Monitoreo para administradores (Estado del sistema → "Monitoreo (última hora)"): tiempos por etapa, motor de voz
+  (Whisper/Vosk) y por qué falló Whisper, último error y RAM libre. Solo códigos y tiempos, en memoria
+  (`GET /api/v1/admin/metrics`).

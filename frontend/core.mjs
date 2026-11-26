@@ -37,6 +37,39 @@ export function connectionBadge(online, knowledge) {
   }
   return {text: "● Backend conectado", style: "good", title: ""};
 }
+const STAGE_NAMES = {stt: "Voz a texto", chat: "Asistente", tts: "Texto a voz"};
+const FAILURE_NAMES = {voice_resource_limit: "falta de RAM", voice_vram_limit: "falta de VRAM",
+  voice_gpu_unavailable: "GPU no disponible", voice_timeout: "tiempo agotado"};
+const seconds = ms => `${(ms / 1000).toFixed(1)} s`;
+
+/** The admin monitoring card as plain Spanish lines (last hour; codes and times only, never content). */
+export function metricsLines(summary) {
+  const lines = [];
+  for (const [stage, name] of Object.entries(STAGE_NAMES)) {
+    const s = summary.stages?.[stage] || {};
+    if (!s.count) { lines.push(`${name}: sin uso en la última hora`); continue; }
+    let line = `${name}: ${s.count}`;
+    if (s.median_ms != null) line += ` · mediana ${seconds(s.median_ms)} · p90 ${seconds(s.p90_ms)}`;
+    if (s.errors) line += ` · ${s.errors} ${s.errors === 1 ? "error" : "errores"}`;
+    lines.push(line);
+  }
+  const whisper = summary.stt_engines?.["whisper-small"] || 0, vosk = summary.stt_engines?.vosk || 0;
+  if (whisper + vosk) {
+    lines.push(`Motor de voz: Whisper ${whisper} · Vosk ${vosk}` +
+      (vosk ? ` (${Math.round(100 * vosk / (whisper + vosk))}%)` : ""));
+  }
+  const failures = Object.entries(summary.whisper_failures || {});
+  if (failures.length) {
+    lines.push("Whisper no disponible: " + failures.map(([code, n]) => `${n} × ${FAILURE_NAMES[code] || code}`).join(", "));
+  }
+  if (summary.ram_available_mb != null) lines.push(`RAM libre: ${(summary.ram_available_mb / 1024).toFixed(1)} GB`);
+  const last = (summary.recent_errors || []).at(-1);
+  if (last) {
+    const ago = last.seconds_ago < 60 ? `${last.seconds_ago} s` : `${Math.floor(last.seconds_ago / 60)} min`;
+    lines.push(`Último error: ${STAGE_NAMES[last.stage].toLowerCase()} · ${last.outcome} · hace ${ago}`);
+  }
+  return lines;
+}
 export function sourcePath(id) {
   if (typeof id !== "string" || !/^[a-f0-9-]{36}$/i.test(id)) throw new Error("Identificador de fuente inválido.");
   return `/api/v1/knowledge/sources/${encodeURIComponent(id)}`;

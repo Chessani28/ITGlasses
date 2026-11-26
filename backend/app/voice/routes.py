@@ -127,12 +127,16 @@ async def transcribe(request: Request):
         if len(raw) > MAX_AUDIO:
             raise KnowledgeError("audio_size", "Audio exceeds the 30-second limit.", 413)
     validate_audio(raw)
+    from backend.app.core import metrics
+    started = time.perf_counter()
     try:
         result = await svc.run("stt", bytes(raw), request, engine=engine)
     except KnowledgeError as error:
+        metrics.record("stt", (time.perf_counter() - started) * 1000, outcome=error.code, detail=engine)
         if engine == "whisper-small" and error.status == 503:
             _remember_whisper_failure(request, error.code)
         raise
+    metrics.record("stt", (time.perf_counter() - started) * 1000, detail=result.get("engine") or engine)
     if engine == "vosk":
         code = _vosk_notice(request)
         if code:
@@ -158,7 +162,14 @@ async def synthesize(payload: SpeechRequest, request: Request):
     speech_text = normalize_for_speech(strip_general_notice(payload.text))
     tts_payload = payload.model_dump(exclude={"citation_ids"})
     tts_payload["text"] = speech_text
-    result = await svc.run("tts", tts_payload, request)
+    from backend.app.core import metrics
+    started = time.perf_counter()
+    try:
+        result = await svc.run("tts", tts_payload, request)
+    except KnowledgeError as error:
+        metrics.record("tts", (time.perf_counter() - started) * 1000, outcome=error.code)
+        raise
+    metrics.record("tts", (time.perf_counter() - started) * 1000)
     await verify_sources()
     return Response(result["audio"], media_type="audio/wav", headers={"Cache-Control": "no-store",
         "X-Voice-Elapsed-Ms": str(result["elapsed_ms"]), "X-Voice-CPU-Seconds": str(result.get("cpu_seconds", "")),
