@@ -12,6 +12,9 @@ $settings = @{
     # 2: the chat model on the GPU plus the embedding model on the CPU (num_gpu 0, no extra VRAM). With 1, every
     # manual search evicted the chat model and each question reloaded it.
     OLLAMA_MAX_LOADED_MODELS = '2'
+    # llama-server's prompt cache in RAM (default up to 8 GB) grew ~40 MB per question and never shrank, leaving
+    # Whisper (3 GB minimum) without room. Our questions rarely share a prefix: the cache is off.
+    LLAMA_ARG_CACHE_RAM = '0'
     OLLAMA_MAX_QUEUE = '1'
     OLLAMA_KEEP_ALIVE = '30s'
     OLLAMA_LOAD_TIMEOUT = '120s'

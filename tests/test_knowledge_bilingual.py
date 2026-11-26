@@ -388,6 +388,13 @@ def test_confirm_that_it_is_running_is_not_an_identification_question():
     assert intent("¿Qué servicio debo confirmar que esté corriendo después de instalar Windows?") != "identify"
 
 
+def test_the_ollama_script_disables_the_llama_server_prompt_cache():
+    # llama-server keeps every prompt's state in RAM (default up to 8 GB): ~40 MB more per question, which left
+    # Whisper without room and the phone on Vosk.
+    script = (ROOT / "scripts" / "start-ollama.ps1").read_text(encoding="utf-8")
+    assert "LLAMA_ARG_CACHE_RAM = '0'" in script
+
+
 def test_the_ollama_script_keeps_two_models_loaded():
     script = (ROOT / "scripts" / "start-ollama.ps1").read_text(encoding="utf-8")
     assert "OLLAMA_MAX_LOADED_MODELS = '2'" in script

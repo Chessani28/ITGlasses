@@ -481,3 +481,11 @@ subió a ~4.9 s porque el modelo de embeddings se descarga tras cada búsqueda p
 - Monitoreo para administradores (Estado del sistema → "Monitoreo (última hora)"): tiempos por etapa, motor de voz
   (Whisper/Vosk) y por qué falló Whisper, último error y RAM libre. Solo códigos y tiempos, en memoria
   (`GET /api/v1/admin/metrics`).
+
+## RAM del modelo de chat — rama feature/ram-ollama, 2026-11-25
+
+Causa de que la voz cayera a Vosk: la caché de prompts en RAM de `llama-server` (default hasta 8 GB) crecía ~40 MB por
+pregunta y no se liberaba (4.5 → 5 GB en 12 preguntas; privada 9.7 GB tras un día). `start-ollama.ps1` la desactiva
+(`LLAMA_ARG_CACHE_RAM=0`): el proceso queda fijo en ~0.7 GB tras 80+ preguntas, RAM libre 7.8–8.8 GB. Examen sin
+cambios en aciertos (voz 12/12, conceptos 24/25, manuales 23/30) y conceptos más rápidos (mediana 2.3 s).
+Para aplicarlo a un Ollama ya corriendo: `stop-all.ps1` y `start-all.ps1`.
