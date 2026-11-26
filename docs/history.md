@@ -23,6 +23,14 @@ intercambios generales anteriores como turnos reales, dentro de `num_ctx` (`ITGL
 - Un administrador ve en «Usuarios» solo **metadatos**: cantidad de conversaciones y de mensajes, web o
   dispositivo, borradas pendientes, fechas y dispositivos. Nunca títulos ni mensajes. El superadmin, igual.
 - La auditoría registra borrados, restauraciones y purgas con ids y conteos, nunca títulos ni mensajes.
+- **👍/👎 (calificaciones, 2026-11-26):** 👍 solo se cuenta. 👎 guarda una copia de **esa** pregunta y respuesta
+  (y el comentario opcional) para los administradores, porque el usuario la envía viendo el aviso «Al enviarlo, esta
+  pregunta y respuesta se comparten con el administrador…». Es la única excepción a «nunca mensajes», y es por
+  respuesta y voluntaria. El panel de administración muestra el % de respuestas útiles y las últimas 👎 **sin decir
+  quién las envió**; los secretos (contraseñas, tokens) se ocultan. Al borrar o purgar la conversación se borran sus
+  calificaciones. Rutas: `POST /api/v1/conversations/{id}/messages/{mid}/feedback {value: 1|-1|0, comment?}`,
+  `POST /api/v1/devices/me/feedback {message_id, value, comment?}` (celular), `GET /api/v1/admin/feedback`.
+  Base de datos del historial: versión 2 (tabla `feedback`; se respalda antes de migrar).
 - Desde esta etapa, sin sesión esta PC no puede usar nada (`LoopbackMode = 'off'`, ver abajo).
 
 ## Borrar, restaurar y purgar

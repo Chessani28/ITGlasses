@@ -113,12 +113,16 @@ def conversation(conversation_id, user_id, device_id=None):
         rows = db.execute("SELECT id,role,content,source,route,sources_json,created_at FROM messages "
                           "WHERE conversation_id=? ORDER BY id DESC LIMIT ?",
                           (conversation_id, MESSAGES_MAX + 1)).fetchall()
+        from .feedback import values_of
+        votes = values_of(db, [row["id"] for row in rows if row["role"] == "assistant"])
     truncated = len(rows) > MESSAGES_MAX
     messages = []
     for row in reversed(rows[:MESSAGES_MAX]):
         message = dict(row)
         sources = message.pop("sources_json")
         message["sources"] = json.loads(sources) if sources else []
+        if message["role"] == "assistant":
+            message["feedback"] = votes.get(message["id"])   # 1, -1 or None: the user's own 👍/👎
         messages.append(message)
     item["messages"] = messages
     item["truncated"] = truncated

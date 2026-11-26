@@ -20,7 +20,7 @@ from backend.app.pairing.store import PROJECT_ROOT, BackupError, SchemaError, ba
 logger = logging.getLogger(__name__)
 
 DEFAULT_DB = PROJECT_ROOT / "storage" / "history" / "history.sqlite3"
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 # Version 1: conversations (web or one device, always with an owner) and their messages.
 V1_SCHEMA = (
@@ -57,6 +57,24 @@ V1_SCHEMA = (
     "CREATE INDEX IF NOT EXISTS message_conversation ON messages(conversation_id,id)",
 )
 
+# Version 2: 👍/👎 on an assistant answer (one per answer). 👍 keeps nothing of the text; 👎 keeps a copy of the
+# question, the answer and the comment for the admins (the user sends it knowing it). Purged with the conversation.
+V2_SCHEMA = (
+    """CREATE TABLE IF NOT EXISTS feedback (
+ message_id INTEGER PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
+ conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+ user_id TEXT NOT NULL,
+ value INTEGER NOT NULL CHECK(value IN (-1, 1)),
+ comment TEXT,
+ question TEXT,
+ answer TEXT,
+ route TEXT,
+ source TEXT,
+ created_at INTEGER NOT NULL
+)""",
+    "CREATE INDEX IF NOT EXISTS feedback_value ON feedback(value, created_at DESC)",
+)
+
 _ready = set()
 _ready_lock = threading.Lock()
 
@@ -79,6 +97,9 @@ def migrate(db):
             raise SchemaError(f"history database version {version} is newer than {SCHEMA_VERSION}")
         if version < 1:
             for statement in V1_SCHEMA:
+                db.execute(statement)
+        if version < 2:
+            for statement in V2_SCHEMA:
                 db.execute(statement)
         db.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
         db.execute("COMMIT")

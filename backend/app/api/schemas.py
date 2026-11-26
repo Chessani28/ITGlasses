@@ -39,6 +39,8 @@ class AssistantResponse(BaseModel):
     speech: str | None = None
     # Stage "historial": whether this exchange was saved in the chat history (older clients ignore it).
     history_saved: bool = False
+    # The saved answer's message id, for 👍/👎 (None when the exchange was not saved).
+    message_id: int | None = None
 
 
 class HealthResponse(BaseModel):

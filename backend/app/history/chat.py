@@ -135,8 +135,8 @@ def _hydrate(assistant, target):
 def _save(assistant, target, message, result):
     state = assistant.sessions.get(target.key)[1] if hasattr(assistant, "sessions") else None
     with store.transaction() as db:
-        conversations.record_exchange(db, target.conversation_id, message, result.get("answer"), target.source,
-                                      result.get("route"), result.get("sources"), state)
+        return conversations.record_exchange(db, target.conversation_id, message, result.get("answer"), target.source,
+                                             result.get("route"), result.get("sources"), state)
 
 
 def _accepts_channel(assistant):
@@ -150,6 +150,7 @@ async def chat(request, assistant, locks, message, session_id, via=None):
     """The assistant's answer (dict), with session_id = the saved conversation and history_saved."""
     target = await asyncio.to_thread(resolve, request, session_id, via)
     saved = target.conversation_id is not None
+    message_id = None
     async with locks.get(target.key):
         if saved:
             try:
@@ -165,11 +166,11 @@ async def chat(request, assistant, locks, message, session_id, via=None):
             result = await assistant.chat(message, target.key)
         if saved:
             try:
-                await asyncio.to_thread(_save, assistant, target, message, result)
+                message_id = await asyncio.to_thread(_save, assistant, target, message, result)
             except store.HistoryUnavailable:
                 saved = False
             except Exception:  # noqa: BLE001 - the answer is already there; keep it, say it was not saved
                 logger.exception("History write failed")
                 saved = False
     session = target.conversation_id or target.returned_session or result.get("session_id")
-    return {**result, "session_id": session, "history_saved": saved}
+    return {**result, "session_id": session, "history_saved": saved, "message_id": message_id if saved else None}

@@ -16,6 +16,7 @@ MOBILE = {
     # Phone app history (stage "historial en la app"): the owner's own conversations; exact paths, id in the body.
     ("POST", "/api/v1/devices/me/conversations/list"), ("POST", "/api/v1/devices/me/conversations/read"),
     ("POST", "/api/v1/devices/me/conversations/open"), ("POST", "/api/v1/devices/me/conversations/new"),
+    ("POST", "/api/v1/devices/me/feedback"),
 }
 # Open requests (pending, or approved but not yet claimed) allowed at once.
 PENDING_PER_IP = 3

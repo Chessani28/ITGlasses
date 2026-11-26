@@ -9,6 +9,7 @@ import {initLayout, nearBottom} from "./layout.mjs";
 import {initVoiceDock} from "./voice-dock.mjs";
 import {openInChat, startNewChat} from "./chat-nav.mjs";
 import {initPasswordToggles} from "./password-toggle.mjs";
+import {COMMENT_MAX, feedbackPath, nextVote, SHARE_NOTICE, usefulText, voteBody, voteStatus} from "./feedback.mjs";
 const layout = initLayout();
 let voiceActive = false;
 let accounts = null;
@@ -152,12 +153,64 @@ function renderChat(follow = false) {
       });
       body.append(options);
     }
+    const votePath = entry.role === "assistant" && !entry.pending && !entry.error && state.mode === "assistant"
+      ? feedbackPath(entry.conversation || state.chats.assistant.conversation, entry.messageId) : null;
+    if (votePath) body.append(voteRow(entry, votePath));
     article.append(body);
     return article;
   }));
   updateControls();
   document.querySelectorAll('.option-button[data-stale="true"]').forEach(button => button.disabled = true);
   if (stick) conversation.scrollTop = conversation.scrollHeight;
+}
+/** 👍/👎 under a saved answer (feedback.mjs). 👎 opens an optional comment and says it is shared with the admins. */
+function voteRow(entry, path) {
+  const row = node("div", "feedback-row");
+  const thumb = (value, label, symbol) => {
+    const button = action(symbol, "feedback-button", () => {
+      const next = nextVote(entry.vote ?? null, value);
+      if (next === -1) { entry.voteOpen = true; entry.voteStatus = ""; renderChat(); return; }
+      sendVote(entry, path, next);
+    });
+    button.setAttribute("aria-label", label);
+    button.title = label;
+    button.setAttribute("aria-pressed", String(entry.vote === value));
+    button.disabled = Boolean(entry.voteBusy);
+    return button;
+  };
+  row.append(thumb(1, "Respuesta útil", "👍"), thumb(-1, "Respuesta no útil", "👎"));
+  if (entry.voteStatus) row.append(node("span", "feedback-status", entry.voteStatus));
+  if (!entry.voteOpen) return row;
+  const form = node("div", "feedback-form");
+  const comment = node("textarea", "feedback-comment");
+  comment.maxLength = COMMENT_MAX;
+  comment.rows = 2;
+  comment.placeholder = "¿Qué estuvo mal? (opcional)";
+  comment.setAttribute("aria-label", "Qué estuvo mal (opcional)");
+  comment.value = entry.voteDraft || "";
+  comment.addEventListener("input", () => { entry.voteDraft = comment.value; });
+  const buttons = node("div", "feedback-actions");
+  buttons.append(action("Cancelar", "secondary-button", () => { entry.voteOpen = false; renderChat(); }),
+    action("Enviar 👎", "primary-button", () => sendVote(entry, path, -1, entry.voteDraft)));
+  form.append(comment, node("p", "feedback-notice", SHARE_NOTICE), buttons);
+  const wrap = node("div", "feedback");
+  wrap.append(row, form);
+  queueMicrotask(() => { if (document.activeElement === document.body) comment.focus(); });
+  return wrap;
+}
+async function sendVote(entry, path, value, comment) {
+  entry.voteBusy = true; renderChat();
+  try {
+    await api(path, jsonOptions(voteBody(value, comment)), 20000);
+    entry.vote = value === 0 ? null : value;
+    entry.voteStatus = voteStatus(value);
+    entry.voteOpen = false;
+    entry.voteDraft = "";
+  } catch (error) {
+    entry.voteStatus = `No se pudo guardar tu calificación: ${error.message}`;
+  } finally {
+    entry.voteBusy = false; renderChat();
+  }
 }
 async function sendMessage(message, choiceId, signal) {
   if (state.busy || state.documentBusy) { if (signal) throw new Error("Hay otra operación en curso."); return; }
@@ -180,7 +233,7 @@ async function sendMessage(message, choiceId, signal) {
     if (mode === "assistant") historyPanel?.answered(data);
     if (mode === "knowledge") chat.conversation = data.conversation_id || null;
     Object.assign(pending, {text: data.answer, ms, status: data.status || data.route, sources: mode === "assistant" ? (data.sources || []) : (mode === "knowledge" ? data.sources : []),
-      options: data.options, conversation: chat.conversation});
+      options: data.options, conversation: chat.conversation, messageId: data.message_id ?? undefined, vote: null});
   } catch (error) {
     if (error.code === "conversation_not_found") {
       chat.conversation = null;
@@ -263,7 +316,30 @@ async function refreshMetrics() {
   } catch {
     $("metrics-panel").hidden = true;
   }
+  refreshFeedback();
   $("refresh-status").disabled = false;
+}
+const ROUTE_NAMES = {general: "Conocimiento general", knowledge: "Manuales", social: "Conversación", otro: "Otras"};
+async function refreshFeedback() {
+  // Admins only (403 for anyone else: the card stays hidden). The 👎 come without who sent them.
+  try {
+    const {data} = await api("/api/v1/admin/feedback", {}, 10000);
+    $("feedback-useful").textContent = usefulText(data.summary);
+    $("feedback-routes").replaceChildren(...Object.entries(data.by_route || {}).map(([route, summary]) =>
+      node("li", "", `${ROUTE_NAMES[route] || route}: ${usefulText(summary)}`)));
+    $("feedback-down").replaceChildren(...(data.recent_down || []).map(item => {
+      const entry = node("li", "feedback-item");
+      entry.append(node("p", "feedback-q", `Pregunta: ${item.question || "—"}`),
+        node("p", "feedback-a", `Respuesta: ${item.answer || "—"}`));
+      if (item.comment) entry.append(node("p", "feedback-c", `Comentario: ${item.comment}`));
+      entry.append(node("small", "", `${ROUTE_NAMES[item.route] || item.route || ""} · ${new Date(item.created_at * 1000).toLocaleString("es-MX")}`));
+      return entry;
+    }));
+    if (!(data.recent_down || []).length) $("feedback-down").replaceChildren(node("li", "feedback-empty", "Ninguna por ahora."));
+    $("feedback-panel").hidden = false;
+  } catch {
+    $("feedback-panel").hidden = true;
+  }
 }
 async function refreshDocuments() {
   $("refresh-documents").disabled = true;

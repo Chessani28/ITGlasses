@@ -60,7 +60,9 @@ export function listPath({channel = "", deviceId = "", deleted = false, cursor =
 export function toChatEntries(messages) {
   return (messages || []).map(message => message.role === "user"
     ? {role: "user", text: message.content}
-    : {role: "assistant", text: message.content, status: message.route || undefined, sources: message.sources || []});
+    : {role: "assistant", text: message.content, status: message.route || undefined, sources: message.sources || [],
+       // The answer's id and the user's own 👍/👎 (feedback.mjs), when the server sends them.
+       ...(Number.isInteger(message.id) ? {messageId: message.id, vote: message.feedback ?? null} : {})});
 }
 /** The line under the composer: whether this conversation is saved and who can see it. */
 export function historyNote({user, saving, lastSaved}) {

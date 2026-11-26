@@ -240,3 +240,57 @@ def device_new(payload: DeviceHistoryRequest, request: Request):
         return {"closed": manage.close_device(device_id, owner)}
     except store.HistoryUnavailable:
         raise _unavailable() from None
+
+
+# --- 👍/👎 on an answer (2026-11-26) ---------------------------------------------------------------------------------
+
+class Vote(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    value: Literal[-1, 0, 1]
+    comment: str | None = Field(default=None, max_length=1000)
+
+
+class DeviceVote(Vote):
+    message_id: int = Field(ge=1)
+
+
+def _vote(user_id, conversation_id, message_id, vote):
+    from . import feedback
+    try:
+        return {"feedback": feedback.give(user_id, conversation_id, message_id, vote.value, vote.comment)}
+    except feedback.NotFound:
+        raise KnowledgeError("message_not_found", "Esa respuesta no existe o ya no está disponible.", 404) from None
+    except store.HistoryUnavailable:
+        raise _unavailable() from None
+
+
+@router.post("/conversations/{conversation_id}/messages/{message_id}/feedback")
+def rate_answer(conversation_id: str, message_id: int, body: Vote, request: Request):
+    session = _session(request, write=True)
+    return _vote(session.user_id, conversation_id, message_id, body)
+
+
+@router.post("/devices/me/feedback")
+def device_rate_answer(body: DeviceVote, request: Request):
+    _, owner = _device_owner(request)
+    try:
+        with store.transaction() as db:
+            row = db.execute("SELECT conversation_id FROM messages WHERE id=?", (body.message_id,)).fetchone()
+    except store.HistoryUnavailable:
+        raise _unavailable() from None
+    if row is None:
+        raise KnowledgeError("message_not_found", "Esa respuesta no existe o ya no está disponible.", 404)
+    return _vote(owner, row["conversation_id"], body.message_id, body)
+
+
+@router.get("/admin/feedback")
+def feedback_report(request: Request, response: Response):
+    session = _session(request)
+    if session.role not in ADMIN_ROLES:
+        raise KnowledgeError("forbidden_role", "Tu rol no permite esta accion.", 403)
+    response.headers["Cache-Control"] = "no-store"
+    from . import feedback
+    try:
+        return feedback.report()
+    except store.HistoryUnavailable:
+        raise _unavailable() from None

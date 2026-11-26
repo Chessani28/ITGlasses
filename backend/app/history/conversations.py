@@ -170,13 +170,17 @@ def _sources(sources):
 
 
 def record_exchange(db, conversation_id, question, answer, source, route=None, sources=None, state=None, now=None):
-    """The question and the answer, the conversation's counters and title, and the assistant state."""
+    """The question and the answer, the conversation's counters and title, and the assistant state. The id of the
+    answer's message (what 👍/👎 refers to)."""
     now = _now(now)
     db.execute("INSERT INTO messages(conversation_id,role,content,source,created_at) VALUES(?,?,?,?,?)",
                (conversation_id, "user", str(question), source, now))
-    db.execute("INSERT INTO messages(conversation_id,role,content,source,route,sources_json,created_at) "
-               "VALUES(?,?,?,?,?,?,?)",
-               (conversation_id, "assistant", str(answer or "")[:ANSWER_MAX], source, route, _sources(sources), now))
+    saved = db.execute("INSERT INTO messages(conversation_id,role,content,source,route,sources_json,created_at) "
+                       "VALUES(?,?,?,?,?,?,?)",
+                       (conversation_id, "assistant", str(answer or "")[:ANSWER_MAX], source, route, _sources(sources),
+                        now))
+    answer_id = saved.lastrowid
     db.execute("UPDATE conversations SET last_message_at=?, message_count=message_count+2, "
                "title=COALESCE(title,?), state_json=COALESCE(?,state_json) WHERE id=?",
                (now, title_from(question), snapshot(state) if state is not None else None, conversation_id))
+    return answer_id  # the answer's message id: what 👍/👎 refers to

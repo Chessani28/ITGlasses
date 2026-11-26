@@ -1372,3 +1372,28 @@ main { display:flex; flex-direction:column; min-width:0; height:100dvh; overflow
 @media (max-width:1100px) and (min-width:768px) {
   .status-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
 }
+
+/* 👍/👎 under a saved answer (feedback.mjs). Quiet until used: the answer is what matters. */
+.feedback { display:flex; flex-direction:column; gap:6px; margin-top:8px; }
+.feedback-row { display:flex; align-items:center; gap:4px; margin-top:6px; }
+.feedback .feedback-row { margin-top:0; }
+.feedback-button { padding:3px 8px; border:1px solid transparent; border-radius:8px; background:transparent;
+  font-size:15px; line-height:1.2; opacity:.55; cursor:pointer; }
+.feedback-button:hover, .feedback-button:focus-visible { opacity:1; border-color:var(--border); }
+.feedback-button[aria-pressed="true"] { opacity:1; background:var(--darkgreen); border-color:var(--green); }
+.feedback-button:disabled { cursor:default; opacity:.35; }
+.feedback-status { margin-left:6px; font-size:12px; color:var(--muted); }
+.feedback-form { display:flex; flex-direction:column; gap:6px; max-width:560px; padding:10px; border:1px solid var(--border);
+  border-radius:10px; background:var(--panel); }
+.feedback-comment { width:100%; resize:vertical; padding:8px; border:1px solid var(--border); border-radius:8px;
+  background:var(--bg); color:var(--text); font:inherit; font-size:13px; }
+.feedback-notice { margin:0; font-size:12px; color:var(--amber); }
+.feedback-actions { display:flex; justify-content:flex-end; gap:8px; }
+.feedback-actions button { padding:5px 12px; font-size:12px; }
+.feedback-useful { margin:4px 0 8px; font-size:20px; font-weight:600; color:var(--green); }
+.feedback-subtitle { margin:14px 0 6px; font-size:13px; color:var(--muted); font-weight:600; }
+.feedback-down { margin:0; padding-left:18px; display:flex; flex-direction:column; gap:10px; max-height:420px; overflow-y:auto; }
+.feedback-item p { margin:0 0 3px; font-size:13px; overflow-wrap:anywhere; }
+.feedback-item .feedback-a { color:var(--muted); }
+.feedback-item .feedback-c { color:var(--amber); }
+.feedback-item small, .feedback-empty { color:var(--muted); font-size:12px; }

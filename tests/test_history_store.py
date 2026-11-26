@@ -50,7 +50,7 @@ def test_default_location_is_its_own_file_under_storage(monkeypatch):
 def test_new_history_database(tmp_path):
     path = tmp_path / "nested" / "history.sqlite3"
     history.ensure_database(path)
-    assert version(path) == 1 and TABLES <= tables(path)
+    assert version(path) == 2 and TABLES <= tables(path)   # v2 (2026-11-26): feedback
     assert not (path.parent / "backups").exists()  # a new database needs no backup
 
 
@@ -79,7 +79,7 @@ def test_migration_is_idempotent_and_a_newer_database_is_refused(tmp_path):
     history.ensure_database(path)
     history._ready.clear()
     history.ensure_database(path)
-    assert version(path) == 1
+    assert version(path) == history.SCHEMA_VERSION
     future = tmp_path / "future.sqlite3"
     with closing(sqlite3.connect(future)) as db, db:
         db.execute("PRAGMA user_version=99")
@@ -96,7 +96,7 @@ def test_an_existing_older_history_database_is_backed_up_before_migrating(tmp_pa
         db.execute("CREATE TABLE notes (x)")  # some content at version 0
     history.ensure_database(path)
     [copy] = list((tmp_path / "backups").glob("*.sqlite3"))
-    assert copy.name.startswith("history-v0-") and version(copy) == 0 and version(path) == 1
+    assert copy.name.startswith("history-v0-") and version(copy) == 0 and version(path) == history.SCHEMA_VERSION
 
 
 def test_the_device_database_schema_does_not_change(tmp_path):
@@ -125,7 +125,8 @@ def test_restore_history_and_refuse_the_wrong_kind(tmp_path, stopped_backend):
     assert restore.main([str(snapshot), "--history", "--db", str(live), "--yes"]) == 0
     with closing(sqlite3.connect(live)) as db:
         assert [row[0] for row in db.execute("SELECT id FROM conversations")] == ["old"]
-    assert any(p.name.startswith("history-v1-pre-restore-") for p in (tmp_path / "backups").glob("*.sqlite3"))
+    assert any(p.name.startswith(f"history-v{history.SCHEMA_VERSION}-pre-restore-")
+               for p in (tmp_path / "backups").glob("*.sqlite3"))
 
 
 def test_history_list(tmp_path, capsys):
@@ -159,7 +160,7 @@ def test_a_backup_set_holds_both_databases_verified(databases):
     assert folder.parent == root and "-manual-" in folder.name
     manifest = json.loads((folder / "manifest.json").read_text(encoding="utf-8"))
     assert [(item["name"], item["schema_version"]) for item in manifest["files"]] == [("devices.sqlite3", 2),
-                                                                                        ("history.sqlite3", 1)]
+                                                                                        ("history.sqlite3", history.SCHEMA_VERSION)]
     with closing(sqlite3.connect(folder / "history.sqlite3")) as db:
         assert db.execute("SELECT content FROM messages").fetchone() == ("hola",)
     assert "hola" not in (folder / "manifest.json").read_text(encoding="utf-8")
@@ -257,3 +258,18 @@ def test_a_failing_daily_backup_is_logged_and_never_stops_the_backend(databases,
 def test_tests_never_touch_the_real_history_or_backups():
     assert history.database_path() != history.DEFAULT_DB
     assert backups.backup_root() != backups.DEFAULT_DIR
+
+
+def test_a_version_1_history_gets_the_feedback_table_and_keeps_its_data(tmp_path):
+    # 2026-11-26: v2 adds 👍/👎. A pilot database (v1) is backed up, migrated in place and keeps its conversations.
+    path = tmp_path / "history.sqlite3"
+    with closing(sqlite3.connect(path, isolation_level=None)) as db:
+        for statement in history.V1_SCHEMA:
+            db.execute(statement)
+        db.execute("PRAGMA user_version=1")
+        conversation(db, "piloto")
+    history.ensure_database(path)
+    assert version(path) == 2 and "feedback" in tables(path)
+    with closing(sqlite3.connect(path)) as db:
+        assert [row[0] for row in db.execute("SELECT id FROM conversations")] == ["piloto"]
+    assert any(p.name.startswith("history-v1-") for p in (tmp_path / "backups").glob("*.sqlite3"))
