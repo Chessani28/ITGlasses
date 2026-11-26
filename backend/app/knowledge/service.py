@@ -85,6 +85,28 @@ def closest_sentences(question, alternates, candidates, limit=2):
     return [candidates[index] for _, index in sorted(best, key=lambda pair: pair[1])]
 
 
+def with_following_sentence(picked, candidates):
+    """A picked heading ("5.2 For SUMMIT (All LOB's):") or question ("¿A quién se reporta…?") brings the sentence after
+    it: the content is there. The picker chose such sentences alone (2026-11-26)."""
+    result = []
+    for index in picked:
+        result.append(index)
+        text = (candidates[index].get("text") or "").strip() if 0 <= index < len(candidates) else ""
+        if text.endswith((":", "?")) and index + 1 < len(candidates):
+            result.append(index + 1)
+    return list(dict.fromkeys(result))
+
+
+def tie_by_words(best, rivals):
+    """A tie (similar meaning) broken by words: the candidate that shares 2 or more words more with the question than
+    every other one ("monitores extra… laptop": the Training guide shares 3, the laptops manual 1). (best, rivals)."""
+    everyone = [best, *rivals]
+    for candidate in everyone:
+        if all(candidate["overlap"] >= other["overlap"] + 2 for other in everyone if other is not candidate):
+            return candidate, []
+    return best, rivals
+
+
 def evidence_rows(ranked, document_id, limit):
     """The best chunks of the chosen document for the evidence selector, without cover and index pages (they matched
     the title words and pushed the real answer out of the four), unless the document has nothing else."""
@@ -260,6 +282,17 @@ class KnowledgeService:
         self._manual_terms_cache = (key, terms)
         return terms
 
+    def _with_next_piece(self, anchor, rows):
+        """[anchor, the piece after it in the document, then the other rows], at most EVIDENCE_PIECES."""
+        ordered = self.store.document_chunks(anchor["document_id"])
+        ids = [chunk["id"] for chunk in ordered]
+        first = [anchor]
+        if anchor["id"] in ids and ids.index(anchor["id"]) + 1 < len(ordered):
+            following = ordered[ids.index(anchor["id"]) + 1]
+            first.append({**anchor, **following})
+        taken = {row["id"] for row in first}
+        return (first + [row for row in rows if row["id"] not in taken])[:EVIDENCE_PIECES]
+
     async def _select(self, question, rows, question_en=None):
         """The evidence selection, given the English question when the selector takes it. An invalid answer from the
         model is retried once; a second one means "no evidence" (None) instead of an error that the assistant would
@@ -401,6 +434,13 @@ class KnowledgeService:
                 # A code of the question found as such ("C6000") is evidence by itself.
                 relevant = [r for r in best_by_doc.values() if r["semantic"] >= 0.55 or r.get("code_hit") or
                             (r["semantic"] >= 0.42 and r.get("overlap_original", r["overlap"]) >= 2)]
+            # A piece with a rare word or a code of the question ("secpol", "C6000") makes its document relevant
+            # and anchors the evidence.
+            anchors = {}
+            for row in ranked:
+                if (row.get("rare_hit") or row.get("code_hit")) and row["document_id"] not in anchors:
+                    anchors[row["document_id"]] = row
+            relevant += [best_by_doc[key] for key in anchors if best_by_doc[key] not in relevant]
             if exact:
                 relevant = list(best_by_doc.values())[:1]
             if not relevant:
@@ -409,6 +449,8 @@ class KnowledgeService:
             rivals = [r for r in relevant[1:] if
                       (r["overlap"] >= best["overlap"] if best.get("lexical_only")
                        else abs(r["semantic"] - best["semantic"]) < 0.055)]
+            if rivals and not best.get("lexical_only"):
+                best, rivals = tie_by_words(best, rivals)
             if not exact and len(relevant) > 1:
                 # The manual the question names wins: "¿Cuánta RAM… para el training?" → "Training Setup Guideline",
                 # not the laptops manual that also talks about RAM, tied or ranked first (2026-11-26). Generic
@@ -431,6 +473,11 @@ class KnowledgeService:
                                f"Lo encontré en {listed}. ¿De cuál quieres la respuesta?", tied)
             # Explicit selection still cannot resolve a missing requested fact by itself.
             rows = evidence_rows(ranked, selected_document["id"], EVIDENCE_PIECES)
+            anchor = anchors.get(selected_document["id"])
+            if anchor is not None and not exact:
+                # The anchor and the piece after it (the steps go on there: "type in secpol.msc" → "…choose
+                # Disable"), then the best others; still EVIDENCE_PIECES (the model's context is 2048 tokens).
+                rows = self._with_next_piece(anchor, rows)
             stats = {"retrieval_ms": retrieval_ms, "semantic_score": best["semantic"], "hybrid_score": best["hybrid"], "candidate_documents": len(best_by_doc)}
             if len(request.message) > 1800:
                 return respond("clarification_required", "La consulta es extensa. Encontré este candidato; confirma si buscas su nombre o sus pasos y acota la pregunta para verificar la evidencia.", [selected_document], stats=stats)
@@ -455,6 +502,11 @@ class KnowledgeService:
                     return missing()
             if not selected:
                 return missing()
+            if mode == "information":
+                # The sentences may also come from the best piece of the search and, with an anchor, the piece after
+                # it, even when the evidence check chose another one ("2.20 GHz": it chose the page before the answer).
+                extra = [0] + ([1] if anchor is not None and not exact and len(rows) > 1 else [])
+                selected = list(dict.fromkeys([*selected, *[i for i in extra if i < len(rows)]]))
             # Reauthorize each citation after the asynchronous model operation.
             evidence = []
             for index in selected:
@@ -479,8 +531,14 @@ class KnowledgeService:
                     title = selected_document["title"]
                     candidates = manual_sentences(evidence)
                     picker = getattr(self.selector, "pick_sentences", None)
-                    picked = await picker(request.message, candidates) if picker and candidates else None
+                    picked = None
+                    if picker and candidates:
+                        import inspect
+                        takes_english = "question_en" in inspect.signature(picker).parameters
+                        picked = (await picker(request.message, candidates, question_en=alternates[0])
+                                  if takes_english and alternates else await picker(request.message, candidates))
                     if picked:
+                        picked = with_following_sentence(picked, candidates)
                         excerpts = [{"text": candidates[i]["text"], "page": candidates[i]["page"]} for i in picked]
                         answer = f"Según «{title}»:\n\n" + " ".join(item["text"] for item in excerpts)
                         return respond("answered", answer, [selected_document], sources, stats, excerpts)

@@ -403,3 +403,131 @@ def test_closest_sentences_do_not_answer_a_follow_up():
     asyncio.run(service.chat("La impresora no imprime", session_id=sid))
     answer = asyncio.run(service.chat("Ya revisé el cable y está bien", session_id=sid))
     assert "driver" in answer["answer"] and "encendida" not in answer["answer"]
+
+
+# --- 8. Real manual cases (Training Setup Guideline) ---------------------------------------------------------------
+
+def test_a_dotted_command_also_counts_its_parts():
+    from backend.app.knowledge.retrieval import tokens
+    assert {"secpol", "msc", "secpol.msc"} <= set(tokens("type in secpol.msc and hit Enter"))
+    assert "2.20" in tokens("higher than 2.20 GHz") and "20" not in tokens("higher than 2.20 GHz")
+
+
+SECPOL = """For Dominos CS
+Before you start, make sure your computer is clean and updated.
+Install Google Chrome by double-clicking ChromeSetup.
+Access to this PC and open Virtual Observer.
+Open RUN, by pressing Windows + R and type in secpol.msc.
+"""
+SECPOL_NEXT = """Once you open the Local Security Policy, click on Local Policies and then go to Security Options.
+Right-click on User Account Control, select Virtualize File and Registry Write Failures, and then choose Disable.
+"""
+
+
+class FirstPickSelector(TranslatingSelector):
+    """Picks the sentence of the candidates that contains a word, like the model would."""
+
+    def __init__(self, translation, word):
+        super().__init__(translation)
+        self.word, self.candidates = word, []
+
+    async def pick_sentences(self, question, candidates):
+        self.candidates = candidates
+        return [i for i, item in enumerate(candidates) if self.word in item["text"]][:1] or None
+
+
+def test_a_rare_word_finds_its_piece_and_the_next_one(tmp_path):
+    # "¿Qué cambio hago en secpol para Dominos?" found nothing: "secpol.msc" was one word, and the change is in the
+    # next piece ("Virtualize… Disable").
+    selector = FirstPickSelector("What change do I make in secpol for Dominos?", "Virtualize")
+    svc = KnowledgeService(tmp_path, EnglishOnlyEmbeddings(), selector)
+    text = ("Filler line about other apps and settings for the training setup.\n" * 8) + SECPOL + SECPOL_NEXT
+    asyncio.run(svc.ingest("t.md", text.encode(), Metadata(title="Training Setup Guideline", version="1",
+                                                           authorized=True)))
+    answer = ask(svc, "¿Qué cambio hago en secpol para Dominos?")
+    assert answer.status == "answered", answer.answer
+    assert any("Virtualize" in item["text"] for item in selector.candidates)
+
+
+def test_a_clear_word_margin_breaks_a_tie():
+    from backend.app.knowledge.service import tie_by_words
+    best = {"document_id": "laptops", "overlap": 1}
+    training = {"document_id": "training", "overlap": 3}
+    assert tie_by_words(best, [training]) == (training, [])
+    close = {"document_id": "training", "overlap": 2}
+    assert tie_by_words(best, [close]) == (best, [close])
+
+
+def test_only_command_or_file_names_are_rare_words():
+    from backend.app.knowledge.retrieval import rare_tokens
+    texts = ["open run and type in secpol.msc", "the printer shows an error", "another error page", "clean the fan"]
+    sets = [set(t.split()) | ({"secpol", "msc"} if "secpol" in t else set()) for t in texts]
+    assert rare_tokens({"secpol", "error", "printer"}, sets, texts) == {"secpol"}
+
+
+def test_a_question_about_a_rule_asks_the_manuals_first():
+    # "¿Qué etiquetas se permiten pegar en los equipos?" was answered in general; the manual says only hostname labels.
+    import uuid as _uuid
+    from test_history_context import NoEvidence
+    from test_named_reference import StubProvider
+    from backend.app.assistant.service import UnifiedAssistantService
+    for question in ("¿Qué etiquetas se permiten pegar en los equipos?", "¿Está prohibido instalar programas?",
+                     "¿Es obligatorio limpiar el equipo antes de entregarlo?"):
+        knowledge = NoEvidence()
+        service = UnifiedAssistantService(knowledge, StubProvider(), web_search=StubWebSearch())
+        asyncio.run(service.chat(question, session_id=str(_uuid.uuid4())))
+        assert knowledge.queries, question
+
+
+def test_a_failed_translation_is_retried_once():
+    # "¿Qué etiquetas se permiten pegar en los equipos?" was searched without its English version (it came back
+    # None once): the Spanish question does not match the English manual.
+    import json as _json
+    import httpx
+    from backend.app.knowledge.grounding import EvidenceSelector
+    calls = []
+
+    def handler(request):
+        calls.append(1)
+        if len(calls) == 1:
+            return httpx.Response(200, json={"done": True, "message": {"content": "no es json"}})
+        return httpx.Response(200, json={"done": True, "message": {"content": _json.dumps(
+            {"english": "What labels are allowed to be attached to the equipment?"})}})
+    selector = EvidenceSelector("qwen-test", transport=httpx.MockTransport(handler))
+    english = asyncio.run(selector.translate_query("¿Qué etiquetas se permiten pegar en los equipos?"))
+    assert english == "What labels are allowed to be attached to the equipment?" and len(calls) == 2
+
+
+def test_the_sentence_picker_gets_the_english_question():
+    # "Para Dominos CS, ¿qué es lo primero que instalo?" picked "Before you start, make sure…" instead of
+    # "Install Google Chrome by double-clicking ChromeSetup".
+    import json as _json
+    import httpx
+    from backend.app.knowledge.grounding import EvidenceSelector
+    seen = []
+
+    def handler(request):
+        seen.append(_json.loads(request.content))
+        return httpx.Response(200, json={"done": True, "message": {"content": _json.dumps({"ids": ["1"]})}})
+    selector = EvidenceSelector("qwen-test", transport=httpx.MockTransport(handler))
+    sentences = [{"id": 0, "text": "Before you start, make sure your computer is clean."},
+                 {"id": 1, "text": "Install Google Chrome by double-clicking ChromeSetup."}]
+    picked = asyncio.run(selector.pick_sentences("Para Dominos CS, ¿qué es lo primero que instalo?", sentences,
+                                                 question_en="For Dominos CS, what do I install first?"))
+    assert picked == [1]
+    payload = seen[0]
+    asked = _json.loads(payload["messages"][1]["content"])
+    assert asked["question_en"] == "For Dominos CS, what do I install first?"
+    assert "question_en" in payload["messages"][0]["content"]
+
+
+def test_a_picked_heading_or_question_brings_the_sentence_after_it():
+    # The picker chose "5.2 For SUMMIT (All LOB's):" and "¿A quién se reporta un equipo que llega dañado?" alone.
+    from backend.app.knowledge.service import with_following_sentence
+    candidates = [{"text": "5.2 For SUMMIT (All LOB's):"}, {"text": "Install VC_redist x86 first."},
+                  {"text": "¿A quién se reporta un equipo que llega dañado?"}, {"text": "A Compras, en 48 horas."},
+                  {"text": "Clean the fan."}]
+    assert with_following_sentence([0], candidates) == [0, 1]
+    assert with_following_sentence([2], candidates) == [2, 3]
+    assert with_following_sentence([4], candidates) == [4]
+    assert with_following_sentence([1, 4], candidates) == [1, 4]

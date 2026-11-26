@@ -635,3 +635,25 @@ Pendientes resueltos después:
   como «manual» o «guía» no cuentan).
 - Sin frase elegida por el modelo: las 1-2 frases con más palabras de la pregunta (marcadas «closest»), no el inicio
   del manual; en un seguimiento no cuentan como respuesta (se sigue el hilo).
+
+## 2026-11-26 — Manuales reales: 23/30 → 25/30 (examen total 140/148)
+
+Causas encontradas en el Training Setup Guideline y arreglos (pruebas en `tests/test_test_manuals_2026_11_26.py`, §8):
+
+- «secpol.msc» era una sola palabra: las palabras con punto también cuentan por partes (los números como «2.20» no).
+- Nombres de comando o archivo raros en la biblioteca («secpol» de «secpol.msc», en 1-2 pedazos) hacen relevante su
+  pedazo y lo anclan; con ancla (o un código) entra también el pedazo siguiente, donde siguen los pasos. Solo nombres
+  con extensión: en una biblioteca chica, palabras comunes («error») parecían raras.
+- Empate por significado roto por palabras: el que comparte 2 o más palabras más con la pregunta gana («monitores
+  extra… laptop»: Training 3, manual de laptops 1).
+- En preguntas de información, el mejor pedazo de la búsqueda (y el siguiente al ancla) siempre aportan frases
+  candidatas aunque el chequeo de evidencia eligiera otro («2.20 GHz» estaba en la página siguiente a la elegida).
+- La traducción de la pregunta se reintenta una vez («¿Qué etiquetas…?» se buscó sin inglés una vez).
+- El selector de frases recibe también la pregunta en inglés. Probado y quitado: pedirle «la frase de la acción»
+  (elegía encabezados y advertencias).
+- Un encabezado («5.2 For SUMMIT:») o una pregunta de FAQ elegidos solos traen la frase siguiente (el contenido).
+
+Quedan (5): «etiquetas» (la página correcta sale primera pero con similitud 0.42 y sin palabras en español; la
+compuerta está calibrada para no dejar pasar preguntas generales), «servicio después de instalar Windows» (empate
+real con el manual de laptops: pregunta cuál), «deadline» (la portada gana por las palabras del título), «VC redist
+x86» y «Dominos: lo primero que instalo» (el selector elige otra frase del mismo apartado; varía entre corridas).

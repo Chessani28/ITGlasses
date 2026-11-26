@@ -36,7 +36,31 @@ def code_hits(codes, text):
 
 
 def tokens(text):
-    return list(dict.fromkeys(t for t in re.findall(r"[\w.-]+", normalize(text)) if len(t) > 1 and t not in STOP))
+    found = []
+    for t in re.findall(r"[\w.-]+", normalize(text)):
+        found.append(t)
+        # "secpol.msc" also counts as "secpol" and "msc" (it matched nothing); "2.20" stays a number.
+        if "." in t and re.search(r"[a-z]\.[a-z]", t):
+            found.extend(part for part in re.split(r"[.]", t) if part)
+    return list(dict.fromkeys(t for t in found if len(t) > 1 and t not in STOP))
+
+
+def rare_tokens(question_tokens, chunk_token_sets, chunk_texts=None, most=2):
+    """The question's command or file names found in at most `most` pieces of the library ("secpol" of
+    "secpol.msc"): like a code, finding one is evidence by itself. Only names written with an extension count: in a
+    small library ordinary words ("error") look rare too."""
+    texts = [normalize(text or "") for text in (chunk_texts or [])]
+    rare = set()
+    for token in question_tokens:
+        if len(token) < 4 or not token.isalpha():
+            continue
+        count = sum(1 for chunk in chunk_token_sets if token in chunk)
+        if not 1 <= count <= most:
+            continue
+        named = re.compile(r"(?<![\w.-])" + re.escape(token) + r"\.[a-z0-9]{2,4}(?![\w-])")
+        if any(named.search(text) for text in texts):
+            rare.add(token)
+    return rare
 
 
 def exact_ids(text):
@@ -106,16 +130,19 @@ class Retriever:
             query_tokens = set(words)
             original_tokens = set(tokens(question))
             codes = code_tokens(question)
+            chunk_sets = [set(tokens(row["title"] + " " + row["scope"] + " " + row["text"])) for row in rows]
+            rare = rare_tokens(original_tokens, chunk_sets, [row["text"] for row in rows])
             result = []
             for index, row in enumerate(rows):
-                chunk_tokens = set(tokens(row["title"] + " " + row["scope"] + " " + row["text"]))
+                chunk_tokens = chunk_sets[index]
                 overlap = len(query_tokens & chunk_tokens)
                 lexical_rank = lexical.get(row["id"])
                 score = 1 / (60 + ranks[index]) + (1 / (60 + lexical_rank) if lexical_rank else 0)
                 # overlap_original: only the user's own words (what the relevance gates were calibrated on).
                 result.append({**row, "semantic": round(float(scores[index]), 6), "hybrid": score, "overlap": overlap,
                                "overlap_original": len(original_tokens & chunk_tokens),
-                               "code_hit": code_hits(codes, row["text"])})
+                               "code_hit": code_hits(codes, row["text"]),
+                               "rare_hit": len(rare & chunk_tokens)})
             # A piece with the question's code first: it is the evidence ("C6000" in the error code table).
             return sorted(result, key=lambda r: (-r["code_hit"], -r["hybrid"], -r["semantic"], r["id"]))
         # Fallback: lexical-only BM25 ranking without semantic scoring
