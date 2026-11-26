@@ -512,3 +512,17 @@ Los fríos de Whisper venían de su umbral para quedarse cargado en CPU (8 GB li
 pregunta lo recargaba. Con la RAM estable se baja a 4 GB (`WHISPER_KEEP_RAM_DEFAULT`, `WhisperKeepRamGiB`); el monitor
 lo sigue descargando bajo 1.5 GB. En GPU (turbo) siempre se queda. El streaming ahorraría ~1 s de un turno caliente de
 ~3.3 s.
+
+### Medición de voz a texto con grabaciones reales (work/voice-human-eval, 20 frases, 2026-11-26)
+
+| Motor | Error por palabra (WER) | Mediana cargado | Cuándo se usa |
+|---|---|---|---|
+| Whisper large-v3-turbo (GPU) | **16.4%** | **0.44 s** | normalmente (frío: ~18 s, se precarga) |
+| Whisper Small (CPU int8) | 27.2% | 1.9 s | si la GPU no tiene VRAM libre |
+| Vosk | 41.0% | 1.1 s | si Small no cabe en RAM (en el celular) |
+| Whisper base (CPU) | 45.3% | 0.67 s | probado y **descartado**: no mejora a Vosk |
+
+El respaldo con Whisper base se revirtió (commit "Revert …Whisper base…"). Lo que más pesa en la calidad es que turbo se
+quede en la GPU: apps que usan VRAM (Chrome, reproductores, overlay de NVIDIA) lo empujan a Small en CPU. Errores
+típicos aun con turbo: nombres en inglés ("Outlook" → "outlaw", "ITGlasses" → "y qué clases"); el vocabulario de
+pistas de Whisper (`vocabulary.py`) es donde atacarlos.
