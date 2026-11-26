@@ -526,3 +526,17 @@ El respaldo con Whisper base se revirtió (commit "Revert …Whisper base…"). 
 quede en la GPU: apps que usan VRAM (Chrome, reproductores, overlay de NVIDIA) lo empujan a Small en CPU. Errores
 típicos aun con turbo: nombres en inglés ("Outlook" → "outlaw", "ITGlasses" → "y qué clases"); el vocabulario de
 pistas de Whisper (`vocabulary.py`) es donde atacarlos.
+
+### Voz más precisa — rama feature/voz-precisa, 2026-11-26
+
+Con el vocabulario de pistas (como en producción) y las 20 grabaciones reales:
+
+| Motor | Antes | Ahora |
+|---|---|---|
+| Whisper turbo (GPU) + pistas | 13.9% | **11.8%** ("ITGlasses" ya se corrige) |
+| Whisper Small (CPU) + pistas | **174%** (alucinaba: "Procedimiento de emergencia para VPN" ×25) | 27.3% |
+
+- Protección contra alucinaciones (`voice/hallucination.py`): un bucle (3+ palabras repetidas 3 veces) o más texto
+  del que cabe en el audio → se transcribe otra vez sin pistas.
+- "ITGlasses" en las pistas y corregido tras un saludo ("Oye, ¿y qué clases?" → "Oye, ITGlasses"), también para Vosk.
+- Quedan: el arranque de algunas frases ("Qué es" → "AS"/"KS", "Cómo puedo" → "No puedo").

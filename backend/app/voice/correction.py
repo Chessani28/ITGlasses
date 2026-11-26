@@ -148,11 +148,41 @@ def _best_scored(scores_for, candidates):
     return scored[0], (scored[1][0] if len(scored) > 1 else 0.0)
 
 
+PRODUCT = "ITGlasses"
+# The product name right after a greeting, as recognizers heard it in real recordings ("Oye, ¿y qué clases?",
+# "porque y clases", "it glasses"). Only there: "¿qué clases de VPN hay?" is ordinary speech.
+_PRODUCT = re.compile(
+    r"^(?P<greeting>\W*(?:oye|hola|ok|okay|ey|hey|porque)\b[\s,]*)"
+    r"(?P<heard>¿?\s*(?:y\s+qu[eé]\s+clases|y\s+clases|i\s*t\s*glas+es|y\s+glas+es|itglasses)\s*\??)(?=\s|,|$)",
+    re.IGNORECASE)
+
+
+def _product_name(text: str) -> tuple[str, list[Correction]]:
+    match = _PRODUCT.match(text or "")
+    if not match:
+        return text, []
+    heard = match.group("heard")
+    if heard.strip() == PRODUCT:
+        return text, []
+    greeting = match.group("greeting")
+    if _fold(greeting).strip(" ,") == "porque":  # Vosk heard "Oye" as "porque"
+        greeting = "Oye "
+    fixed = greeting + PRODUCT + text[match.end():]
+    return fixed, [Correction(heard.strip(), PRODUCT, 1.0, True)]
+
+
 def correct(text: str, vocabulary: Vocabulary) -> tuple[str, list[Correction]]:
     """Corrected text and the corrections made (empty list: text unchanged)."""
+    text, named = _product_name(text)
     candidates = vocabulary.candidates
     if not text or not candidates:
-        return text, []
+        return text, named
+    rest, made = _correct_titles(text, candidates)
+    return rest, named + made
+
+
+def _correct_titles(text, candidates):
+    """Known titles and headings (anchored after "según el manual de…", or near-exact anywhere)."""
     corrections: list[tuple[int, int, Correction]] = []
 
     def taken(begin, end):

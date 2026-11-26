@@ -30,7 +30,10 @@ def test_limits_drop_headings_first_then_titles_never_acronyms():
     stats = vocabulary.stats()
     assert stats["fixed"] == len(FIXED_TERMS)
     assert stats["terms"] <= MAX_TERMS and stats["chars"] <= MAX_CHARS
-    assert stats["heading"] == 0 and stats["title"] > 0  # titles win over headings
+    # Titles win over headings: every title is placed before any heading; a short heading may still fill the
+    # space left over when the next title no longer fits.
+    kinds = [t.kind for t in vocabulary.terms if t.kind in ("title", "heading")]
+    assert stats["title"] > stats["heading"] and kinds == sorted(kinds, key=lambda kind: kind != "title")
     small = build(["Uno dos tres"], [], max_terms=len(FIXED_TERMS))
     assert [t.kind for t in small.terms] == ["fixed"] * len(FIXED_TERMS)
 

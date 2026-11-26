@@ -37,6 +37,7 @@ from .persistent_worker import (
 )
 from . import vocabulary as voice_vocabulary
 from .correction import apply_to_result as _correct_transcript
+from .hallucination import looks_hallucinated
 from .piper_persistent import PersistentPiper, PiperWorkerError
 
 logger = logging.getLogger(__name__)
@@ -99,6 +100,15 @@ def whisper_keep_ram_bytes(value=None):
         logger.warning("ITGLASSES_WHISPER_KEEP_RAM_GIB is below the 3 GiB load limit; using 3 GiB")
         return WHISPER_MIN_LOAD_RAM
     return requested
+
+
+def _audio_seconds(raw):
+    """Duration of a WAV payload in seconds (1.0 when it cannot be read)."""
+    try:
+        with wave.open(io.BytesIO(raw), "rb") as audio:
+            return audio.getnframes() / float(audio.getframerate() or 1)
+    except Exception:  # noqa: BLE001 - only a hint for the hallucination check
+        return 1.0
 
 
 def validate_audio(raw):
@@ -1140,6 +1150,10 @@ class VoiceService:
         mode = whisper_hint_mode()
         hint = vocabulary.hint if vocabulary is not None and mode != "off" and engine == "whisper-small" else None
         result = await self._run_engine(kind, payload, request, engine, hint, mode if hint else None)
+        if hint and looks_hallucinated(result.get("text") or "", _audio_seconds(payload)):
+            # The hint can make Whisper loop on a manual title: transcribe the same audio again without it.
+            logger.warning("Whisper transcript looked hallucinated with the hint; retrying without it")
+            result = await self._run_engine(kind, payload, request, engine, None, None)
         if vocabulary is not None and stt_correction_enabled() and isinstance(result.get("text"), str):
             result = _correct_transcript(result, vocabulary)
             made = result["corrections"]

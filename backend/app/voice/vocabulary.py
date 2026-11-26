@@ -20,7 +20,7 @@ MAX_TERM_CHARS = 60
 SEPARATOR = ", "
 FIXED_TERMS = (
     "BIOS", "SSD", "NVMe", "VPN", "DNS", "DHCP", "IP", "RAM", "USB", "CPU", "GPU", "Wi-Fi",
-    "Outlook", "Windows", "Active Directory",
+    "Outlook", "Windows", "Active Directory", "ITGlasses",
 )
 # File names, upload copies ("(18)"), underscores: not something a person says.
 _FILE_LIKE = re.compile(r"_|\.(?:pdf|docx?|txt|md|xlsx?|pptx?|csv)\s*$|\(\d+\)\s*$", re.IGNORECASE)
