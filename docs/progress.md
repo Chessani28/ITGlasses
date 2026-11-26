@@ -585,3 +585,15 @@ Arreglado (pruebas en `tests/test_user_test_2026_11_26.py`, casos nuevos en `eva
 
 Queda: «¿Me ayudas con mi tarea de historia?» sin pregunta concreta se niega (una pregunta concreta sí se contesta);
 el clima encuentra páginas pero no las puede leer (dinámicas). Examen: 109/118, sin retrocesos.
+
+### Sugerencias del asistente sobre un procedimiento y lectura por partes
+
+- «¿Qué le agregarías?», «¿le falta algún paso?», «¿sobra algún paso?», «¿cómo lo mejorarías?»… sobre el procedimiento
+  de la conversación: el modelo recibe los pasos reales del manual y la pregunta, y responde con 2 a 4 sugerencias
+  marcadas «Sugerencias del asistente para «X» (no están en el manual)». Qué sobra o se repite tiene su propio
+  prompt (con uno solo, el modelo de 4B siempre proponía agregar). Los pasos del manual no cambian. Antes se negaba
+  con «No pude verificar ese procedimiento en los manuales».
+- Voz: al seguir un procedimiento por partes, la burbuja muestra lo mismo que se dice (mostraba del paso 4 al 8 y el
+  siguiente «sí» con 7 y 8 parecía repetido); un «sí» después del último paso dice «Esos fueron todos los pasos».
+- Prueba inestable vista una vez con el examen corriendo a la vez:
+  `test_users_sessions.py::test_activity_slides_the_idle_expiry_but_never_past_the_absolute_one` (sola pasa 3 de 3).

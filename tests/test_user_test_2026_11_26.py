@@ -180,3 +180,85 @@ def test_game_safety_and_names_that_are_not_games_stay_out():
     for question in ("Mi hijo juega Roblox, ¿es seguro?", "Me hackearon la cuenta de Fortnite", "jaja lol",
                      "Mario no puede entrar a su correo"):
         assert game_play_answer(question) is None, question
+
+
+def test_a_procedure_read_in_parts_shows_the_same_part_it_says():
+    # Voice, 8 steps: "Sí" read 4-6 but the bubble showed 4-8, so the next "Sí" (7-8) looked repeated.
+    service, sid = build(), session()
+
+    def say(message):
+        return asyncio.run(service.chat(message, session_id=sid, channel="voice"))
+
+    first = say("¿Cuáles son los pasos de COMPUTER PREPARATION?")
+    assert "Paso 3" in first["speech"] and "Paso 4" not in first["speech"]
+    second = say("Sí")
+    assert "Paso 4" in second["speech"] and "Paso 6" in second["speech"] and "Paso 7" not in second["speech"]
+    assert "Paso 7" not in second["answer"]                    # the bubble = what was said
+    third = say("Sí")
+    assert "Paso 7" in third["answer"] and "Paso 8" in third["answer"]
+    assert "Paso 4" not in third["answer"]
+
+
+def test_yes_after_the_last_step_says_there_are_no_more():
+    service, sid = build(), session()
+
+    def say(message):
+        return asyncio.run(service.chat(message, session_id=sid, channel="voice"))
+
+    say("¿Cuáles son los pasos de COMPUTER PREPARATION?")
+    say("Sí")
+    say("Sí")                                                      # 7-8: the last part
+    done = say("Sí")
+    assert "todos los pasos" in done["answer"] and "Paso" not in done["answer"]
+
+
+# --- The assistant's own suggestions about a manual's procedure (asked by the user, never mixed with it) ------------
+
+class RecordingProvider:
+    def __init__(self, answer="Antes del paso 6, apaga el equipo y desconéctalo."):
+        self.answer, self.calls = answer, []
+
+    async def generate(self, message):
+        self.calls.append(message)
+        return self.answer
+
+
+def test_asking_what_to_add_gets_labelled_suggestions_from_the_real_steps():
+    from backend.app.assistant.service import UnifiedAssistantService, SUGGESTIONS_LABEL
+    provider = RecordingProvider()
+    service = UnifiedAssistantService(Knowledge(), provider, web_search=StubWebSearch())
+    sid = session()
+    ask(service, "¿Cuáles son los pasos de COMPUTER PREPARATION?", sid)
+    answer = ask(service, "¿Y si tú le tuvieras que agregar más pasos, cuáles serían?", sid)
+    assert answer["answer"].startswith(SUGGESTIONS_LABEL.format(title="COMPUTER PREPARATION"))
+    assert "no están en el manual" in answer["answer"] and "No pude verificar" not in answer["answer"]
+    assert "apaga el equipo" in answer["answer"]
+    prompt = provider.calls[-1]
+    assert "COMPUTER PREPARATION" in prompt and "Thermal paste" in prompt      # the manual's own steps
+
+
+def test_other_ways_of_asking_for_an_opinion_on_the_steps():
+    from backend.app.assistant.service import asks_for_suggestions
+    for question in ("¿Qué le agregarías?", "¿Le falta algún paso?", "¿Sobra algún paso?", "¿Qué opinas de estos pasos?",
+                     "¿Cómo lo mejorarías?", "¿Se repite algún paso?", "¿Qué le quitarías?", "¿Le cambiarías algo?"):
+        assert asks_for_suggestions(question), question
+    for question in ("¿Cuáles son los pasos?", "Explícame el paso 2", "¿Qué es COMPUTER PREPARATION?", "Sí",
+                     "¿Qué le agrego al café?"):
+        assert not asks_for_suggestions(question), question
+
+
+def test_without_a_procedure_in_the_conversation_it_is_answered_as_before():
+    from backend.app.assistant.service import SUGGESTIONS_LABEL
+    answer = ask(build(), "¿Qué le agregarías?", session())
+    assert not answer["answer"].startswith(SUGGESTIONS_LABEL.split("«")[0])
+
+
+def test_the_suggestions_answer_the_question_asked_and_hide_the_internal_word():
+    provider = RecordingProvider("- El paso 6 y el 7 se pueden hacer juntos.\nCOMPLETO")
+    from backend.app.assistant.service import UnifiedAssistantService
+    service = UnifiedAssistantService(Knowledge(), provider, web_search=StubWebSearch())
+    sid = session()
+    ask(service, "¿Cuáles son los pasos de COMPUTER PREPARATION?", sid)
+    answer = ask(service, "¿Sobra algún paso?", sid)["answer"]
+    assert "¿Sobra algún paso?" in provider.calls[-1]                     # the user's own question reaches the model
+    assert "COMPLETO" not in answer and "se pueden hacer juntos" in answer

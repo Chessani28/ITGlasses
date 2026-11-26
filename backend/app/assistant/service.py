@@ -405,6 +405,27 @@ def game_play_answer(message):
     return None
 
 
+# The user asks for the assistant's own opinion of the procedure being discussed (2026-11-26: "¿Y si tú le tuvieras
+# que agregar más pasos, cuáles serían?" was refused as an unverified company procedure). The manual's steps are never
+# changed: the suggestions come apart, labelled as not being in the manual.
+_ASKS_SUGGESTIONS = re.compile(
+    r"\b(?:agregarias|anadirias|quitarias|cambiarias|mejorarias|modificarias|recomendarias agregar)\b"
+    r"|\b(?:tuvieras|pudieras) que (?:agregar|anadir|quitar|cambiar|mejorar)\b"
+    r"|\b(?:falta|faltan|sobra|sobran|se repite|se repiten)\s+(?:algun|algo|alguno|pasos?)\b"
+    r"|\bque opinas de (?:estos|los|este|el) (?:pasos?|procedimiento)\b"
+    r"|\bcomo (?:lo|la) mejorarias\b")
+SUGGESTIONS_LABEL = "Sugerencias del asistente para «{title}» (no están en el manual):"
+SUGGESTIONS_NONE = "No se me ocurren mejoras claras para «{title}»; los pasos del manual se ven completos."
+REMOVALS_NONE = "No veo pasos que sobren en «{title}»: cada uno revisa algo distinto."
+# "¿Sobra algún paso?": only steps to remove or merge (with one prompt for everything the 4B model kept adding steps).
+_ASKS_REMOVAL = re.compile(r"\b(?:sobra|sobran|se repite|se repiten|quitarias|eliminarias|juntarias)\b")
+
+
+def asks_for_suggestions(message):
+    """True when the message asks what the assistant would add, remove or change in the steps being discussed."""
+    return bool(_ASKS_SUGGESTIONS.search(_fold(message or "")))
+
+
 def clock_answer(message, now=None):
     """Today's date or the time from this server's clock (a web page answered 2024), or None for anything else."""
     text = re.sub(r"[^\w\s]", " ", _fold(message or ""))
@@ -1837,9 +1858,23 @@ class UnifiedAssistantService:
                 state.pop("pending_rest", None)
             return await self._chat_with_topic(message, session_id)
         session_id, state = self.sessions.get(session_id)
+        finished = state.pop("read_to_the_end", False)
         reply = await self._voice_offer_reply(state, session_id, message)
         if reply is not None:
-            return self._voice_result(state, reply, short=False)
+            continued = reply.get("route") != "social" and voice_mode.wants_rest(message)
+            result = self._voice_result(state, reply, short=False)
+            if continued and state.get("pending_rest"):
+                # The rest of a procedure is read in parts too: the bubble shows the part said ("Paso 4…6 ¿Sigo?"),
+                # not the whole rest (it showed 4-8, so the next "Sí" with 7-8 looked repeated).
+                result["answer"] = result["speech"]
+            elif continued:
+                state["read_to_the_end"] = True   # the last part: one more "sí" hears that there is nothing left
+            return result
+        if finished and voice_mode.wants_rest(message):
+            answer = "Esos fueron todos los pasos. ¿Te ayudo con algo más?"
+            self.sessions.remember(state, message, answer, route="social")
+            return self._voice_result(state, {"answer": answer, "session_id": session_id, "route": "social",
+                                              "sources": []}, short=False)
         state["_channel"] = "voice"
         try:
             result = await self._chat_with_topic(message, session_id)
@@ -2010,6 +2045,12 @@ class UnifiedAssistantService:
         if clock is not None:
             self.sessions.remember(state, message, clock)
             return {"answer": clock, "session_id": session_id, "route": "social", "sources": []}
+        # "¿Qué le agregarías?" about the procedure being discussed: the assistant's labelled suggestions.
+        if asks_for_suggestions(message) and state.get("active_procedure") and state.get("active_steps"):
+            answer = await self._suggest_for_procedure(state, message)
+            state["active_route"] = "general"
+            self.sessions.remember(state, message, answer, route="general")
+            return {"answer": answer, "session_id": session_id, "route": "general", "sources": []}
         # How to play a video game: not IT, said the same way every time (never the manuals nor the web).
         game = game_play_answer(message)
         if game is not None:
@@ -2581,6 +2622,41 @@ class UnifiedAssistantService:
         else:
             answer = await self._answer_steps(state, entry["title"], only=[entry])
         return (answer, sources) if answer else None
+
+    async def _suggest_for_procedure(self, state, question=""):
+        """The assistant's own suggestions for the active procedure: what it would add (safety, backup, a check at the
+        end), remove or merge (a repeated step) or reorder, each tied to a step, from the manual's steps only. Labelled
+        SUGGESTIONS_LABEL; the manual's steps are not changed."""
+        title = state.get("active_procedure") or "el procedimiento"
+        steps = self._scope_steps(state)
+        listed = "\n".join(f"{index}. {(step.get('text') or '').strip()}" for index, step in enumerate(steps, start=1))
+        removal = bool(_ASKS_REMOVAL.search(_fold(question or "")))
+        asked = (question or "").strip()[:300]
+        if removal:
+            prompt = (
+                f"Este es el procedimiento «{title}» de un manual de soporte técnico:\n{listed}\n\nEl usuario pregunta: "
+                f"«{asked}». ¿Algún paso sobra, se repite o se podría juntar con otro? Responde en español solo eso, sin "
+                "proponer pasos nuevos: de 1 a 3 líneas que empiecen con «- », cada una con el número del paso y el "
+                "porqué. Si ningún paso sobra, responde solo: COMPLETO."
+            )
+        else:
+            prompt = (
+                f"Eres un técnico de soporte con experiencia. Este es el procedimiento «{title}» de un manual de la "
+                f"empresa:\n{listed}\n\nEl usuario te pide tu opinión: «{asked}». Responde exactamente a eso, en "
+                "español, con 2 a 4 sugerencias breves: pasos que faltan (seguridad, respaldo de datos, una verificación "
+                "al final) o un mejor orden. En cada una di a qué paso se refiere (por ejemplo «antes del paso 6»). Una "
+                "sugerencia por línea, empezando con «- ». No copies los pasos ni inventes datos de la empresa. Si no "
+                "hay nada que sugerir, responde solo: COMPLETO."
+            )
+        try:
+            text = (await self.provider.generate(prompt) or "").strip()
+        except Exception:  # noqa: BLE001 - a failed model call is said plainly
+            return "No pude preparar sugerencias en este momento. Inténtalo de nuevo."
+        # "COMPLETO" is the model's way to say there is nothing to suggest; never shown (it was left after a list).
+        text = "\n".join(line for line in text.splitlines() if line.strip().strip(".").upper() != "COMPLETO").strip()
+        if not text:
+            return (REMOVALS_NONE if removal else SUGGESTIONS_NONE).format(title=title)
+        return SUGGESTIONS_LABEL.format(title=title) + "\n" + text
 
     async def _describe_section(self, state, entry):
         """"¿Qué es <sección>?": what the section is about in one or two sentences written by the model from its
