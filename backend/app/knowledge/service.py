@@ -35,6 +35,17 @@ def reserve_answer(evidence, reason):
 
 
 # What a company question asked about, for the refusal without evidence: (this, a) in Spanish.
+CHUNK_CHARS_DEFAULT = 900
+
+
+def chunk_chars():
+    """Largest chunk (characters) when indexing a manual. ITGLASSES_CHUNK_CHARS overrides it (80-4000); a changed
+    value applies to documents indexed or reindexed afterwards."""
+    import os
+    raw = os.environ.get("ITGLASSES_CHUNK_CHARS", "").strip()
+    return int(raw) if raw.isdigit() and 80 <= int(raw) <= 4000 else CHUNK_CHARS_DEFAULT
+
+
 def embeddings_keep_min_bytes():
     """Available RAM needed to keep the embedding model loaded after a search: Whisper's 3 GiB plus a small margin: the voice service frees it anyway before giving up on Whisper.
     ITGLASSES_EMBEDDINGS_KEEP_MIN_MB overrides the default 3584 MB."""
@@ -122,7 +133,8 @@ class KnowledgeService:
                     metadata = metadata.model_copy(update={"procedure_id": discovered[0]})
             # Secrets in the manual (tokens, keys, passwords) are never stored, embedded or answered.
             from .redaction import redact
-            pieces = [{**piece, "text": redact(piece["text"])[0]} for piece in chunks(result["blocks"])]
+            pieces = [{**piece, "text": redact(piece["text"])[0]}
+                      for piece in chunks(result["blocks"], chunk_chars())]
             if len(pieces) > 1000:
                 raise KnowledgeError("chunk_limit", "Documents are limited to 1000 chunks.", 413)
             fingerprint = await self.embeddings.fingerprint()

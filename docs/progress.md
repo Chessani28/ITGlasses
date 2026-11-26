@@ -489,3 +489,11 @@ pregunta y no se liberaba (4.5 → 5 GB en 12 preguntas; privada 9.7 GB tras un 
 (`LLAMA_ARG_CACHE_RAM=0`): el proceso queda fijo en ~0.7 GB tras 80+ preguntas, RAM libre 7.8–8.8 GB. Examen sin
 cambios en aciertos (voz 12/12, conceptos 24/25, manuales 23/30) y conceptos más rápidos (mediana 2.3 s).
 Para aplicarlo a un Ollama ya corriendo: `stop-all.ps1` y `start-all.ps1`.
+
+## Pedazos más finos en los manuales — experimento, 2026-11-25
+
+Copias del índice reindexadas con pedazos de 450 y 300 caracteres (hoy 900, casi una página por pedazo): manuales
+23/30 en los tres tamaños; con 300 un caso empeora (Dominos responde un fragmento). **No se reindexó el índice real.**
+El límite que queda es la selección del modelo de 4B (elige la página vecina). El tamaño queda configurable
+(`ITGLASSES_CHUNK_CHARS`, 900 por defecto) para manuales futuros. Dos casos del examen fallaban por palabras clave
+("nombre de host", "no se puede determinar") y se ampliaron (casos locales).

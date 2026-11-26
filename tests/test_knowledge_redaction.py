@@ -73,6 +73,23 @@ def test_a_new_manual_is_stored_without_its_secrets(tmp_path):
     assert "Hola1234" not in stored and FAKE_HEX not in stored and "toner cartridge" in stored
 
 
+def test_the_chunk_size_is_configurable(tmp_path, monkeypatch):
+    from backend.app.knowledge.service import chunk_chars
+    monkeypatch.delenv("ITGLASSES_CHUNK_CHARS", raising=False)
+    default = chunk_chars()
+    monkeypatch.setenv("ITGLASSES_CHUNK_CHARS", "120")
+    assert chunk_chars() == 120
+    monkeypatch.setenv("ITGLASSES_CHUNK_CHARS", "5")  # nonsense is ignored
+    assert chunk_chars() == default
+    monkeypatch.setenv("ITGLASSES_CHUNK_CHARS", "120")
+    text = "\n".join(f"Sentence number {n} of a long manual page about printers." for n in range(12))
+    svc = KnowledgeService(tmp_path, EnglishOnlyEmbeddings(), PickingSelector())
+    asyncio.run(svc.ingest("long.md", text.encode(), Metadata(title="Long", procedure_id="5", version="1",
+                                                              authorized=True)))
+    sizes = [len(row["text"]) for row in svc.store.eligible_chunks()]
+    assert len(sizes) > 3 and max(sizes) <= 120
+
+
 def test_a_manual_indexed_before_redaction_never_returns_its_secrets(tmp_path):
     svc = build(tmp_path)
     with closing(sqlite3.connect(svc.store.path)) as db:  # as if it had been indexed by an older version
