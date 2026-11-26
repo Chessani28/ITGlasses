@@ -316,9 +316,9 @@ def _proper_nouns(text):
     """
     names = []
     sentence_start = True
-    for match in re.finditer(r"[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9'-]*|[.!?;:]", text or ""):
+    for match in re.finditer(r"[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9'-]*|[.!?;:(]", text or ""):
         word = match.group()
-        if word in ".!?;:":
+        if word in ".!?;:(":
             sentence_start = True
             continue
         if len(word) < 2 or not word[0].isupper():
@@ -424,6 +424,26 @@ _ASKS_REMOVAL = re.compile(r"\b(?:sobra|sobran|se repite|se repiten|quitarias|el
 def asks_for_suggestions(message):
     """True when the message asks what the assistant would add, remove or change in the steps being discussed."""
     return bool(_ASKS_SUGGESTIONS.search(_fold(message or "")))
+
+
+# A follow-up that asks about the situation just read in a manual: "¿puedo…?", "¿debo…?", "¿y si…?".
+_MANUAL_FOLLOWUP = re.compile(r"(?:y\s+)?(?:puedo|podria|debo|deberia|se puede|se debe|hay que|tengo que|es necesario|"
+                              r"es normal|es peligroso|que pasa si|y si|y cuando|y despues|y luego|cuanto tiempo|"
+                              r"cada cuanto|con que"
+                              # What the user already tried: "Ya revisé el cable y está bien", "Sigue igual".
+                              r"|ya\s+(?:lo\s+|la\s+)?\w+(?:e|i)\b|sigue|no funciona|no sirve|no jala|tampoco)\b")
+# "¿Cómo lo recupero?", "¿cómo hago…?": a how-to question ("¿cómo se llama…?" asks a name).
+_ASKS_HOW = re.compile(r"\bcomo\b(?!\s+se\s+llama)")
+
+
+# The step and sentence translation. Names on screen stay as written: a technician looks for "System Menu" and
+# "Print Spooler" on the printer, not for "Menú Sistema" (the guards rejected those, leaving the English text).
+TRANSLATION_PROMPT = (
+    "Traduce al espanol el texto de abajo. Devuelve UNICAMENTE la traduccion, en una sola linea, sin explicaciones, "
+    "sin ejemplos, sin notas, sin instrucciones adicionales y sin anadir informacion que no aparezca en el texto "
+    "original. Conserva los terminos tecnicos. Deja sin traducir, tal como aparecen, los nombres de menús, botones, "
+    "pantallas, servicios, carpetas y códigos (las palabras con mayúscula dentro de la frase).\n\nTexto:\n"
+)
 
 
 def clock_answer(message, now=None):
@@ -947,6 +967,10 @@ class UnifiedAssistantService:
         return scope
 
     # ------------------------------------------------------------- generation
+    # A marker is not added content when the source says the same ("for example" → "por ejemplo").
+    _MARKER_SOURCES = {"por ejemplo": ("for example", "e.g.", "por ejemplo"), "puedes": ("can ", "may ", "puede"),
+                       "debes ": ("must", "should", "have to", "debe"), "nota:": ("note:", "nota:"),
+                       "importante:": ("important", "importante")}
     _TRANSLATION_MARKERS = (
         "explicaci", "explica:", "por ejemplo", "consejo", "nota:", "recuerda que",
         "importante:", "ademas", "asimismo", "en resumen", "puedes", "debes ",
@@ -1021,12 +1045,7 @@ class UnifiedAssistantService:
         cache = state.setdefault("translations", {})
         if text in cache:
             return cache[text]
-        prompt = (
-            "Traduce al espanol el texto de abajo. Devuelve UNICAMENTE la traduccion, "
-            "en una sola linea, sin explicaciones, sin ejemplos, sin notas, sin "
-            "instrucciones adicionales y sin anadir informacion que no aparezca en el "
-            "texto original. Conserva los terminos tecnicos.\n\nTexto:\n" + text
-        )
+        prompt = TRANSLATION_PROMPT + text
         answer = ""
         try:
             answer = await self.provider.generate(prompt)
@@ -1064,7 +1083,9 @@ class UnifiedAssistantService:
         if not line:
             return source
         lowered = line.casefold()
-        if any(marker in lowered for marker in cls._TRANSLATION_MARKERS):
+        said = source.casefold()
+        if any(marker in lowered and not any(word in said for word in cls._MARKER_SOURCES.get(marker, ()))
+               for marker in cls._TRANSLATION_MARKERS):
             return source
         if len(line) > max(60, int(len(source) * 2.2)):
             return source
@@ -1076,7 +1097,8 @@ class UnifiedAssistantService:
             return source
         # New lines, bullets or quotes are formatting the model invented.
         # Quoted text is only acceptable when the source is quoted too.
-        invented_format = re.search(r"[\n•·‣*>|]", line)
+        # (A ">" of a menu path that the source has is not invented: "System Menu > Report > Status Page".)
+        invented_format = [char for char in re.findall(r"[\n•·‣*>|]", line) if char not in source]
         if invented_format:
             return source
         quotes = "\"'“”«»‘’"
@@ -1123,12 +1145,20 @@ class UnifiedAssistantService:
     _MULTIWORD_NAME = re.compile(r"(?<![.!?:]\s)(?<!^)\b([A-Z][A-Za-z0-9]+(?:\s+[A-Z][A-Za-z0-9]+)+)\b")
     _QUOTED = re.compile(r"[\"“«]([^\"”»]{2,60})[\"”»]")
 
+    @staticmethod
+    def _without_leading_codes(name):
+        """A table row has no punctuation: "C6000 Fuser" is a code and a word, not a name on screen."""
+        words = name.split()
+        while words and re.search(r"\d", words[0]):
+            words.pop(0)
+        return " ".join(words) if len(words) >= 2 else ""
+
     @classmethod
     def _drops_name(cls, source, translation):
         """A name on screen must survive the translation: multiword capitalized names in the middle of a sentence
         ("Newly Added", "Centris Network") and quoted labels ("Recording"). A technician looks for that exact text;
         a translated folder or button name points at something that does not exist."""
-        names = [match.group(1) for match in cls._MULTIWORD_NAME.finditer(source or "")]
+        names = [cls._without_leading_codes(match.group(1)) for match in cls._MULTIWORD_NAME.finditer(source or "")]
         names += [match.group(1).strip() for match in cls._QUOTED.finditer(source or "")]
         folded = (translation or "").casefold()
         return any(name.casefold() not in folded for name in names if name.strip())
@@ -1167,6 +1197,8 @@ class UnifiedAssistantService:
         antes ahora usted rough archivo archivos grupo grupos red redes
         equipo equipos sistema sistemas opciones opcion recien añadido
         added nuevo nuevas nuevo
+        apaga enciende sigue abre cierra reinicia espera llama revisa verifica imprime conecta desconecta
+        selecciona pulsa presiona haz usa instala comprueba confirma asegúrate busca elige pide cambia
     """.split())
 
     # Bilingual pairs used to recognise a translated common noun. If the
@@ -1326,6 +1358,9 @@ class UnifiedAssistantService:
         # The source is a single step; a translation that carries a second
         # sentence is adding instructions.
         src_sentences = _sentence_count(source)
+        # A table row joins its cells without a period ("C6000 Fuser heater error Turn the printer off…"): each
+        # lowercase word followed by a capitalized one is a hidden sentence break, so its translation may use two.
+        src_sentences += len(re.findall(r"(?<=[a-z0-9)]) (?=[A-Z][a-z]{2,}\b)", source or ""))
         tr_sentences = _sentence_count(translation)
         if tr_sentences > src_sentences:
             return True
@@ -1415,9 +1450,10 @@ class UnifiedAssistantService:
         return "\n\n".join(blocks)
 
     @staticmethod
-    def _clearly_best_title(procedures, message):
+    def _clearly_best_title(procedures, message, min_shared=1):
         """The procedure whose title shares clearly more words with the message (2 or more word roots, strictly more
-        than any other), or None: "solucionar un problema de conexión VPN" → "…resolver problemas de VPN"."""
+        than any other), or None: "solucionar un problema de conexión VPN" → "…resolver problemas de VPN". With
+        min_shared=1, also the only title that shares one word (no rival)."""
         from backend.app.knowledge.retrieval import tokens
 
         def roots(text):
@@ -1426,6 +1462,10 @@ class UnifiedAssistantService:
         scores = sorted(((len(asked & roots(p.get("title"))), index) for index, p in enumerate(procedures)),
                         reverse=True)
         if scores and scores[0][0] >= 2 and (len(scores) == 1 or scores[0][0] > scores[1][0]):
+            return procedures[scores[0][1]]
+        # One shared word and no other title shares any ("preparar una laptop nueva" → "Preparación física del
+        # equipo", 2026-11-26): no rival, so it is that one.
+        if min_shared <= 1 and scores and scores[0][0] == 1 and (len(scores) == 1 or scores[1][0] == 0):
             return procedures[scores[0][1]]
         return None
 
@@ -1590,6 +1630,16 @@ class UnifiedAssistantService:
             return True
         text = _fold(message or "").lstrip("¿¡ \t")
         return bool(IT_CONTEXTUAL_FOLLOWUP.search(text))
+
+    @staticmethod
+    def _continues_manual(state, message):
+        """A short follow-up ("¿Puedo usar unas pinzas de metal?", "¿Y si sigue atorada?") right after an answer from a
+        manual: the manual is asked first, with the previous question as context. A question of its own ("¿Qué es una
+        VPN?") is not glued to it."""
+        if state.get("active_route") != "knowledge" or not state.get("active_document_id") or not state.get("history"):
+            return False
+        text = _fold(message or "").lstrip("¿¡ \t")
+        return len(text.split()) <= 15 and bool(_MANUAL_FOLLOWUP.match(text))
 
     async def _general_fallback_answer(self, state, message, use_history=True):
         """General answer to a question the manuals did not cover: GENERAL_NOTICE first when it is IT. A refusal for lack of
@@ -1775,6 +1825,12 @@ class UnifiedAssistantService:
                         "que lo aclare.")
         if state.get("active_subject"):
             context += "\nTema explícito de soporte activo: " + state["active_subject"] + ". Mantén ese sujeto en seguimientos sin sujeto explícito; no conviertas el objeto de una conexión en el dispositivo averiado. Si hay ambigüedad, pregunta."
+        manual = state.pop("_manual_context", None)
+        if manual:
+            # The previous exchange came from a manual (it never reaches the general model's turns): the thread.
+            context += ("\n\nJusto antes, según un manual de la empresa:\nUsuario: " + manual[0] + "\nAsistente: "
+                        + manual[1] + "\nSigue esa conversación hablándole directo al usuario (de tú): dile qué "
+                        "revisar ahora, sin repetir lo que ya hizo ni estas indicaciones.")
         missing = (
             "Los manuales autorizados no cubren esta pregunta. Respóndela con conocimiento general de TI; no te "
             "niegues por falta de documentación.\n" if documentation_missing else ""
@@ -2313,10 +2369,11 @@ class UnifiedAssistantService:
         documentation_only = bool(DOCUMENTED_TOPIC.search(_fold(message)))
         general_followup = documentation_only and self._general_followup(state, message)
         ordinary_general = self._is_conceptual(message) or self._continues_general(state, message)
+        continues_manual = self._continues_manual(state, message)
         needs_knowledge = (
             needs_web or documentation_only or self._is_it_related(message)
             or self._continues_it(state, message) or not ordinary_general
-            or self._names_manual_term(message)
+            or self._names_manual_term(message) or continues_manual
         )
 
         # Non-IT conceptual questions and ordinary follow-ups retain the fast,
@@ -2334,7 +2391,11 @@ class UnifiedAssistantService:
             from backend.app.knowledge.models import KnowledgeError, KnowledgeRequest
             if self.knowledge is None:
                 raise RuntimeError("authorized knowledge service is unavailable")
-            request = KnowledgeRequest(message=message,
+            # A short follow-up of a manual answer carries the previous question ("¿Cómo saco una hoja atorada?
+            # ¿Puedo usar unas pinzas de metal?"): alone it matches nothing in the manual.
+            asked = (f"{state['history'][-1][0]} {message}"[:4000] if continues_manual and state.get("history")
+                     else message)
+            request = KnowledgeRequest(message=asked,
                                        conversation_id=state.get("knowledge_conversation_id"))
             try:
                 result = await self.knowledge.query(request)
@@ -2375,6 +2436,16 @@ class UnifiedAssistantService:
             evidence_sufficient = False
             result = result.model_copy(update={"status": "insufficient_evidence", "documentation_sufficient": False,
                                                "sources": []})
+        if (evidence_sufficient and continues_manual and result.intent == "information"
+                and not getattr(result, "excerpts", None)):
+            # A follow-up the manual has no sentence for ("Ya revisé el cable y está bien"): its raw first piece was
+            # shown ("Network Printer Troubleshooting Guide · Document ID…"). It is answered in general, knowing what
+            # the manual said just before.
+            evidence_sufficient = False
+            result = result.model_copy(update={"status": "insufficient_evidence", "documentation_sufficient": False,
+                                               "sources": []})
+            last = state["history"][-1]
+            state["_manual_context"] = (str(last[0])[:500], _without_notice(str(last[1]))[:800])
         if evidence_sufficient and (not needs_web or documentation_only) and named_document is not None:
             own = [s for s in result.sources if s.get("document_id") == named_document.document_id]
             if not own:
@@ -2417,6 +2488,13 @@ class UnifiedAssistantService:
                 answer = self._answer_document(state)
             if answer is None and kind == "procedure":
                 answer = self._answer_procedure(state)
+            if answer is None and kind is None and _ASKS_HOW.search(_fold(message)):
+                # "Un usuario borró un archivo, ¿cómo lo recupero?": a procedure whose title clearly matches (2 words
+                # or more) is read as steps, not as a few loose sentences of it (2026-11-26).
+                best = self._clearly_best_title([p for p in state.get("procedures") or [] if p.get("steps")],
+                                                message, min_shared=2)
+                if best is not None:
+                    answer = await self._answer_steps(state, message, only=[best])
             if answer is None and getattr(result, "excerpts", None):
                 answer = await self._excerpt_answer(state, result)
             if answer is None:

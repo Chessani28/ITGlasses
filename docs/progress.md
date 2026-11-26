@@ -597,3 +597,33 @@ el clima encuentra páginas pero no las puede leer (dinámicas). Examen: 109/118
   siguiente «sí» con 7 y 8 parecía repetido); un «sí» después del último paso dice «Esos fueron todos los pasos».
 - Prueba inestable vista una vez con el examen corriendo a la vez:
   `test_users_sessions.py::test_activity_slides_the_idle_expiry_but_never_past_the_absolute_one` (sola pasa 3 de 3).
+
+## 2026-11-26 — Manuales de prueba (Grupo Andina, ficticio)
+
+Tres PDF hechos para probar (`work/manuales-prueba/`, no versionado: alta de laptops en español, impresoras de red
+en inglés, respaldos en español; preguntas y respuestas esperadas en `preguntas-de-prueba.md`; casos del examen en
+`evals/cases/local/manuales-prueba.json`). Resultado: 23/28 al subirlos → 28/28. Lo que se arregló (pruebas en
+`tests/test_test_manuals_2026_11_26.py`):
+
+- Subida: un manual con «Procedimiento 1:», «Procedimiento 2:»… se rechazaba («Multiple procedure identifiers»);
+  ahora se indexa sin id automático (con uno solo, se toma como antes).
+- Pedazos: se cortaba después de «4. » (tomado por fin de oración) y el paso perdía su número; se corta en un salto
+  de línea o en un fin de oración real. Los manuales reales no habían perdido pasos.
+- Códigos (C6000, J0511, PRN-3-A): un código de la pregunta encontrado tal cual hace relevante ese pedazo y lo pone
+  primero; «¿qué significa <código>?» es información, no identificación.
+- «nombre» solo identifica el documento cuando se pide el nombre del proceso o del manual («¿con qué nombre se
+  restaura el archivo?» es un dato).
+- Procedimiento por la pregunta: un título con una palabra en común y sin rival se elige («preparar una laptop
+  nueva»); «¿cómo…?» con un título claramente parecido (2 palabras) da sus pasos.
+- Seguimiento de una respuesta de manual («¿Puedo usar unas pinzas de metal?», «Ya revisé el cable…», «Sigue igual»):
+  se pregunta al manual con la pregunta anterior; si el manual no tiene una frase para eso, respuesta general que
+  conoce lo que dijo el manual (antes: respuesta general sin hilo o el pedazo crudo del manual).
+- Traducción de manuales en inglés: el prompt pide dejar sin traducir nombres de menús, botones y servicios; «>» del
+  original, «por ejemplo» si el original dice «for example», imperativos con tú («Apaga») y una mayúscula tras «(»
+  ya no rechazan una traducción fiel; una fila de tabla («C6000 Fuser… Turn…») no es un nombre de pantalla.
+- Empate entre manuales: se usa el que nombra la pregunta («…para el training» → Training Setup Guideline); si no,
+  la pregunta nombra los manuales («Lo encontré en «A» y «B». ¿De cuál quieres la respuesta?»).
+
+Queda: una traducción que renombra un menú («Menú Sistema» por «System Menu») se sigue rechazando a propósito y esa
+frase queda en inglés; «procedimiento 2» por número no ubica la sección (sí por nombre); los títulos de los
+manuales de prueba quedaron como el nombre del archivo.

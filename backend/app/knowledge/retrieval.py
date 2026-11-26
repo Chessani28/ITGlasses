@@ -10,6 +10,31 @@ STOP |= set("an and are be do does did in on at by as or if which who whom where
             "about into than then so".split())
 
 
+# A code of a manual: letters and digits in one word ("C6000", "J0511", "PRN-3-A"); never a quantity with its unit
+# ("16GB", "65W") nor a plain number. The one word a question about an error code shares with the manual is the code.
+_CODE = re.compile(r"(?<![\w-])[a-z0-9]+(?:-[a-z0-9]+)*(?![\w-])")
+_UNIT = re.compile(r"\d+(?:[.,]\d+)?(?:gb|mb|tb|kb|ghz|mhz|hz|w|v|mm|cm|in|p|k|x|h|s|ms)")
+
+
+def code_tokens(text):
+    """The codes of a text (folded): words with letters and digits, at least 4 characters without hyphens."""
+    found = set()
+    for word in _CODE.findall(normalize(text or "")):
+        bare = word.replace("-", "")
+        if (len(bare) >= 4 and re.search(r"\d", bare) and re.search(r"[a-z]", bare)
+                and not _UNIT.fullmatch(bare)):
+            found.add(word)
+    return found
+
+
+def code_hits(codes, text):
+    """How many of the question's codes appear as such in the text."""
+    if not codes:
+        return 0
+    folded = normalize(text or "")
+    return sum(1 for code in codes if re.search(r"(?<![\w-])" + re.escape(code) + r"(?![\w-])", folded))
+
+
 def tokens(text):
     return list(dict.fromkeys(t for t in re.findall(r"[\w.-]+", normalize(text)) if len(t) > 1 and t not in STOP))
 
@@ -27,7 +52,14 @@ def intent(text):
     # "qué es lo primero / lo que…" asks for information, not for a name.
     # "que es" as whole words: "confirmar que esté corriendo" (folded "que este") is not a definition question.
     # "cómo se llama la carpeta / el botón" asks for a fact of the manual; only the process itself is a name question.
-    if re.search(r"como se llama(?!\s+(?:la|las|los|el)\s+(?!proceso|procedimiento))|nombre"
+    # "¿Qué significa el error C6000?" asks what the manual says about the code: information, not a name.
+    if code_tokens(text) and re.search(r"que (?:es|significa)|significado", text):
+        return "information"
+    # "nombre" is a name question only for the process or the document itself ("dame su nombre", "el nombre del
+    # procedimiento"); "¿con qué nombre se restaura el archivo?" / "el nombre del equipo" ask a fact of the manual.
+    if re.search(r"como se llama(?!\s+(?:la|las|los|el)\s+(?!proceso|procedimiento))"
+                 r"|(?:su|tu) nombre|nombre (?:del|de la|de este|de esta) (?:proceso|procedimiento|manual|documento|"
+                 r"guia|politica)"
                  r"|que (?:es\b(?! lo\b)|significa)|definicion|no recuerdo", text):
         return "identify"
     ids = exact_ids(text)
@@ -73,6 +105,7 @@ class Retriever:
             ranks = {i: rank + 1 for rank, i in enumerate(semantic_order)}
             query_tokens = set(words)
             original_tokens = set(tokens(question))
+            codes = code_tokens(question)
             result = []
             for index, row in enumerate(rows):
                 chunk_tokens = set(tokens(row["title"] + " " + row["scope"] + " " + row["text"]))
@@ -81,12 +114,15 @@ class Retriever:
                 score = 1 / (60 + ranks[index]) + (1 / (60 + lexical_rank) if lexical_rank else 0)
                 # overlap_original: only the user's own words (what the relevance gates were calibrated on).
                 result.append({**row, "semantic": round(float(scores[index]), 6), "hybrid": score, "overlap": overlap,
-                               "overlap_original": len(original_tokens & chunk_tokens)})
-            return sorted(result, key=lambda r: (-r["hybrid"], -r["semantic"], r["id"]))
+                               "overlap_original": len(original_tokens & chunk_tokens),
+                               "code_hit": code_hits(codes, row["text"])})
+            # A piece with the question's code first: it is the evidence ("C6000" in the error code table).
+            return sorted(result, key=lambda r: (-r["code_hit"], -r["hybrid"], -r["semantic"], r["id"]))
         # Fallback: lexical-only BM25 ranking without semantic scoring
         words = tokens(" ".join([question, *alternates]))
         lexical = self.store.lexical(words)
         query_tokens = set(words)
+        codes = code_tokens(question)
         result = []
         for index, row in enumerate(rows):
             overlap = len(query_tokens & set(tokens(row["title"] + " " + row["scope"] + " " + row["text"])))
@@ -94,5 +130,6 @@ class Retriever:
             if not lexical_rank:
                 continue
             score = 1 / (60 + lexical_rank)
-            result.append({**row, "semantic": 0.0, "hybrid": score, "overlap": overlap, "lexical_only": True})
-        return sorted(result, key=lambda r: (-r["hybrid"], -r["overlap"], r["id"]))
+            result.append({**row, "semantic": 0.0, "hybrid": score, "overlap": overlap, "lexical_only": True,
+                           "code_hit": code_hits(codes, row["text"])})
+        return sorted(result, key=lambda r: (-r["code_hit"], -r["hybrid"], -r["overlap"], r["id"]))

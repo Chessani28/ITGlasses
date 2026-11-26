@@ -12,7 +12,7 @@ import uuid
 
 from .extract import validate, chunks
 from .models import KnowledgeAnswer, KnowledgeError, Metadata
-from .retrieval import Retriever, exact_ids, intent
+from .retrieval import Retriever, exact_ids, intent, tokens
 from .social import detect_social_intent, social_response
 from .store import Store, normalize
 
@@ -127,9 +127,9 @@ class KnowledgeService:
                 raise KnowledgeError(result["error"], result["message"], 422)
             if metadata.procedure_id is None:
                 discovered = exact_ids("\n".join(b["text"] for b in result["blocks"]))
-                if len(discovered) > 1:
-                    raise KnowledgeError("procedure_metadata_required", "Multiple procedure identifiers were found. Supply the primary procedure ID explicitly or split the document.", 422)
-                if discovered:
+                # One "Procedimiento 024" names the document; several ("Procedimiento 1: …", "Procedimiento 2: …") are
+                # the sections of a manual: indexed without an automatic id (it was refused, 2026-11-26).
+                if len(discovered) == 1:
                     metadata = metadata.model_copy(update={"procedure_id": discovered[0]})
             # Secrets in the manual (tokens, keys, passwords) are never stored, embedded or answered.
             from .redaction import redact
@@ -374,11 +374,12 @@ class KnowledgeService:
             # use the hybrid (BM25) score and overlap count instead.
             first_doc = list(best_by_doc.values())[0] if best_by_doc else None
             if first_doc and first_doc.get("lexical_only"):
-                relevant = [r for r in best_by_doc.values() if r["overlap"] >= 2]
+                relevant = [r for r in best_by_doc.values() if r["overlap"] >= 2 or r.get("code_hit")]
             else:
                 # The middle band needs two of the USER'S words in the chunk: words shared only with the English
                 # translation ("SSD", "disk", "Windows") let general questions into unrelated manual pages.
-                relevant = [r for r in best_by_doc.values() if r["semantic"] >= 0.55 or
+                # A code of the question found as such ("C6000") is evidence by itself.
+                relevant = [r for r in best_by_doc.values() if r["semantic"] >= 0.55 or r.get("code_hit") or
                             (r["semantic"] >= 0.42 and r.get("overlap_original", r["overlap"]) >= 2)]
             if exact:
                 relevant = list(best_by_doc.values())[:1]
@@ -388,12 +389,24 @@ class KnowledgeService:
             rivals = [r for r in relevant[1:] if
                       (r["overlap"] >= best["overlap"] if best.get("lexical_only")
                        else abs(r["semantic"] - best["semantic"]) < 0.055)]
+            if rivals and not exact:
+                # A tie broken by the manual the question names: "¿Cuánta RAM… para el training?" → "Training Setup
+                # Guideline", not the laptops manual that also talks about RAM (2026-11-26).
+                asked = set(tokens(request.message))
+                named = [r for r in [best, *rivals] if asked & set(tokens(available[r["document_id"]]["title"]))]
+                if len(named) == 1:
+                    best, rivals = named[0], []
             selected_document = available[best["document_id"]]
             conflicts = [d for d in documents if d["procedure_key"] == selected_document["procedure_key"]]
             if len(conflicts) > 1 and not request.choice_document_id:
                 return respond("conflict", "Existen varias versiones o copias del procedimiento. Necesito que confirmes la versión aplicable; no mezclaré instrucciones.", conflicts)
             if rivals and not exact:
-                return respond("clarification_required", "Encontré varias coincidencias plausibles. ¿Cuál corresponde a tu caso?", [selected_document] + [available[r["document_id"]] for r in rivals])
+                # The question names the manuals: "¿Cuál corresponde a tu caso?" alone gave no choice (by voice above all).
+                tied = [selected_document] + [available[r["document_id"]] for r in rivals]
+                titles = [f"«{d['title']}»" for d in tied]
+                listed = ", ".join(titles[:-1]) + " y " + titles[-1]
+                return respond("clarification_required",
+                               f"Lo encontré en {listed}. ¿De cuál quieres la respuesta?", tied)
             # Explicit selection still cannot resolve a missing requested fact by itself.
             rows = evidence_rows(ranked, selected_document["id"], EVIDENCE_PIECES)
             stats = {"retrieval_ms": retrieval_ms, "semantic_score": best["semantic"], "hybrid_score": best["hybrid"], "candidate_documents": len(best_by_doc)}

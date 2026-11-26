@@ -238,10 +238,15 @@
       "tinta",
       "prueba",
       "software",
-      "reconoc"
+      "reconoc",
+      "red",
+      "conect",
+      "IP",
+      "servidor"
      ],
      "not_contains": [
-      "cable está conectado"
+      "cable está conectado",
+      "El usuario"
      ]
     }
    },

@@ -88,3 +88,50 @@ def test_revisions_and_access(tmp_path):
         await service.access(first['id'], withdrawn=True)
         assert not service.store.eligible_chunks()
     asyncio.run(scenario())
+
+
+def test_a_chunk_never_ends_on_a_step_number():
+    # 2026-11-26, test manuals: the cut was made after "4. " (taken for the end of a sentence), so the number stayed
+    # in one piece and the step's text in the next one, and the procedure lost that step.
+    lines = [f"{n}. Paso número {n} del procedimiento de prueba con texto suficiente para llenar la línea." for n in range(1, 40)]
+    text = "\n".join(lines)
+    pieces = chunks([dict(text=text, page=1, section='S', paragraph=1)])
+    assert ''.join(c['text'] for c in pieces) == text
+    for piece in pieces[:-1]:
+        assert piece['text'].endswith('\n'), repr(piece['text'][-40:])
+    for piece in pieces[1:]:
+        assert re_step.match(piece['text']), repr(piece['text'][:40])
+
+
+def test_without_lines_a_chunk_still_ends_at_a_sentence_not_at_a_number():
+    text = ("Primera oración del texto. " * 20) + "Siga el paso 4. Luego revise todo. " + ("Otra oración más. " * 30)
+    pieces = chunks([dict(text=text, page=1, section='S', paragraph=1)])
+    assert ''.join(c['text'] for c in pieces) == text.strip()
+    for piece in pieces[:-1]:
+        assert not piece['text'].rstrip().endswith(("4.", "paso 4.")), repr(piece['text'][-30:])
+
+
+import re as _re
+re_step = _re.compile(r"^\d+\. ")
+
+
+def test_a_manual_with_several_numbered_procedures_is_indexed(tmp_path):
+    # 2026-11-26: "Procedimiento 1: …", "Procedimiento 2: …" in one manual was refused with "Multiple procedure
+    # identifiers were found" (procedure_metadata_required). It is indexed without an automatic procedure id.
+    async def scenario():
+        service = KnowledgeService(tmp_path, FakeEmbeddings(), None)
+        text = (b"Manual de prueba.\nProcedimiento 1: Preparar el equipo\n1. Encender.\n2. Revisar.\n"
+                b"Procedimiento 2: Entregar el equipo\n1. Firmar.\n2. Cerrar el ticket.\n")
+        document = await service.ingest('manual.txt', text, Metadata(title='Manual', authorized=True))
+        assert document['procedure_id'] is None
+        assert len(service.store.eligible_chunks()) >= 1
+    asyncio.run(scenario())
+
+
+def test_a_single_procedure_number_is_still_taken_as_its_id(tmp_path):
+    async def scenario():
+        service = KnowledgeService(tmp_path, FakeEmbeddings(), None)
+        document = await service.ingest('p.txt', b'Procedimiento 024: Reinicio del servidor.\n1. Apagar.',
+                                        Metadata(title='Reinicio', authorized=True))
+        assert document['procedure_id'] == '24'                  # normalized, as before
+    asyncio.run(scenario())

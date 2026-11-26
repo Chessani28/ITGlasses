@@ -46,13 +46,15 @@ def test_grounding_abstention():
         assert asyncio.run(EvidenceSelector('local').select('question',[{'title':'T','text':'irrelevant'}])) == []
 
 
-def test_id_extraction_and_multiple_id_rejection(tmp_path):
+def test_id_extraction_and_several_ids_are_sections(tmp_path):
+    # 2026-11-26: several ids used to be rejected (procedure_metadata_required); a manual with "Procedimiento 1:",
+    # "Procedimiento 2:" sections could not be uploaded. Now it is indexed without an automatic id.
     async def scenario():
         svc = service(tmp_path)
         doc = await svc.ingest('x.txt', b'Procedimiento 24: Windows.', Metadata(title='Windows', authorized=True))
         assert doc['procedure_id'] == '24'
-        with pytest.raises(KnowledgeError):
-            await svc.ingest('x.txt', b'Procedimiento 25. Procedimiento 26.', Metadata(title='Several'))
+        several = await svc.ingest('y.txt', b'Procedimiento 25. Procedimiento 26.', Metadata(title='Several'))
+        assert several['procedure_id'] is None
     asyncio.run(scenario())
 
 

@@ -76,6 +76,14 @@ def extract(data: bytes, extension: str) -> list[dict]:
     return result
 
 
+def _sentence_end(text: str, low: int, high: int) -> int:
+    """Index of the last ". " in text[low:high] that ends a sentence (not a number like "4. "), or -1."""
+    position = text.rfind(". ", low, high)
+    while position != -1 and position > 0 and text[position - 1].isdigit():
+        position = text.rfind(". ", low, position)
+    return position
+
+
 def chunks(blocks: list[dict], limit: int = 900) -> list[dict]:
     result = []
     for block in blocks:
@@ -84,7 +92,11 @@ def chunks(blocks: list[dict], limit: int = 900) -> list[dict]:
         while start < len(text):
             end = min(start + limit, len(text))
             if end < len(text):
-                boundary = max(text.rfind(". ", start + limit // 2, end), text.rfind("\n", start + limit // 2, end))
+                # A line break first; else the end of a sentence, never "4. " (a step number: cut there, the number
+                # stayed in one chunk and the step's text in the next one, and the procedure lost that step).
+                boundary = text.rfind("\n", start + limit // 2, end)
+                if boundary == -1:
+                    boundary = _sentence_end(text, start + limit // 2, end)
                 if boundary != -1:
                     end = boundary + 1
             result.append({**block, "text": text[start:end], "offset": start})
