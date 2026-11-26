@@ -50,6 +50,31 @@ def test_the_memory_line_warns_below_what_whisper_needs():
     assert low.startswith("POCA") and "2.8 GB" in low and "Vosk" in low
 
 
+GPU_LINE = ("C:\\env\\python.exe -B -m backend.app.voice.persistent_worker --model "
+            "D:\\ITGlasses\\storage\\voice\\models\\faster-whisper-large-v3-turbo --device cuda --compute-type int8_float16")
+CPU_LINE = ("C:\\env\\python.exe -B -m backend.app.voice.persistent_worker --model "
+            "D:\\ITGlasses\\storage\\voice\\models\\faster-whisper-small --device cpu --compute-type int8")
+
+
+def test_whisper_on_the_gpu_is_reported_as_turbo():
+    line = run(f"Get-ITGlassesWhisperStatus -CommandLines @('{GPU_LINE}') -FreeVramMiB 812")
+    assert line == "OK  GPU (large-v3-turbo) - VRAM libre 812 MB"
+
+
+def test_whisper_on_the_cpu_says_what_to_do():
+    line = run(f"Get-ITGlassesWhisperStatus -CommandLines @('{CPU_LINE}') -FreeVramMiB 300")
+    assert line.startswith("CPU (small)") and "VRAM" in line and "Chrome" in line and "start-all" in line
+
+
+def test_whisper_not_loaded_yet():
+    line = run("Get-ITGlassesWhisperStatus -CommandLines @() -FreeVramMiB 2000")
+    assert line.startswith("NO CARGADO")
+
+
+def test_start_all_reports_whisper():
+    assert "Get-ITGlassesWhisperStatus" in (SCRIPTS / "start-all.ps1").read_text(encoding="utf-8")
+
+
 def test_start_all_reports_memory():
     assert "Get-ITGlassesMemoryStatus" in (SCRIPTS / "start-all.ps1").read_text(encoding="utf-8")
 

@@ -52,6 +52,36 @@ function Get-ITGlassesMemoryStatus {
     return "OK  $gb libres"
 }
 
+function Get-ITGlassesWhisperStatus {
+    # One summary line: where the persistent Whisper worker runs. GPU (turbo) understands best (~12% word errors,
+    # ~0.35 s); on the CPU (Small) about 27% and ~2.5 s, which happens when other apps fill the VRAM.
+    param([string[]]$CommandLines = @(), [int]$FreeVramMiB = -1)
+    $worker = @($CommandLines | Where-Object { $_ -match 'persistent_worker' }) | Select-Object -First 1
+    if (-not $worker) {
+        return 'NO CARGADO: se carga con la primera pregunta de voz (puede tardar ~15 s)'
+    }
+    $model = if ($worker -match 'faster-whisper-([^\\/\s"]+)') { $Matches[1] } else { 'whisper' }
+    $device = if ($worker -match '--device\s+(\S+)') { $Matches[1] } else { 'cpu' }
+    if ($device -eq 'cuda') {
+        return "OK  GPU ($model) - VRAM libre $FreeVramMiB MB"
+    }
+    return ("CPU ($model): entiende peor y tarda ~2.5 s. Libera VRAM (Chrome con aceleracion por hardware, " +
+        "reproductores, overlay de NVIDIA) y reinicia con stop-all.ps1 y start-all.ps1.")
+}
+
+function Get-ITGlassesWhisperCommandLines {
+    @(Get-CimInstance Win32_Process -Filter "Name='python.exe'" -ErrorAction SilentlyContinue |
+        Where-Object { $_.CommandLine -match 'persistent_worker' } | ForEach-Object { $_.CommandLine })
+}
+
+function Get-ITGlassesFreeVramMiB {
+    try {
+        [int]((& nvidia-smi --query-gpu=memory.free --format=csv,noheader,nounits 2>$null | Select-Object -First 1).Trim())
+    } catch {
+        -1
+    }
+}
+
 function Get-ITGlassesChatModel {
     # The chat model the backend is configured to use (config.toml / Settings).
     param([string]$ProjectRoot)

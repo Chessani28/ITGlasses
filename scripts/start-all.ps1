@@ -80,8 +80,17 @@ if (-not $bind -or -not (Test-Path -LiteralPath $caddy)) {
 
 $summary['RAM'] = Get-ITGlassesMemoryStatus
 
+# Whisper is preloaded in the background after the backend starts (15-45 s): wait for it a little.
+$whisperLines = Get-ITGlassesWhisperCommandLines
+for ($i = 0; $i -lt 20 -and $whisperLines.Count -eq 0; $i++) {
+    Start-Sleep -Seconds 3
+    $whisperLines = Get-ITGlassesWhisperCommandLines
+}
+$summary['Whisper'] = Get-ITGlassesWhisperStatus -CommandLines $whisperLines -FreeVramMiB (Get-ITGlassesFreeVramMiB)
+
 Write-Host ''
 Write-Host 'ITGlasses:'
 foreach ($item in $summary.GetEnumerator()) { Write-Host ('  {0,-8} {1}' -f $item.Key, $item.Value) }
 Write-Host "  Logs     $logs"
 Write-Host '  Para apagar todo: .\scripts\stop-all.ps1'
+exit 0

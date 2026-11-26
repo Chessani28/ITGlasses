@@ -58,7 +58,7 @@ def test_vocabulary_adds_the_aliases_of_existing_headings_last():
     plain = from_knowledge(Knowledge())
     with_aliases = from_knowledge(Knowledge(), aliases=True)
     assert plain.aliases == 0 and with_aliases.aliases == 6
-    assert with_aliases.stats()["terms"] == plain.stats()["terms"] + 6 <= 33
+    assert with_aliases.stats()["terms"] == plain.stats()["terms"] + 6 <= 34  # 34 since "ITGlasses" joined the fixed terms
     assert with_aliases.stats()["chars"] <= MAX_CHARS
     assert with_aliases.hint.startswith(plain.hint)        # aliases go last: a token limit cuts them first
     assert with_aliases.hint.endswith("frecuencia del CPU")
