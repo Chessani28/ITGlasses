@@ -88,7 +88,7 @@ def _opened(request, db, device_id, owner):
     return conversation_id
 
 
-def resolve(request, session_id):
+def resolve(request, session_id, via=None):
     """Where this exchange goes. KnowledgeError 404 when a web session asks for a conversation that is not its."""
     device_id = getattr(request.state, "device_id", None)
     user_id = getattr(request.state, "user_id", None) if getattr(request.state, "auth_kind", None) == "session" else None
@@ -97,6 +97,8 @@ def resolve(request, session_id):
     try:
         if device_id:
             owner, label, source = _device(device_id)
+            if via == "glasses":
+                source = "glasses"  # the phone app heard it through the glasses
             if not owner:
                 return _legacy(device_id, session_id)  # a device without an owner: its chats are not saved
             with store.transaction() as db:
@@ -144,9 +146,9 @@ def _accepts_channel(assistant):
         return False
 
 
-async def chat(request, assistant, locks, message, session_id):
+async def chat(request, assistant, locks, message, session_id, via=None):
     """The assistant's answer (dict), with session_id = the saved conversation and history_saved."""
-    target = await asyncio.to_thread(resolve, request, session_id)
+    target = await asyncio.to_thread(resolve, request, session_id, via)
     saved = target.conversation_id is not None
     async with locks.get(target.key):
         if saved:

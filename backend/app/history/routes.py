@@ -192,10 +192,12 @@ def _required_id(payload):
 
 @router.post("/devices/me/conversations/list")
 def device_list(payload: DeviceHistoryRequest, request: Request, response: Response):
-    _, owner = _device_owner(request)
+    device_id, owner = _device_owner(request)
     response.headers["Cache-Control"] = "no-store"
     try:
-        items, next_cursor = manage.list_conversations(owner, None, None, False, 50, payload.cursor)
+        # Only this phone's conversations (its app and its glasses), never the web's or another device's.
+        items, next_cursor = manage.list_conversations(owner, "device", device_id, False, 50, payload.cursor,
+                                                       with_sources=True)
     except ValueError:
         raise KnowledgeError("invalid_cursor", "El cursor de la lista no es válido.", 422) from None
     except store.HistoryUnavailable:
@@ -205,10 +207,10 @@ def device_list(payload: DeviceHistoryRequest, request: Request, response: Respo
 
 @router.post("/devices/me/conversations/read")
 def device_read(payload: DeviceHistoryRequest, request: Request, response: Response):
-    _, owner = _device_owner(request)
+    device_id, owner = _device_owner(request)
     response.headers["Cache-Control"] = "no-store"
     try:
-        return {"conversation": manage.conversation(_required_id(payload), owner)}
+        return {"conversation": manage.conversation(_required_id(payload), owner, device_id)}
     except manage.NotFound:
         raise _not_found() from None
     except store.HistoryUnavailable:

@@ -25,6 +25,9 @@ class AssistantRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     message: str = Field(strict=True, min_length=1, max_length=4000)
     session_id: str | None = Field(default=None, max_length=128)
+    # A paired phone says when the question came through the glasses (voice with "Usar lentes"): the history shows
+    # the glasses icon. Ignored for the web and the API token.
+    via: Literal["phone", "glasses"] | None = None
 
 
 class AssistantResponse(BaseModel):

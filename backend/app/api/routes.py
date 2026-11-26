@@ -56,7 +56,7 @@ async def assistant_chat(payload: AssistantRequest, request: Request):
     started = time.perf_counter()
     try:
         result = await history_chat(request, assistant, request.app.state.conversation_locks, payload.message,
-                                    payload.session_id)
+                                    payload.session_id, via=payload.via)
     except Exception as error:
         metrics.record("chat", (time.perf_counter() - started) * 1000, outcome=type(error).__name__)
         raise

@@ -1,5 +1,5 @@
-"""Chat history in the phone app: the device owner's own conversations (web, phone and glasses), read them, continue
-one (it becomes the device's current conversation, shared with the glasses) or start a new one. Exact POST routes:
+"""Chat history in the phone app: only this phone's conversations (its app and its glasses, with the questions per
+source), read them, continue one (shared with the glasses) or start a new one. Exact POST routes:
 Caddy never publishes path parameters and DPoP proofs reject query strings."""
 import pytest
 
@@ -20,19 +20,46 @@ def test_the_routes_are_exact_phone_routes():
         assert ("POST", ROOT + path) in MOBILE
 
 
-def test_the_list_has_only_the_owners_conversations_including_the_web(setup, people):  # noqa: F811
+def test_the_list_has_only_this_phones_conversations(setup, people):  # noqa: F811
     c, phone, _ = setup
     _, token = paired(c, phone, owner=people["ana"])
     mine = phone_ask(c, phone, token)["session_id"]
     with web() as client:
-        web_id = ask(client, sign_in(client, "ana"))["session_id"]
+        ask(client, sign_in(client, "ana"))                        # the owner's web conversation: not listed
         ask(client, sign_in(client, "beto"))                       # someone else's: never listed
-    listed = call(c, phone, token, LIST).json()
-    assert {item["id"] for item in listed["conversations"]} == {mine, web_id}
-    assert all("title" in item for item in listed["conversations"])
+    listed = call(c, phone, token, LIST).json()["conversations"]
+    assert [item["id"] for item in listed] == [mine]
+    assert listed[0]["title"] and listed[0]["sources"] == {"phone": 1}
 
 
-def test_reading_a_conversation_and_someone_elses_looks_missing(setup, people):  # noqa: F811
+def test_another_phone_of_the_same_owner_is_not_listed(setup, people):  # noqa: F811
+    from backend.app.history import conversations, store
+    c, phone, _ = setup
+    _, token = paired(c, phone, owner=people["ana"])
+    phone_ask(c, phone, token)
+    with store.transaction() as db:                                # the owner's other phone
+        other_id = conversations.device_conversation(db, "otro-celular", people["ana"], "Otro")
+        conversations.record_exchange(db, other_id, "Hola", "Hola", "phone")
+    listed = call(c, phone, token, LIST).json()["conversations"]
+    assert other_id not in {item["id"] for item in listed}
+    assert call(c, phone, token, READ, {"id": other_id}).status_code == 404
+    assert call(c, phone, token, OPEN, {"id": other_id}).status_code == 404
+
+
+def test_questions_through_the_glasses_are_marked(setup, people):  # noqa: F811
+    c, phone, _ = setup
+    _, token = paired(c, phone, owner=people["ana"])
+    phone_ask(c, phone, token)                                    # typed on the phone
+    body = {"message": "¿Y qué es un router?", "via": "glasses"}
+    response = c.post(CHAT, headers=phone.headers("POST", "/assistant/chat", token), json=body)
+    assert response.status_code == 200, response.text
+    [item] = call(c, phone, token, LIST).json()["conversations"]
+    assert item["sources"] == {"phone": 1, "glasses": 1}
+    messages = call(c, phone, token, READ, {"id": item["id"]}).json()["conversation"]["messages"]
+    assert [m["source"] for m in messages] == ["phone", "phone", "glasses", "glasses"]
+
+
+def test_reading_a_conversation_and_the_web_or_someone_elses_looks_missing(setup, people):  # noqa: F811
     c, phone, _ = setup
     _, token = paired(c, phone, owner=people["ana"])
     mine = phone_ask(c, phone, token)["session_id"]
@@ -41,21 +68,31 @@ def test_reading_a_conversation_and_someone_elses_looks_missing(setup, people): 
     roles = [message["role"] for message in read.json()["conversation"]["messages"]]
     assert roles == ["user", "assistant"]
     with web() as client:
+        web_id = ask(client, sign_in(client, "ana"))["session_id"]
         others = ask(client, sign_in(client, "beto"))["session_id"]
+    assert call(c, phone, token, READ, {"id": web_id}).status_code == 404
     assert call(c, phone, token, READ, {"id": others}).status_code == 404
 
 
-def test_opening_a_conversation_makes_the_next_message_continue_it(setup, people):  # noqa: F811
+def test_opening_an_older_conversation_makes_the_next_message_continue_it(setup, people):  # noqa: F811
+    c, phone, _ = setup
+    _, token = paired(c, phone, owner=people["ana"])
+    older = phone_ask(c, phone, token)["session_id"]
+    call(c, phone, token, NEW)
+    assert phone_ask(c, phone, token)["session_id"] != older       # the device's new conversation
+    assert call(c, phone, token, OPEN, {"id": older}).status_code == 200
+    answer = phone_ask(c, phone, token, message="¿Y qué es un router?")
+    assert answer["session_id"] == older                          # the phone (and the glasses) continue it
+    [conversation] = rows("SELECT message_count FROM conversations WHERE id=?", (older,))
+    assert conversation["message_count"] == 4
+
+
+def test_a_web_conversation_cannot_be_opened_from_the_phone(setup, people):  # noqa: F811
     c, phone, _ = setup
     _, token = paired(c, phone, owner=people["ana"])
     with web() as client:
         web_id = ask(client, sign_in(client, "ana"))["session_id"]
-    phone_ask(c, phone, token)                                    # the device's own current conversation
-    assert call(c, phone, token, OPEN, {"id": web_id}).status_code == 200
-    answer = phone_ask(c, phone, token, message="¿Y qué es un router?")
-    assert answer["session_id"] == web_id                         # the phone (and the glasses) continue it
-    [conversation] = rows("SELECT message_count FROM conversations WHERE id=?", (web_id,))
-    assert conversation["message_count"] == 4
+    assert call(c, phone, token, OPEN, {"id": web_id}).status_code == 404
 
 
 def test_new_starts_a_fresh_conversation(setup, people):  # noqa: F811

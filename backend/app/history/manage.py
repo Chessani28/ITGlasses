@@ -48,7 +48,8 @@ def _cursor(value):
         raise ValueError("invalid cursor") from None
 
 
-def list_conversations(user_id, channel=None, device_id=None, deleted=False, limit=50, cursor=None, now=None):
+def list_conversations(user_id, channel=None, device_id=None, deleted=False, limit=50, cursor=None, now=None,
+                       with_sources=False):
     """The user's conversations, newest first: (items, next cursor). deleted=True: the ones that can be restored."""
     if not _exists():
         return [], None
@@ -75,25 +76,40 @@ def list_conversations(user_id, channel=None, device_id=None, deleted=False, lim
     parameters.append(limit + 1)
     with store.transaction() as db:
         rows = [dict(row) for row in db.execute(sql, parameters)]
-    more = len(rows) > limit
-    rows = rows[:limit]
+        more = len(rows) > limit
+        rows = rows[:limit]
+        if with_sources and rows:
+            _add_sources(db, rows)
     return rows, (f"{rows[-1]['last_message_at']}:{rows[-1]['id']}" if more else None)
 
 
-def _owned(db, conversation_id, user_id):
+def _add_sources(db, rows):
+    """Each conversation's questions per source ({"phone": 3, "glasses": 1}): the phone app shows its icons."""
+    marks = ",".join("?" * len(rows))
+    counts = {}
+    for row in db.execute(f"SELECT conversation_id, source, COUNT(*) AS n FROM messages WHERE role='user' "
+                          f"AND conversation_id IN ({marks}) GROUP BY conversation_id, source", [r["id"] for r in rows]):
+        counts.setdefault(row["conversation_id"], {})[row["source"]] = row["n"]
+    for row in rows:
+        row["sources"] = counts.get(row["id"], {})
+
+
+def _owned(db, conversation_id, user_id, device_id=None):
     row = db.execute(f"SELECT {LIST_FIELDS} FROM conversations WHERE id=? AND user_id=? AND deleted_at IS NULL",
                      (conversation_id, user_id)).fetchone()
+    if row is not None and device_id is not None and row["device_id"] != device_id:
+        row = None  # held on another device or on the web: the phone app only sees its own
     if row is None:
         raise NotFound(conversation_id)
     return row
 
 
-def conversation(conversation_id, user_id):
-    """The user's conversation with its messages (the newest MESSAGES_MAX)."""
+def conversation(conversation_id, user_id, device_id=None):
+    """The user's conversation with its messages (the newest MESSAGES_MAX). device_id: only one held on that device."""
     if not _exists():
         raise NotFound(conversation_id)
     with store.transaction() as db:
-        item = dict(_owned(db, conversation_id, user_id))
+        item = dict(_owned(db, conversation_id, user_id, device_id))
         rows = db.execute("SELECT id,role,content,source,route,sources_json,created_at FROM messages "
                           "WHERE conversation_id=? ORDER BY id DESC LIMIT ?",
                           (conversation_id, MESSAGES_MAX + 1)).fetchall()
@@ -151,13 +167,12 @@ def restore(conversation_id, user_id, now=None):
 
 
 def open_for_device(conversation_id, user_id, device_id, now=None):
-    """Check that the user may continue this conversation from the device (phone app: "continue") and close the
-    device's other open conversations. The chat layer then routes the device's messages to it (see chat.resolve);
-    the conversation itself is not moved: a web conversation stays a web conversation."""
+    """Check that the user may continue this conversation of this device (phone app: "continue") and close the
+    device's other open conversations. The chat layer then routes the device's messages to it (see chat.resolve)."""
     if not _exists():
         raise NotFound(conversation_id)
     with store.transaction() as db:
-        _owned(db, conversation_id, user_id)
+        _owned(db, conversation_id, user_id, device_id)
         db.execute("UPDATE conversations SET closed_at=? WHERE device_id=? AND user_id=? AND closed_at IS NULL "
                    "AND deleted_at IS NULL AND id<>?", (_now(now), device_id, user_id, conversation_id))
     return {"id": conversation_id}

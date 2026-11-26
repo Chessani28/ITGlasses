@@ -82,13 +82,18 @@ Resumen solo de metadatos, sin contenido: `.venv\Scripts\python -m backend.app.h
 ## En la app del celular
 
 - Barra fija sobre el cuadro de mensaje, solo conectado: «Historial» y «Nueva conversación».
-- «Historial» lista solo las conversaciones del dueño del celular (web, celular y lentes): título, cuándo,
-  dónde y cuántos mensajes; «Ver conversaciones anteriores…» trae las siguientes 50.
+- «Historial» abre una hoja desde abajo con **solo las conversaciones de ese celular y sus lentes** (nunca las de
+  la web ni las de otro celular del mismo dueño), agrupadas por día. Cada una lleva un icono: celular, lentes, o
+  lentes con un celular chico si hubo preguntas de ambos; la que está en uso va marcada «Actual».
+- La app manda `via: "glasses"` en `/assistant/chat` cuando la pregunta se escuchó por los lentes (app abierta
+  con «Usar lentes» y celular bloqueado); el mensaje se guarda con `source = 'glasses'`. Las conversaciones
+  anteriores a este cambio quedaron como celular.
 - Al abrir una, sus mensajes reemplazan el chat y lo siguiente (escrito, voz o lentes) la continúa mientras
-  se use (igual que la conversación propia del celular: 30 min sin mensajes y vuelve a la suya).
+  se use (30 min sin mensajes y vuelve a la suya).
 - Un celular sin dueño asignado no tiene historial (403, «no tiene dueño asignado»).
 - Rutas POST exactas con el id en el cuerpo (DPoP no admite query y Caddy no publica parámetros de ruta):
-  `/api/v1/devices/me/conversations/list {cursor?}`, `read {id}`, `open {id}`, `new {}`. Caddy sí las publica.
+  `/api/v1/devices/me/conversations/list {cursor?}` (con `sources` por conversación), `read {id}`, `open {id}`,
+  `new {}`. `read` y `open` responden 404 para lo que no es de ese celular.
 
 ## API
 
