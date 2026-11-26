@@ -180,7 +180,7 @@ before any embedding or LLM call. Retrieval filters eligible current revisions.
 
 `qwen3-embedding:0.6b` runs with `num_gpu=0`, four CPU threads, batches of four,
 2048 context tokens, and truncation disabled. It stays loaded while at least
-4.5 GB of RAM remain available (`ITGLASSES_EMBEDDINGS_KEEP_MIN_MB`, default 4608;
+3.5 GB of RAM remain available (`ITGLASSES_EMBEDDINGS_KEEP_MIN_MB`, default 3584;
 reloading it cost 2–3 s per manual question) and is unloaded after a search when
 less remains, so Whisper Small (3 GiB minimum) always fits; before giving up on
 Whisper, the voice service also asks Ollama to unload it. `start-ollama.ps1` keeps two models loaded

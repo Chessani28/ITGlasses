@@ -36,11 +36,11 @@ def reserve_answer(evidence, reason):
 
 # What a company question asked about, for the refusal without evidence: (this, a) in Spanish.
 def embeddings_keep_min_bytes():
-    """Available RAM needed to keep the embedding model loaded after a search: Whisper's 3 GiB plus a margin.
-    ITGLASSES_EMBEDDINGS_KEEP_MIN_MB overrides the default 4608 MB."""
+    """Available RAM needed to keep the embedding model loaded after a search: Whisper's 3 GiB plus a small margin: the voice service frees it anyway before giving up on Whisper.
+    ITGLASSES_EMBEDDINGS_KEEP_MIN_MB overrides the default 3584 MB."""
     import os
     raw = os.environ.get("ITGLASSES_EMBEDDINGS_KEEP_MIN_MB", "").strip()
-    megabytes = int(raw) if raw.isdigit() else 4608
+    megabytes = int(raw) if raw.isdigit() else 3584
     return megabytes * 1024 * 1024
 
 
