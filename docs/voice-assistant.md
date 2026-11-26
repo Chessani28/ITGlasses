@@ -89,6 +89,14 @@ completion. Speech/transcript contents are not logged. There is no public audio
 directory or replay endpoint. Offline operation requires models to be installed
 before disconnecting the machine from the internet. Missing models return 503.
 
+### Whisper base: respaldo ligero antes de Vosk
+
+Cadena de voz a texto: Whisper turbo (GPU) → Whisper Small (CPU, 3 GiB de RAM libre) → **Whisper base (CPU, ~1.5 GiB)**
+→ 503 y el celular cae a Vosk. `base` se usa solo cuando Small no cabe en RAM; entiende mucho mejor que Vosk. Se
+detecta en `storage\voice\models\faster-whisper-base` (copiado del modelo oficial `Systran/faster-whisper-base`,
+`model.bin` SHA-256 `d01c3014…a0a6a9`) o en `ITGLASSES_WHISPER_LIGHT_MODEL`. La respuesta trae
+`whisper_model: base` y `fallback_reason: voice_resource_limit`; la tarjeta de Monitoreo cuenta cuántas veces cayó.
+
 ### Optional Whisper Small pilot
 
 The production dependency manifests are unchanged. Whisper remains optional;
