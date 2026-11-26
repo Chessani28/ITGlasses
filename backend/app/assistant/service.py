@@ -1291,6 +1291,10 @@ class UnifiedAssistantService:
         if not matched:
             return None
         if len(matched) > 1:
+            best = self._clearly_best_title(matched, message)
+            if best is not None:
+                matched = [best]
+        if len(matched) > 1:
             return "¿Qué procedimiento quieres consultar? Opciones: " + "; ".join(p.get("title", "") for p in matched)
         blocks = []
         for procedure in matched:
@@ -1314,6 +1318,21 @@ class UnifiedAssistantService:
         state["active_procedure"] = matched[0].get("title")
         state["current_step_index"] = 0
         return "\n\n".join(blocks)
+
+    @staticmethod
+    def _clearly_best_title(procedures, message):
+        """The procedure whose title shares clearly more words with the message (2 or more word roots, strictly more
+        than any other), or None: "solucionar un problema de conexión VPN" → "…resolver problemas de VPN"."""
+        from backend.app.knowledge.retrieval import tokens
+
+        def roots(text):
+            return {word[:5] for word in tokens(text or "") if len(word) > 2 or word.isupper()}
+        asked = roots(message)
+        scores = sorted(((len(asked & roots(p.get("title"))), index) for index, p in enumerate(procedures)),
+                        reverse=True)
+        if scores and scores[0][0] >= 2 and (len(scores) == 1 or scores[0][0] > scores[1][0]):
+            return procedures[scores[0][1]]
+        return None
 
     def _answer_document(self, state):
         sources = state.get("active_sources") or []
@@ -2515,9 +2534,15 @@ class UnifiedAssistantService:
                 state["current_step_index"] = 0
             state["active_procedure"] = matches[0].get("title")
             state["active_steps"] = (matches[0].get("steps") or [])
-        elif state.get("active_procedure"):
+        elif state.get("active_procedure") is not None:
+            # An untitled procedure ("") is still the active one: "" is not "none".
             entry = next((p for p in procedures if p.get("title") == state["active_procedure"]), None)
             state["active_steps"] = (entry.get("steps") if entry is not None else [])
+        elif len([p for p in procedures if p.get("steps")]) == 1:
+            # A document with a single procedure: that is the one being talked about.
+            only = next(p for p in procedures if p.get("steps"))
+            state["active_procedure"] = only.get("title") or ""
+            state["active_steps"] = only.get("steps") or []
         else:
             fallback = match_procedures(procedures, state.get("active_document") or "")
             if fallback:

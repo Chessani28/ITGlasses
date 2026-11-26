@@ -196,6 +196,29 @@ def test_the_text_channel_never_translates_procedures():
     assert provider.calls == []
 
 
+UNTITLED = {
+    "document": {"id": "doc-1", "title": "Guía de Instalación", "authorized": True},
+    "procedures": [{"number": 1, "title": "", "steps": [
+        {"number": n, "text": text, "substeps": [], "procedure": ""}
+        for n, text in enumerate(["Descargar el instalador.", "Ejecutar como administrador.",
+                                  "Seguir el asistente de instalación."], start=1)]}],
+}
+INSTALL_SOURCES = [{"title": "Guía de Instalación", "document_id": "doc-1", "page": None, "version": "1",
+                    "revision": 1, "filename": "guia.md", "citation_id": "cit-1"}]
+
+
+def test_a_procedure_without_a_title_keeps_its_steps_for_the_follow_ups():
+    from test_assistant_service import StubKnowledge
+    service = build(knowledge=StubKnowledge(catalog=UNTITLED, sources=INSTALL_SOURCES))
+    first = asyncio.run(service.chat("Dame los pasos de la guía de instalación"))
+    second = asyncio.run(service.chat("Explícame el paso 2", first["session_id"]))
+    assert "administrador" in second["answer"]
+    thanks = asyncio.run(service.chat("Gracias", first["session_id"]))
+    assert thanks["route"] == "social"
+    third = asyncio.run(service.chat("¿Y el paso 3?", first["session_id"]))
+    assert "asistente de instalación" in third["answer"]
+
+
 def test_the_web_still_gets_the_whole_procedure():
     service = build()
     result = asyncio.run(service.chat("¿Cuáles son los pasos de COMPUTER PREPARATION?"))

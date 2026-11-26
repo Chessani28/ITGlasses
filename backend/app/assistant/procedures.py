@@ -83,6 +83,18 @@ def is_cover_page(text, page=None) -> bool:
             and not any(line[-1] in ".:;" for line in lines) and not any(_STEP.match(line) for line in lines))
 
 
+# Headings that say nothing about which procedure it is: as a title, "Pasos" would match every "dame los pasos".
+_GENERIC_SECTION = re.compile(
+    r"^(?:page\s+\d+|p[aá]gina\s+\d+|document|documento|pasos|steps|procedimientos?|procedures?"
+    r"|instrucciones|instructions)?$", re.IGNORECASE)
+
+
+def _section_title(chunk) -> str:
+    """The chunk's own heading (markdown sections) as a procedure title; "" for generic ones ("Page 3")."""
+    title = clean_title((chunk.get("section") or "").strip()).rstrip(":").strip()
+    return "" if _GENERIC_SECTION.match(title) else title
+
+
 def parse_document(chunks) -> list:
     """Return ordered procedures with ordered steps for a list of chunks.
 
@@ -92,15 +104,18 @@ def parse_document(chunks) -> list:
     procedures = []
     current = None
     section = ""
+    origin = {}  # id(procedure) -> the chunk heading it started under
 
-    def new_procedure(number, title):
+    def new_procedure(number, title, heading=""):
         nonlocal current, section
         current = {"number": number, "title": title, "steps": [], "notes": []}
         section = ""
         procedures.append(current)
+        origin[id(current)] = heading
         return current
 
     for chunk in chunks:
+        heading_of_chunk = _section_title(chunk)
         citation = {
             "page": chunk.get("page"),
             "section": chunk.get("section"),
@@ -123,7 +138,7 @@ def parse_document(chunks) -> list:
             listed = inline_steps(inline.group(1)) if inline else []
             if listed:
                 if current is None:
-                    new_procedure("", "")
+                    new_procedure("", heading_of_chunk, heading_of_chunk)
                 for number, text in listed:
                     if not any(s["number"] == number and s["section"] == section for s in current["steps"]):
                         current["steps"].append({"number": number, "text": text, "substeps": [],
@@ -142,8 +157,12 @@ def parse_document(chunks) -> list:
                 continue
             step = _STEP.match(line)
             if step:
-                if current is None:
-                    new_procedure("", "")
+                restarted = (current is not None and current["steps"] and int(step.group(1)) == 1
+                             and heading_of_chunk and origin.get(id(current)) != heading_of_chunk)
+                if current is None or restarted:
+                    # A list that starts again under another heading is another procedure: it must never
+                    # overwrite the steps of the previous list (same numbers).
+                    new_procedure("", heading_of_chunk, heading_of_chunk)
                 entry = {"number": int(step.group(1)), "text": step.group(2).strip(),
                          "substeps": [], "section": section, "source": dict(citation)}
                 existing = next(
