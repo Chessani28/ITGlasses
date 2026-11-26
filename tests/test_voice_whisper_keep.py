@@ -14,17 +14,18 @@ GIB = 1024**3
 
 
 @pytest.mark.parametrize(("value", "expected"), [
-    (None, 8 * GIB), ("", 8 * GIB), ("  ", 8 * GIB),
+    (None, 4 * GIB), ("", 4 * GIB), ("  ", 4 * GIB),
     ("6", 6 * GIB), ("6.5", int(6.5 * GIB)), ("12", 12 * GIB),
     ("2", 3 * GIB), ("0.5", 3 * GIB),                      # never below the 3 GiB load limit
-    ("0", 8 * GIB), ("-4", 8 * GIB), ("abc", 8 * GIB), ("nan", 8 * GIB), ("inf", 8 * GIB),
+    ("0", 4 * GIB), ("-4", 4 * GIB), ("abc", 4 * GIB), ("nan", 4 * GIB), ("inf", 4 * GIB),
 ])
 def test_keep_threshold_is_conservative_and_never_below_the_load_limit(value, expected, monkeypatch):
     monkeypatch.delenv("ITGLASSES_WHISPER_KEEP_RAM_GIB", raising=False)
     if value is not None:
         monkeypatch.setenv("ITGLASSES_WHISPER_KEEP_RAM_GIB", value)
     assert whisper_keep_ram_bytes() == expected
-    assert WHISPER_KEEP_RAM_DEFAULT == 8 * GIB
+    # 4 GiB since Ollama's prompt-cache leak was fixed: with 8 a CPU Whisper reloaded (15-18 s) every turn.
+    assert WHISPER_KEEP_RAM_DEFAULT == 4 * GIB
     assert whisper_keep_ram_bytes() >= WHISPER_MIN_LOAD_RAM
 
 
@@ -56,7 +57,7 @@ def test_chat_keeps_whisper_with_ram_above_the_threshold(tmp_path, monkeypatch):
     asyncio.run(exercise())
 
 
-@pytest.mark.parametrize(("keep", "free_gib"), [(None, 7), ("6", 5)])
+@pytest.mark.parametrize(("keep", "free_gib"), [(None, 3.5), ("6", 5)])
 def test_chat_unloads_whisper_with_ram_below_the_threshold(keep, free_gib, tmp_path, monkeypatch):
     monkeypatch.delenv("ITGLASSES_WHISPER_KEEP_RAM_GIB", raising=False)
     if keep:
@@ -65,7 +66,7 @@ def test_chat_unloads_whisper_with_ram_below_the_threshold(keep, free_gib, tmp_p
 
     async def exercise():
         await service.run("stt", wav(), engine="whisper-small")
-        _set_ram(monkeypatch, lambda: free_gib * GIB)  # 7 GiB is below the 8 GiB default
+        _set_ram(monkeypatch, lambda: free_gib * GIB)  # 3.5 GiB is below the 4 GiB default
         await service.release_whisper()
         assert workers[0].close_calls == 1 and not workers[0].alive
 

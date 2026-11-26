@@ -71,16 +71,17 @@ async def ram_for_whisper_load(measure=None, free=None, minimum=WHISPER_MIN_LOAD
         await asyncio.sleep(0.5)  # Ollama releases the memory asynchronously
         available = measure()
     return available
-# Keep the persistent Whisper loaded between voice questions only with plenty of free RAM (chat and speech
-# synthesis otherwise unload it so Ollama and Piper get the memory). Conservative default; never below the load
-# limit. ITGLASSES_WHISPER_KEEP_RAM_GIB overrides it.
-WHISPER_KEEP_RAM_DEFAULT = 8 * 1024**3
+# Keep the persistent Whisper loaded between voice questions while enough RAM stays free (chat and speech
+# synthesis otherwise unload it so Ollama and Piper get the memory). 4 GiB since Ollama's prompt-cache leak was fixed:
+# with 8 a CPU Whisper (~2.4 GiB) could never stay and every question reloaded it (15-18 s). Never below the load
+# limit; the idle monitor still unloads it below 1.5 GiB. ITGLASSES_WHISPER_KEEP_RAM_GIB overrides it.
+WHISPER_KEEP_RAM_DEFAULT = 4 * 1024**3
 
 
 def whisper_keep_ram_bytes(value=None):
     """Free RAM (bytes) required to keep Whisper loaded: the environment value in GiB, at least 3 GiB.
 
-    Missing, invalid, zero or negative values give the conservative default (8 GiB).
+    Missing, invalid, zero or negative values give the default (4 GiB).
     """
     raw = os.environ.get("ITGLASSES_WHISPER_KEEP_RAM_GIB") if value is None else value
     if raw is None or str(raw).strip() == "":
@@ -88,10 +89,10 @@ def whisper_keep_ram_bytes(value=None):
     try:
         gib = float(str(raw).strip())
     except ValueError:
-        logger.warning("ITGLASSES_WHISPER_KEEP_RAM_GIB is not a number; using the 8 GiB default")
+        logger.warning("ITGLASSES_WHISPER_KEEP_RAM_GIB is not a number; using the 4 GiB default")
         return WHISPER_KEEP_RAM_DEFAULT
     if gib != gib or gib in (float("inf"), float("-inf")) or gib <= 0:
-        logger.warning("ITGLASSES_WHISPER_KEEP_RAM_GIB must be positive; using the 8 GiB default")
+        logger.warning("ITGLASSES_WHISPER_KEEP_RAM_GIB must be positive; using the 4 GiB default")
         return WHISPER_KEEP_RAM_DEFAULT
     requested = int(gib * 1024**3)
     if requested < WHISPER_MIN_LOAD_RAM:

@@ -497,3 +497,18 @@ Copias del índice reindexadas con pedazos de 450 y 300 caracteres (hoy 900, cas
 El límite que queda es la selección del modelo de 4B (elige la página vecina). El tamaño queda configurable
 (`ITGLASSES_CHUNK_CHARS`, 900 por defecto) para manuales futuros. Dos casos del examen fallaban por palabras clave
 ("nombre de host", "no se puede determinar") y se ampliaron (casos locales).
+
+## Medición de un turno de voz y Whisper siempre listo — rama feature/whisper-base, 2026-11-25
+
+Turno medido sin lentes (registro real de 26 transcripciones + Piper directo + examen):
+
+| Etapa | Cargado | En frío |
+|---|---|---|
+| Voz a texto (Whisper) | mediana 1.1 s | 15–18 s (p90 16 s) |
+| Asistente | ~1.8 s | ~2–3 s |
+| Texto a voz (Piper) | ~0.4 s por 6–8 s de audio | ~7 s (se precarga al arrancar) |
+
+Los fríos de Whisper venían de su umbral para quedarse cargado en CPU (8 GB libres), que casi nunca se cumplía: cada
+pregunta lo recargaba. Con la RAM estable se baja a 4 GB (`WHISPER_KEEP_RAM_DEFAULT`, `WhisperKeepRamGiB`); el monitor
+lo sigue descargando bajo 1.5 GB. En GPU (turbo) siempre se queda. El streaming ahorraría ~1 s de un turno caliente de
+~3.3 s.

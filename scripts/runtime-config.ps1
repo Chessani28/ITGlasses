@@ -140,7 +140,7 @@ function Set-ITGlassesRuntimeConfiguration {
             }
         }
 
-        # Free RAM (GiB) needed to keep Whisper loaded between voice questions. Optional: the backend uses 8 GiB
+        # Free RAM (GiB) needed to keep Whisper loaded between voice questions. Optional: the backend uses 4 GiB
         # by default and never less than its 3 GiB load limit.
         # Voz 2: Whisper vocabulary hint (hotwords, initial_prompt or off) and the transcript correction (on/off).
         # Optional: the backend uses hotwords and the correction on by default.

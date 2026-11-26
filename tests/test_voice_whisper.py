@@ -425,6 +425,8 @@ def test_request_cancellation_aborts_owned_worker(tmp_path, monkeypatch):
 
 
 def test_returning_to_vosk_and_piper_releases_whisper(tmp_path, monkeypatch):
+    # The fake reports 4 GiB free; a keep threshold above that makes the release the behavior under test.
+    monkeypatch.setenv("ITGLASSES_WHISPER_KEEP_RAM_GIB", "8")
     python, model = prepare_whisper(tmp_path, monkeypatch)
     service = VoiceService(tmp_path)
     workers = configure_fake_worker(monkeypatch, service, python, model)
