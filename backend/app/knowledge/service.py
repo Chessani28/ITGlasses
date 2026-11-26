@@ -65,6 +65,26 @@ _ASKED_ABOUT = (
 )
 
 
+# Words of a manual's title that name no manual in particular ("¿…según el manual?").
+GENERIC_TITLE_WORDS = {"manual", "manuales", "guia", "guide", "politica", "policy", "documento", "document",
+                       "procedimiento", "procedure", "instructivo", "de", "del", "y", "and"}
+
+
+def closest_sentences(question, alternates, candidates, limit=2):
+    """Up to `limit` candidate sentences (in their order) sharing most words with the question or its translations;
+    a sentence needs 2 shared words, or the question's code ("PRN-3-A"). [] when none is close."""
+    from .retrieval import code_hits, code_tokens
+    asked = set(tokens(" ".join([question, *alternates])))
+    codes = code_tokens(question)
+    scored = []
+    for index, item in enumerate(candidates):
+        shared = len(asked & set(tokens(item["text"]))) + 3 * code_hits(codes, item["text"])
+        if shared >= 2:
+            scored.append((shared, index))
+    best = sorted(scored, key=lambda pair: (-pair[0], pair[1]))[:limit]
+    return [candidates[index] for _, index in sorted(best, key=lambda pair: pair[1])]
+
+
 def evidence_rows(ranked, document_id, limit):
     """The best chunks of the chosen document for the evidence selector, without cover and index pages (they matched
     the title words and pushed the real answer out of the four), unless the document has nothing else."""
@@ -389,11 +409,13 @@ class KnowledgeService:
             rivals = [r for r in relevant[1:] if
                       (r["overlap"] >= best["overlap"] if best.get("lexical_only")
                        else abs(r["semantic"] - best["semantic"]) < 0.055)]
-            if rivals and not exact:
-                # A tie broken by the manual the question names: "¿Cuánta RAM… para el training?" → "Training Setup
-                # Guideline", not the laptops manual that also talks about RAM (2026-11-26).
+            if not exact and len(relevant) > 1:
+                # The manual the question names wins: "¿Cuánta RAM… para el training?" → "Training Setup Guideline",
+                # not the laptops manual that also talks about RAM, tied or ranked first (2026-11-26). Generic
+                # words of a title ("manual", "guía") name no manual in particular.
                 asked = set(tokens(request.message))
-                named = [r for r in [best, *rivals] if asked & set(tokens(available[r["document_id"]]["title"]))]
+                named = [r for r in relevant
+                         if asked & (set(tokens(available[r["document_id"]]["title"])) - GENERIC_TITLE_WORDS)]
                 if len(named) == 1:
                     best, rivals = named[0], []
             selected_document = available[best["document_id"]]
@@ -462,6 +484,15 @@ class KnowledgeService:
                         excerpts = [{"text": candidates[i]["text"], "page": candidates[i]["page"]} for i in picked]
                         answer = f"Según «{title}»:\n\n" + " ".join(item["text"] for item in excerpts)
                         return respond("answered", answer, [selected_document], sources, stats, excerpts)
+                    # No pick: the sentences that share most words with the question (and its English version),
+                    # not the start of the evidence (it showed "Network Printer Troubleshooting Guide · Document ID…").
+                    closest = closest_sentences(request.message, alternates, candidates)
+                    if closest:
+                        excerpts = [{"text": item["text"], "page": item["page"]} for item in closest]
+                        answer = f"Según «{title}»:\n\n" + " ".join(item["text"] for item in excerpts)
+                        # Marked: closest by words, not chosen as the answer (a follow-up does not take them).
+                        return respond("answered", answer, [selected_document], sources,
+                                       {**stats, "sentences": "closest"}, excerpts)
                     answer = f"Según «{title}»:\n\n" + (clean_excerpt(evidence) or reserve_answer(evidence, "empty"))
                     return respond("answered", answer, [selected_document], sources, stats)
                 # The selected evidence itself: the model never writes what a manual says.

@@ -432,6 +432,9 @@ _MANUAL_FOLLOWUP = re.compile(r"(?:y\s+)?(?:puedo|podria|debo|deberia|se puede|s
                               r"cada cuanto|con que"
                               # What the user already tried: "Ya revisé el cable y está bien", "Sigue igual".
                               r"|ya\s+(?:lo\s+|la\s+)?\w+(?:e|i)\b|sigue|no funciona|no sirve|no jala|tampoco)\b")
+# A section by its number: "procedimiento 2", "sección 3", "la parte 4".
+_SECTION_NUMBER = re.compile(r"\b(?:procedimiento|procedure|seccion|section|capitulo|parte|apartado)\s+"
+                             r"(?:numero\s+|no\.?\s*)?(\d{1,2})\b")
 # "¿Cómo lo recupero?", "¿cómo hago…?": a how-to question ("¿cómo se llama…?" asks a name).
 _ASKS_HOW = re.compile(r"\bcomo\b(?!\s+se\s+llama)")
 
@@ -1045,6 +1048,21 @@ class UnifiedAssistantService:
         cache = state.setdefault("translations", {})
         if text in cache:
             return cache[text]
+        # Names on screen go as placeholders ("@@1@@") and come back exactly: the model renamed "System Menu >
+        # Status Page" as "Menú Sistema > Página de Estado", the guard kept the English sentence (2026-11-26).
+        protected, names = self._protect_names(text)
+        if names:
+            try:
+                candidate = await self.provider.generate(TRANSLATION_PROMPT + protected) or ""
+            except Exception:  # noqa: BLE001
+                candidate = ""
+            if candidate and all(candidate.count(mark) == 1 for mark in names):
+                for mark, name in names.items():
+                    candidate = candidate.replace(mark, name)
+                answer = self._clean_translation(text, candidate)
+                if answer != text.strip():
+                    cache[text] = answer
+                    return answer
         prompt = TRANSLATION_PROMPT + text
         answer = ""
         try:
@@ -1054,6 +1072,31 @@ class UnifiedAssistantService:
         answer = self._clean_translation(text, answer or "")
         cache[text] = answer
         return answer
+
+    # A menu path ("System Menu > Report > Status Page"): kept whole.
+    _MENU_PATH = re.compile(r"[A-Z][\w/-]*(?:\s+[A-Z][\w/-]*)*(?:\s*>\s*[A-Z][\w/-]*(?:\s+[A-Z][\w/-]*)*)+")
+
+    @classmethod
+    def _protect_names(cls, text):
+        """(text with "@@n@@" in place of each name on screen, {placeholder: name}): menu paths, quoted labels and
+        multiword capitalized names in the middle of a sentence ("Print Spooler", "Newly Added")."""
+        names = {}
+
+        def keep(name):
+            for mark, kept in names.items():
+                if kept == name:
+                    return mark
+            mark = f"@@{len(names) + 1}@@"
+            names[mark] = name
+            return mark
+
+        text = cls._MENU_PATH.sub(lambda match: keep(match.group(0)), text or "")
+        text = re.sub(r"[\"“«][^\"”»]{2,60}[\"”»]", lambda match: keep(match.group(0)), text)
+        for match in list(cls._MULTIWORD_NAME.finditer(text)):
+            name = cls._without_leading_codes(match.group(1))
+            if name and name in text:
+                text = text.replace(name, keep(name), 1)
+        return text, names
 
     async def _excerpt_answer(self, state, result):
         """An information answer made only of the manual sentences the knowledge service picked, each translated by
@@ -2229,6 +2272,14 @@ class UnifiedAssistantService:
         # procedure of the previous question, and a name that matches nothing is said so, offering one closest
         # name (never a list). Explicit internet requests keep the public search flow.
         target = named_target(message)
+        numbered = None
+        if (target and target["name"].strip().isdigit() and state.get("active_document_id")
+                and not self._is_document_id(target["name"].strip())):
+            # "¿Y los pasos del procedimiento 2?": the number of a section of the manual being discussed, not a
+            # document called "2" (2026-11-26).
+            numbered = self._section_by_number(state["active_document_id"], state.get("active_document"), message)
+            if numbered is not None:
+                target = None
         resolution = self._resolve_named(target, message) if target else None
         if resolution is not None and resolution.status == "missing" and not self._needs_web(message):
             # A misheard document name ("Trading Sarah Guyton") with the only heading of a document in the question:
@@ -2256,6 +2307,13 @@ class UnifiedAssistantService:
             self.sessions.remember(state, message, answer)
             return {"answer": answer, "session_id": session_id, "route": "knowledge", "sources": []}
         named_document = resolution if resolution is not None and resolution.status == "found" else None
+        if named_document is not None and not named_document.procedure:
+            # "En el manual X, ¿los pasos de la sección 2?": its numbered section (it answered "no identifiqué esa
+            # sección" while listing them).
+            numbered = self._section_by_number(named_document.document_id, named_document.document_title,
+                                               message) or numbered
+        if numbered is not None:
+            named_document = numbered
         if target is not None and kind == "procedure" and not _READS_PROCEDURE.search(message):
             kind = None  # "el procedimiento de X" is the name: the question itself decides
         if named_document is not None:
@@ -2437,7 +2495,8 @@ class UnifiedAssistantService:
             result = result.model_copy(update={"status": "insufficient_evidence", "documentation_sufficient": False,
                                                "sources": []})
         if (evidence_sufficient and continues_manual and result.intent == "information"
-                and not getattr(result, "excerpts", None)):
+                and (not getattr(result, "excerpts", None)
+                     or (getattr(result, "retrieval", None) or {}).get("sentences") == "closest")):
             # A follow-up the manual has no sentence for ("Ya revisé el cable y está bien"): its raw first piece was
             # shown ("Network Printer Troubleshooting Guide · Document ID…"). It is answered in general, knowing what
             # the manual said just before.
@@ -2700,6 +2759,34 @@ class UnifiedAssistantService:
         else:
             answer = await self._answer_steps(state, entry["title"], only=[entry])
         return (answer, sources) if answer else None
+
+    def _is_document_id(self, number):
+        """True when "procedimiento N" is the id of an authorized document ("Procedimiento de Reinicio" is 10): the id
+        wins over a section numbered N of the manual being discussed."""
+        store = getattr(self.knowledge, "store", None)
+        try:
+            from backend.app.knowledge.store import procedure_id
+            wanted = procedure_id(number)
+            return any(d.get("procedure_id") == wanted for d in store.documents(eligible_only=True)) if store else False
+        except Exception:  # noqa: BLE001
+            return False
+
+    def _section_by_number(self, document_id, document_title, message):
+        """The section numbered like "procedimiento 2" / "sección 2" in the message, when that number is a single
+        section of the document ("Procedimiento 2: …", "2. WINDOWS DEPLOYMENT PROCEDURE"); None otherwise."""
+        match = _SECTION_NUMBER.search(_fold(message or ""))
+        if not match or not document_id:
+            return None
+        try:
+            catalog = self.knowledge.procedure_catalog(document_id)
+        except Exception:  # noqa: BLE001
+            return None
+        sections = [p for p in (catalog or {}).get("procedures") or []
+                    if p.get("steps") and str(p.get("number") or "").strip() == match.group(1)]
+        if len(sections) != 1:
+            return None
+        title = document_title or ((catalog or {}).get("document") or {}).get("title")
+        return named_reference.Resolution("found", document_id, title, sections[0]["title"])
 
     async def _suggest_for_procedure(self, state, question=""):
         """The assistant's own suggestions for the active procedure: what it would add (safety, backup, a check at the

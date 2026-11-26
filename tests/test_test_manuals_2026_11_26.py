@@ -253,3 +253,153 @@ def test_a_follow_up_the_manual_does_not_answer_is_answered_with_its_context():
     assert "driver" in answer["answer"]
     prompt = provider.prompts[-1]
     assert "Justo antes, según un manual" in prompt and "La impresora no imprime" in prompt   # the thread
+
+
+# --- 6. Pending of 2026-11-26: names on screen protected during the translation ---------------------------------------
+
+class PlaceholderProvider:
+    """Translates the printer sentences keeping whatever placeholder it receives (as qwen does with "@@1@@")."""
+
+    def __init__(self):
+        self.prompts = []
+
+    async def generate(self, message):
+        self.prompts.append(message)
+        text = message.rsplit("\n", 1)[-1]
+        if "@@1@@" in text and "configuration page" in text:
+            return "Imprime una página de configuración desde el menú de la impresora (@@1@@) y confirma la dirección IP."
+        if "configuration page" in text:     # without the placeholder: renames the menu, like the real model
+            return ("Imprime una página de configuración desde el menú de la impresora (Menú Sistema > Informe > "
+                    "Página de Estado) y confirma la dirección IP.")
+        return text
+
+
+def test_a_menu_path_is_kept_exactly_and_the_sentence_is_translated():
+    import uuid as _uuid
+    from backend.app.assistant.service import UnifiedAssistantService
+    from test_named_reference import Knowledge
+    provider = PlaceholderProvider()
+    service = UnifiedAssistantService(Knowledge(), provider, web_search=StubWebSearch())
+    state = {}
+    source = ("Print a configuration page from the printer menu (System Menu > Report > Status Page) and confirm the "
+              "IP address.")
+    spanish = asyncio.run(service._translate(state, source, ""))
+    assert spanish == ("Imprime una página de configuración desde el menú de la impresora (System Menu > Report > "
+                       "Status Page) y confirma la dirección IP.")
+    assert "@@1@@" in provider.prompts[0] and "System Menu" not in provider.prompts[0]
+
+
+def test_protected_names_cover_menu_paths_screen_names_and_quoted_labels():
+    from backend.app.assistant.service import UnifiedAssistantService as S
+    text, names = S._protect_names('Restart the Print Spooler service and open the "Recording" folder in Newly Added.')
+    assert set(names.values()) == {"Print Spooler", '"Recording"', "Newly Added"}
+    assert "Print Spooler" not in text and "@@1@@" in text
+    assert S._protect_names("Turn the printer off and wait 10 minutes.") == ("Turn the printer off and wait 10 minutes.", {})
+
+
+# --- 7. Pending of 2026-11-26: a section by its number -----------------------------------------------------------------
+
+def test_a_section_asked_by_its_number_in_a_named_manual():
+    # "En el manual de alta de laptops, ¿cuáles son los pasos del procedimiento 2?" answered "no identifiqué esa
+    # sección" although the manual numbers its sections.
+    import uuid as _uuid
+    from test_named_reference import Knowledge, build
+    from test_user_test_2026_11_26 import ask
+    service, sid = build(Knowledge()), str(_uuid.uuid4())
+    answer = ask(service, "En el Training Setup Guideline, ¿cuáles son los pasos de la sección 2?", sid)["answer"]
+    assert answer.startswith("«WINDOWS DEPLOYMENT PROCEDURE» ("), answer[:120]
+
+
+def test_a_section_number_of_the_manual_being_discussed():
+    import uuid as _uuid
+    from test_named_reference import Knowledge, build
+    from test_user_test_2026_11_26 import ask
+    service, sid = build(Knowledge()), str(_uuid.uuid4())
+    ask(service, "¿Cuáles son los pasos de COMPUTER PREPARATION?", sid)
+    answer = ask(service, "¿Y los pasos del procedimiento 2?", sid)["answer"]
+    assert answer.startswith("«WINDOWS DEPLOYMENT PROCEDURE» ("), answer[:120]
+
+
+def test_a_section_number_that_does_not_exist_is_not_invented():
+    import uuid as _uuid
+    from test_named_reference import Knowledge, build
+    from test_user_test_2026_11_26 import ask
+    service, sid = build(Knowledge()), str(_uuid.uuid4())
+    answer = ask(service, "En el Training Setup Guideline, ¿cuáles son los pasos de la sección 9?", sid)["answer"]
+    assert "WINDOWS DEPLOYMENT PROCEDURE» (" not in answer
+
+
+def test_a_document_id_wins_over_a_section_number():
+    from backend.app.assistant.service import UnifiedAssistantService
+    from test_named_reference import Knowledge, StubProvider
+    service = UnifiedAssistantService(Knowledge(), StubProvider(), web_search=StubWebSearch())
+    ids = {d.get("procedure_id") for d in service.knowledge.store.documents(eligible_only=True)} - {None}
+    for number in ids:
+        assert service._is_document_id(number)
+    assert not service._is_document_id("77")
+
+
+def test_the_manual_the_question_names_wins_even_without_a_tie(tmp_path):
+    # "¿Cuánta memoria RAM… para el training?" was answered from the laptops manual once its title changed.
+    svc = KnowledgeService(tmp_path, EnglishOnlyEmbeddings(), TranslatingSelector("Which paper for the training?"))
+    asyncio.run(svc.ingest("a.md", b"Load paper paper paper in tray 1 for the delivery letters.",
+                           Metadata(title="Manual de Alta de Laptops", version="1", authorized=True)))
+    asyncio.run(svc.ingest("b.md", b"Use letter paper in tray 1 for the training printouts.",
+                           Metadata(title="Training Setup Guideline", version="1", authorized=True)))
+    answer = ask(svc, "¿Qué papel uso para el training?")
+    assert answer.status == "answered" and answer.sources[0]["title"] == "Training Setup Guideline"
+    generic = ask(svc, "¿Qué papel uso según el manual?")                 # "manual" names no manual in particular
+    assert generic.status in ("answered", "clarification_required")
+
+
+class NoPickSelector(TranslatingSelector):
+    async def pick_sentences(self, question, candidates):
+        return None
+
+
+def test_without_a_picked_sentence_the_closest_sentences_are_shown_not_the_manual_start(tmp_path):
+    text = ("Network Printer Troubleshooting Guide\nDocument ID: IT-PRN-004 Version: 1.3\n"
+            "Every printer is installed through the print server PRINT01.\n"
+            "Users print to the shared queues named PRN-FLOOR-LETTER, for example PRN-3-A is printer A on the third floor.\n"
+            "Toner cartridges are kept in the IT storeroom.\n")
+    svc = KnowledgeService(tmp_path, EnglishOnlyEmbeddings(), NoPickSelector("What is the queue of printer A on the third floor?"))
+    asyncio.run(svc.ingest("g.md", text.encode(), Metadata(title="Network Printer Troubleshooting Guide",
+                                                             version="1", authorized=True)))
+    answer = ask(svc, "¿Cómo se llama la cola de la impresora PRN-3-A del tercer piso?")
+    assert answer.status == "answered"
+    assert "PRN-3-A" in answer.answer and "Document ID" not in answer.answer
+
+
+class ClosestEvidenceKnowledge(RawEvidenceKnowledge):
+    """As RawEvidenceKnowledge, but the follow-up comes back with the closest sentences (no pick): the first step again."""
+
+    async def query(self, request):
+        answer = await super().query(request)
+        if len(self.queries) == 1:
+            return answer
+        return answer.model_copy(update={"answer": "Según «network-printer-guide»: Check that the printer is turned on.",
+                                         "excerpts": [{"text": "Check that the printer is turned on.", "page": 1}],
+                                         "retrieval": {"sentences": "closest"}})
+
+
+def test_closest_sentences_do_not_answer_a_follow_up():
+    # "Ya revisé el cable y está bien" repeated "Verifica que la impresora esté encendida" (the closest sentence).
+    import uuid as _uuid
+    from backend.app.assistant.service import UnifiedAssistantService
+
+    class Provider:
+        def __init__(self):
+            self.prompts = []
+
+        async def generate(self, message):
+            self.prompts.append(message)
+            if message.startswith("Traduce"):
+                return "Verifica que la impresora esté encendida."
+            return "Entonces revisa el driver y la cola de impresión."
+
+    provider = Provider()
+    service = UnifiedAssistantService(ClosestEvidenceKnowledge(), provider, web_search=StubWebSearch())
+    sid = str(_uuid.uuid4())
+    asyncio.run(service.chat("La impresora no imprime", session_id=sid))
+    answer = asyncio.run(service.chat("Ya revisé el cable y está bien", session_id=sid))
+    assert "driver" in answer["answer"] and "encendida" not in answer["answer"]

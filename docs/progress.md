@@ -624,6 +624,14 @@ en inglés, respaldos en español; preguntas y respuestas esperadas en `pregunta
 - Empate entre manuales: se usa el que nombra la pregunta («…para el training» → Training Setup Guideline); si no,
   la pregunta nombra los manuales («Lo encontré en «A» y «B». ¿De cuál quieres la respuesta?»).
 
-Queda: una traducción que renombra un menú («Menú Sistema» por «System Menu») se sigue rechazando a propósito y esa
-frase queda en inglés; «procedimiento 2» por número no ubica la sección (sí por nombre); los títulos de los
-manuales de prueba quedaron como el nombre del archivo.
+Pendientes resueltos después:
+- Nombres de pantalla protegidos al traducir: se mandan como «@@1@@» y vuelven tal cual («Imprime una página de
+  configuración… (System Menu > Report > Status Page)»); si falla, se intenta como antes.
+- Sección por número: «procedimiento 2» / «sección 2» ubica la sección numerada del manual nombrado o del de la
+  conversación (única con ese número); el id de un documento («Procedimiento de Reinicio» = 10) gana.
+- Títulos: los 3 manuales de prueba se volvieron a indexar como revisión 2 con título («Manual de Alta de Laptops»,
+  «Network Printer Troubleshooting Guide», «Política de Respaldos y Restauración»).
+- El manual que nombra la pregunta («…para el training») gana aunque no haya empate (palabras genéricas del título
+  como «manual» o «guía» no cuentan).
+- Sin frase elegida por el modelo: las 1-2 frases con más palabras de la pregunta (marcadas «closest»), no el inicio
+  del manual; en un seguimiento no cuentan como respuesta (se sigue el hilo).

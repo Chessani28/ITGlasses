@@ -283,10 +283,13 @@ def test_an_information_answer_is_made_of_picked_manual_sentences(tmp_path):
     assert first in result.answer and "Reception Printer Guide" in result.answer
 
 
-def test_without_a_pick_the_answer_is_the_clean_excerpt(tmp_path):
+def test_without_a_pick_the_answer_is_the_closest_sentences(tmp_path):
+    # 2026-11-26: without a pick, the sentences that share most words with the question (it was the clean start of
+    # the evidence, which showed a manual's cover page: "Network Printer Troubleshooting Guide · Document ID…").
     svc, _ = build(tmp_path, PickingSelector(picked=None))
     result = ask(svc)
-    assert result.status == "answered" and result.excerpts == []
+    assert result.status == "answered" and result.excerpts
+    assert any("HP 58A toner cartridge" in item["text"] for item in result.excerpts)
     assert "Según la documentación autorizada" not in result.answer
     assert "Reception Printer Guide" in result.answer
 
