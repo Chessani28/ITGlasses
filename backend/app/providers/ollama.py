@@ -28,6 +28,15 @@ SYSTEM_PROMPT = (
 )
 
 
+def system_prompt(now=None):
+    """SYSTEM_PROMPT and this server's date and time, in the Spanish words to say: without them the model answered
+    "¿qué día es hoy?" with "Hoy es el día de la semana que corresponde a la fecha actual", and given "2026-11-26" it
+    said "20 de noviembre"."""
+    from backend.app.core.clock import time_text, today_text
+    return (f"{SYSTEM_PROMPT} Today is \"{today_text(now)}\" and the local time is {time_text(now)} (server "
+            "clock). When the user asks about today, the date, the day or the time, say exactly that date.")
+
+
 def _label(value):
     return re.sub(r"[^A-Za-z0-9_.:-]", "", str(value))[:64] or "none"
 
@@ -104,7 +113,7 @@ class OllamaProvider:
         (E4), as many of the most recent as fit in num_ctx next to the answer's tokens."""
         from backend.app.assistant.context import fit_turns
         limit = self._general_limit(num_predict)
-        fitted = fit_turns(turns, self.config.context_length, limit, SYSTEM_PROMPT + message)
+        fitted = fit_turns(turns, self.config.context_length, limit, system_prompt() + message)
         return await self._chat("general", message, limit, allow_partial=True, history=fitted)
 
     async def _chat(self, component, message, num_predict, allow_partial, history=()):
@@ -121,7 +130,7 @@ class OllamaProvider:
                     data = await self._post("/api/chat", {
                         "model": self.model,
                         "messages": [
-                            {"role": "system", "content": SYSTEM_PROMPT},
+                            {"role": "system", "content": system_prompt()},
                             *[{"role": role, "content": text} for question, answer in history
                               for role, text in (("user", question), ("assistant", answer))],
                             {"role": "user", "content": message},

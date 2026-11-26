@@ -1,6 +1,7 @@
 """Regression tests of the web questions of 2026-11-24 (15 asked, 10 right). Each case keeps the exact question.
 
-1. "¿Qué es <sección>?" about a manual lists the section's steps and never shows an internal id.
+1. "¿Qué es <sección>?" about a manual says what the section is (2026-11-26: no longer its step list) and never
+   shows an internal id.
 2. A name that matches nothing related is not "closest" to an unrelated section; a general answer is offered.
 3. The refusal without evidence uses the word of the question (política, procedimiento) or "información".
 4. An IT question with a typo ("q es un firewal") is IT: the general answer carries its notice.
@@ -31,14 +32,16 @@ def session():
 @pytest.mark.parametrize("question", ["Según el manual Training Setup Guideline, ¿qué es COMPUTER PREPARATION?",
                                       "¿Qué es COMPUTER PREPARATION?",
                                       "¿En qué consiste COMPUTER PREPARATION?"])
-def test_what_is_a_section_lists_its_steps_without_internal_ids(question):
+def test_what_is_a_section_says_what_it_is_without_internal_ids(question):
+    # 2026-11-26: what it is (described from its steps) with the steps offered, no longer the list itself.
     knowledge = Knowledge()
     service, sid = build(knowledge), session()
     answer = ask(service, question, sid)
     assert answer["route"] == "knowledge" and answer["sources"] and knowledge.queries == []
     assert answer["answer"].startswith("«COMPUTER PREPARATION» es una sección de «Training Setup Guideline» (")
     assert answer["answer"].count("COMPUTER PREPARATION") == 1           # the title once, not twice
-    assert "\n1. " in answer["answer"] and "Documento identificado" not in answer["answer"]
+    assert "\n1. " not in answer["answer"] and "¿Cuáles son los pasos?" in answer["answer"]
+    assert "Documento identificado" not in answer["answer"]
     assert not UUID.search(answer["answer"])
     third = ask(service, "¿Y cuál es el paso 3?", sid)                       # the follow-up still works
     assert third["route"] == "knowledge" and "Paso 3" in third["answer"] and not UUID.search(third["answer"])

@@ -11,6 +11,7 @@ Three guarantees are implemented here:
 """
 import asyncio
 import html
+import datetime
 import re
 import uuid
 from difflib import SequenceMatcher
@@ -202,6 +203,19 @@ _PUBLIC_STOPWORDS = frozenset("""
 # route is unavailable instead of inventing an explanation.
 # A general answer to an IT question the authorized manuals did not cover (added by the code, not the model).
 GENERAL_NOTICE = "Respuesta general (no proviene de los manuales autorizados):"
+# Beyond IT (user's test of 2026-11-26): light chat is welcome (a joke, "si fueras panadero…", general culture), but
+# specialized advice outside IT is declined in one or two kind sentences instead of invented ("defender el 2.6 en
+# Clash Royale", bets); a known fact is said plainly ("No sé la fecha… pero nació el 18 de marzo de 1806").
+GENERAL_SCOPE = (
+    "Las preguntas ligeras o de cultura general (un chiste, una pregunta imaginaria, una fecha histórica, tus gustos) "
+    "contéstalas con naturalidad y directo, sin aclarar que no son de TI. Solo si te piden un consejo especializado "
+    "que no es de tecnología (estrategias de videojuegos, apuestas, salud, temas legales o de dinero), dilo en una o "
+    "dos frases amables: que no es un tema de TI y que no puedes darle un consejo confiable; no lo inventes. Si la "
+    "pregunta es sobre un sistema, servidor, equipo o dato interno de la empresa, no lo inventes ni lo confundas con "
+    "otra cosa: di que no tienes ese dato y a quién preguntarlo. "
+)
+# (Games named without the internal-data sentence made "¿Cuál es la IP del servidor de Dominos?" about the game of
+# dominoes; without games, Clash Royale strategies were invented. Both are measured in evals: mezcla, manuales.)
 GENERAL_OFFER = "No encontré esto en los manuales autorizados. ¿Quieres que te lo explique de forma general?"
 # After "No encontré un procedimiento llamado «X» en los documentos autorizados." when nothing related exists.
 MISSING_OFFER = ("¿Quieres que te lo explique de forma general? Si existe ese manual, un administrador puede subirlo "
@@ -349,6 +363,27 @@ def _section_reply(message):
         return "yes"
     if _NO.fullmatch(text):
         return "no"
+    return None
+
+
+# Today's date or the time, and nothing else: "¿qué día es hoy?", "¿qué fecha es?", "¿a qué fecha estamos?",
+# "¿qué hora es?". "¿Qué día es el Black Friday?" is not one of them (it still goes to the web).
+_ASKS_DATE = re.compile(r"^(?:y\s+)?(?:(?:me\s+dices\s+)?(?:que|cual)\s+(?:es\s+(?:la\s+)?)?(?:dia|fecha)\s+"
+                        r"(?:es\s+)?(?:hoy|de\s+hoy)|que\s+fecha\s+es|a\s+que\s+(?:dia|fecha)\s+estamos"
+                        r"|que\s+dia\s+es)$")
+_ASKS_TIME = re.compile(r"^(?:y\s+)?(?:me\s+dices\s+)?que\s+hora\s+es(?:\s+ahorita|\s+ahora)?$")
+
+
+def clock_answer(message, now=None):
+    """Today's date or the time from this server's clock (a web page answered 2024), or None for anything else."""
+    text = re.sub(r"[^\w\s]", " ", _fold(message or ""))
+    text = " ".join(text.split())
+    now = now or datetime.datetime.now()
+    from backend.app.core.clock import time_text, today_text
+    if _ASKS_TIME.match(text):
+        return f"Son las {time_text(now)}."
+    if _ASKS_DATE.match(text):
+        return f"Hoy es {today_text(now)}."
     return None
 
 
@@ -824,6 +859,10 @@ class UnifiedAssistantService:
         documented company topic is handled by the knowledge path before ever
         calling for public sources.
         """
+        # A bet is advice, not a fact to look up: "¿A qué equipo le apuesto en el partido de hoy?" is declined (see
+        # GENERAL_SCOPE) without a search and its links.
+        if message and re.search(r"\bapuest|\bapost", _fold(message)):
+            return False
         return bool(message and _WEB_NEED_QUERY.search(message))
 
     # ------------------------------------------------------------------ state
@@ -1286,6 +1325,10 @@ class UnifiedAssistantService:
         """
         procedures = (only if only is not None else state.get("procedures")) or []
         matched = match_procedures(procedures, message)
+        if not matched and state.get("active_procedure") and not re.search(r"\btod[oa]s?\b", _fold(message or "")):
+            # No section named: the one being discussed ("¿Qué es COMPUTER PREPARATION?" → "¿Cuáles son los pasos?").
+            # "Todos los pasos" means the whole manual: its sections are offered, as before.
+            matched = [p for p in procedures if p.get("title") == state["active_procedure"] and p.get("steps")]
         if not matched:
             matched = [p for p in procedures if p.get("steps")]
         if not matched:
@@ -1690,7 +1733,9 @@ class UnifiedAssistantService:
         prompt = (
             "Eres un asistente de soporte técnico. " + style + missing +
             "Si no sabes la respuesta, dilo claramente.\n\n" + "Mensaje del usuario: " + message +
-            context + web_block
+            context + web_block +
+            # Last, right before the answer: the 4B model followed it there, not at the start (Clash Royale).
+            "\n\nAntes de responder: " + GENERAL_SCOPE.strip()
         )
         try:
             # The general chat may be longer than /api/v1/chat (OllamaProvider.generate_general: 768 tokens, and
@@ -1921,6 +1966,12 @@ class UnifiedAssistantService:
                 self.sessions.remember(state, message, answer)
                 return {"answer": answer, "session_id": session_id, "route": "knowledge", "sources": sources}
 
+        # Today's date and the time come from this server's clock, never from a web search.
+        clock = clock_answer(message)
+        if clock is not None:
+            self.sessions.remember(state, message, clock)
+            return {"answer": clock, "session_id": session_id, "route": "social", "sources": []}
+
         # Social messages never disturb the procedure continuity of the session.
         social = detect_social_intent(message)
         if social:
@@ -2100,7 +2151,8 @@ class UnifiedAssistantService:
                 and (kind in _READING_KINDS or _READS_PROCEDURE.search(message))
                 and not match_procedures(state.get("procedures"), message)):
             named_document = self._find_heading_anywhere(message)
-        # "¿Qué es <sección>?" (with or without "según el manual"): the section explained and its steps listed.
+        # "¿Qué es <sección>?" (with or without "según el manual"): what the section is about, with its steps offered
+        # (the list itself answers "¿Cuáles son los pasos?", which now continues this section).
         if kind is None and _ASKS_WHAT.search(message):
             asked = named_document
             if asked is None:
@@ -2111,14 +2163,9 @@ class UnifiedAssistantService:
                 elif target is None:
                     asked = self._find_heading_anywhere(message)
             if asked is not None and asked.procedure and self._names_heading(message, asked.procedure):
-                read = await self._answer_named_procedure(state, asked, "steps", None)
+                read = await self._answer_named_procedure(state, asked, "describe", None)
                 if read is not None:
                     answer, sources = read
-                    document = asked.document_title or state.get("active_document")
-                    heading = f"«{asked.procedure}» "
-                    if document and answer.startswith(heading + "("):
-                        # One line: "«COMPUTER PREPARATION» es una sección de «Training Setup Guideline» (8 pasos):"
-                        answer = f"{heading}es una sección de «{document}» " + answer[len(heading):]
                     state["active_route"] = "knowledge"
                     self.sessions.remember(state, message, answer)
                     return {"answer": answer, "session_id": session_id, "route": "knowledge", "sources": sources}
@@ -2199,12 +2246,21 @@ class UnifiedAssistantService:
 
         # Everything else goes through the grounded knowledge pipeline.
         try:
-            from backend.app.knowledge.models import KnowledgeRequest
+            from backend.app.knowledge.models import KnowledgeError, KnowledgeRequest
             if self.knowledge is None:
                 raise RuntimeError("authorized knowledge service is unavailable")
             request = KnowledgeRequest(message=message,
                                        conversation_id=state.get("knowledge_conversation_id"))
-            result = await self.knowledge.query(request)
+            try:
+                result = await self.knowledge.query(request)
+            except KnowledgeError as error:
+                # The manuals keep their conversations 30 min in memory, while this one is saved and survives a
+                # restart (or is reopened later from the history): start a new manuals conversation, never fail.
+                if error.code != "conversation_expired" or request.conversation_id is None:
+                    raise
+                state["knowledge_conversation_id"] = None
+                request = request.model_copy(update={"conversation_id": None})
+                result = await self.knowledge.query(request)
         except Exception as exc:  # noqa: BLE001
             import logging
             logging.getLogger("assistant").exception("knowledge query failed: %s", exc)
@@ -2227,6 +2283,13 @@ class UnifiedAssistantService:
             and result.documentation_sufficient
             and bool(result.sources)
         )
+        if (evidence_sufficient and result.intent == "identify" and _ASKS_WHAT.search(message)
+                and not documentation_only):
+            # "Que es una vpn?": a manual that only mentions it was *identified*. Naming a document never answers
+            # what something is, so the concept is explained in general (with its notice), as without evidence.
+            evidence_sufficient = False
+            result = result.model_copy(update={"status": "insufficient_evidence", "documentation_sufficient": False,
+                                               "sources": []})
         if evidence_sufficient and (not needs_web or documentation_only) and named_document is not None:
             own = [s for s in result.sources if s.get("document_id") == named_document.document_id]
             if not own:
@@ -2469,9 +2532,45 @@ class UnifiedAssistantService:
             answer = await self._answer_movement(state, kind, (reference or {}).get("number"))
         elif kind == "document":
             answer = self._answer_document(state)
+        elif kind == "describe":
+            answer = await self._describe_section(state, entry)
         else:
             answer = await self._answer_steps(state, entry["title"], only=[entry])
         return (answer, sources) if answer else None
+
+    async def _describe_section(self, state, entry):
+        """"¿Qué es <sección>?": what the section is about in one or two sentences written by the model from its
+        steps only (the manual rarely defines its own sections), and the steps offered. A description that is empty,
+        too long or a list falls back to naming its first and last steps."""
+        # The steps the reader follows (a single "1." with lettered items counts its items), as the step list does.
+        steps = self._scope_steps({"active_steps": entry.get("steps") or []})
+        title = entry.get("title") or "Procedimiento"
+        document = state.get("active_document")
+        where = f"una sección de «{document}»" if document else "una sección del manual"
+        texts = [(step.get("text") or "").strip() for step in steps if (step.get("text") or "").strip()]
+        description = ""
+        if texts:
+            prompt = (
+                f"Una sección de un manual de soporte técnico se llama «{title}». Sus pasos son:\n"
+                + "\n".join(f"- {text}" for text in texts[:20])
+                + "\n\nEn una o dos frases en español, explica qué es esta sección y para qué sirve. Básate solo "
+                  "en esos pasos, sin inventar datos. No enumeres los pasos ni uses viñetas. Devuelve solo las frases."
+            )
+            try:
+                description = " ".join((await self.provider.generate(prompt) or "").split())
+            except Exception:  # noqa: BLE001 - the fallback below still answers
+                description = ""
+            if len(description) > 400 or re.search(r"(?:^|\s)(?:\d+[.)]|[-*•])\s", description):
+                description = ""
+        if not description and texts:
+            description = (f"Agrupa los pasos desde «{texts[0]}» hasta «{texts[-1]}»." if len(texts) > 1
+                           else f"Consiste en: «{texts[0]}».")
+        state["current_step_index"] = 0
+        lines = [f"«{title}» es {where} ({_pasos(len(steps))}). {description}".strip()]
+        if steps:
+            lines.append(self._citation(steps[0], document))
+        lines.append("Si quieres el detalle, pregunta «¿Cuáles son los pasos?».")
+        return "\n".join(lines)
 
     def _forget_document(self, state):
         """Drop the previous question's document and procedure so they are not carried into this one."""

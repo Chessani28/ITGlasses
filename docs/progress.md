@@ -545,3 +545,24 @@ Con el vocabulario de pistas (como en producción) y las 20 grabaciones reales:
   → "¿Qué es". Probado y descartado: `initial_prompt` (igual) y prompt con preguntas de ejemplo (+1 frase, no vale el
   riesgo). Turbo en producción: **9.3%** de error (16.4% sin pistas ni correcciones). Queda "Cómo puedo" → "No puedo",
   ambiguo (también es una queja válida).
+
+## 2026-11-26 — Prueba del usuario en la web: arreglos del cerebro
+
+Lo que falló en la prueba manual y cómo quedó (pruebas: `tests/test_user_test_2026_11_26.py`; examen: categorías
+`usuario` (local) y `mezcla`):
+
+- «Que es una vpn?» (minúsculas) respondía «Documento identificado: Manual de Soporte VPN». Una pregunta «qué es» que
+  solo identifica un documento ahora se explica con conocimiento general («¿Cómo se llama el manual…?» sigue
+  identificando).
+- «¿Qué es COMPUTER PREPARATION?» dice qué es la sección (descrita por el modelo a partir de sus pasos) y ofrece los
+  pasos; «¿Cuáles son los pasos?» justo después usa esa sección (con «todos» se siguen ofreciendo las secciones).
+- Fecha: «¿qué día es hoy?» / «¿qué hora es?» los contesta el reloj del servidor (`backend/app/core/clock.py`) y el
+  modelo recibe siempre la fecha en palabras (con «2026-11-26» decía «20 de noviembre»).
+- «No se pudo consultar la documentación autorizada» tras reiniciar o al volver a una conversación después de 30 min:
+  la conversación de manuales expirada se reemplaza por una nueva.
+- Fuera de TI (`GENERAL_SCOPE`, al final del prompt general): la plática ligera se contesta con naturalidad; un
+  consejo especializado (videojuegos, apuestas, salud, leyes, dinero) se declina en una o dos frases; un dato interno
+  de la empresa no se inventa. Las apuestas no disparan la búsqueda web.
+- Examen: 102/112 con internet estable; ningún caso empeoró contra la corrida de la mañana. Pendiente conocido: el
+  modelo de 4B dice que Benito Juárez nació el 18 de marzo (fue el 21) y, dentro de una conversación mezclada, a
+  veces responde «no tengo información» a esa pregunta (`mez-random-luego-vpn` queda fallando a propósito).

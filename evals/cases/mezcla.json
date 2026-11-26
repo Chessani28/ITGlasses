@@ -1,0 +1,27 @@
+[
+  {"id": "mez-random-luego-vpn", "category": "mezcla", "turns": [
+    {"message": "Si fueras panadero, ¿qué tipo de pan venderías?", "expect": {"route": "general", "max_chars": 600, "not_contains": ["manuales autorizados", "No se pudo"]}},
+    {"message": "¿Qué día nació Benito Juárez?", "expect": {"contains_any": ["1806"], "not_contains": ["no se conoce", "No sé"]}},
+    {"message": "¿Cómo puedo defender el 2.6 en Clash Royale?", "expect": {"max_chars": 500, "contains_any": ["TI", "tecnología", "informática", "técnic", "tecnológic"]}},
+    {"message": "¿Qué es una VPN?", "expect": {"contains_any": ["red privada", "túnel", "cifra"], "not_contains": ["No se pudo", "Documento identificado"]}}]},
+  {"id": "mez-medicina", "category": "mezcla", "turns": [
+    {"message": "¿Qué medicina me tomo para la gripa?", "expect": {"max_chars": 500, "contains_any": ["médico", "TI", "tecnología", "profesional de la salud"]}}]},
+  {"id": "mez-apuesta", "category": "mezcla", "turns": [
+    {"message": "¿A qué equipo le apuesto en el partido de hoy?", "expect": {"max_chars": 500, "not_contains": ["Fuentes consultadas"], "contains_any": ["TI", "tecnología", "informática", "no puedo", "no tengo"]}}]},
+  {"id": "mez-chiste-luego-firewall", "category": "mezcla", "channel": "voice", "turns": [
+    {"message": "Cuéntame un chiste", "expect": {"max_speech_chars": 400}},
+    {"message": "¿Qué es un firewall?", "expect": {"contains_any": ["tráfico", "bloque", "filtra"], "max_speech_chars": 600}}]},
+  {"id": "mez-tema-y-vuelta", "category": "mezcla", "turns": [
+    {"message": "¿Qué es el phishing?", "expect": {"route": "general", "contains_any": ["engañ", "suplant", "fraude", "correo"]}},
+    {"message": "Oye, ¿cuál es tu color favorito?", "expect": {"max_chars": 400, "not_contains": ["phishing", "Solo puedo ayudarte"]}},
+    {"message": "Volviendo al tema, ¿cómo lo reconozco en un correo?", "expect": {"contains_any": ["remitente", "enlace", "link", "urgencia", "dirección"]}}]},
+  {"id": "mez-hilo-lenta", "category": "mezcla", "turns": [
+    {"message": "Mi computadora está muy lenta", "expect": {"contains_any": ["RAM", "disco", "procesos", "Administrador de tareas", "programas"]}},
+    {"message": "Ya cerré los programas y sigue igual", "expect": {"contains_any": ["disco", "RAM", "virus", "malware", "inicio", "actualiz", "reinici"]}},
+    {"message": "¿Y si le pongo más RAM?", "expect": {"contains_any": ["RAM", "memoria"]}},
+    {"message": "¿Cuánta me recomiendas?", "expect": {"contains_any": ["GB"]}}]},
+  {"id": "mez-hilo-impresora", "category": "mezcla", "turns": [
+    {"message": "La impresora no imprime", "expect": {"contains_any": ["conect", "cable", "papel", "cola", "controlador", "encend"]}},
+    {"message": "Ya revisé el cable y está bien", "expect": {"contains_any": ["cola", "controlador", "driver", "reinici", "papel", "tóner", "tinta", "prueba", "software", "reconoc"], "not_contains": ["cable está conectado"]}},
+    {"message": "¿Cómo veo la cola de impresión?", "expect": {"contains_any": ["Configuración", "Panel de control", "impresora", "cola"]}}]}
+]

@@ -283,7 +283,7 @@ def test_ollama_receives_alternating_turns_within_the_context():
     assert asyncio.run(provider.generate_general_turns("¿Y para qué sirve en una empresa?", turns)) == "Respuesta."
     payload = [p for path, p in seen if path == "/api/chat"][-1]
     assert [m["role"] for m in payload["messages"]] == ["system", "user", "assistant", "user", "assistant", "user"]
-    assert payload["messages"][0]["content"] == SYSTEM_PROMPT
+    assert payload["messages"][0]["content"].startswith(SYSTEM_PROMPT)  # + today's date (2026-11-26)
     assert payload["messages"][1]["content"] == "¿Qué es una VPN?" and payload["messages"][-1]["content"].startswith("¿Y para")
     assert payload["options"]["num_ctx"] == provider.config.context_length
     assert payload["options"]["num_predict"] == min(GENERAL_MAX_OUTPUT_TOKENS, provider.config.context_length // 2)
