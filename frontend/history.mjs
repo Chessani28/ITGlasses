@@ -150,7 +150,7 @@ export function initHistory(chat) {
       const row = el("li", "history-item" + (item.id === current ? " active" : ""));
       const kind = channelKind(item, view.variants);
       const open = button("", "history-open", () => openConversation(item.id), `Abrir: ${titleOf(item)} · ${KIND_LABELS[kind]}`);
-      open.title = describe(item);
+      open.title = `${titleOf(item)}\n${describe(item)}`;  // the full title on hover (the row cuts it with …)
       if (view.deleted) open.disabled = true;
       open.append(icon(kind), el("span", "history-title", titleOf(item)));
       if (view.deleted) open.append(el("small", "warning-text", purgeText(item.purge_after)));

@@ -76,8 +76,8 @@ Resumen solo de metadatos, sin contenido: `.venv\Scripts\python -m backend.app.h
 - Debajo del cuadro de texto, una línea dice si la conversación se guarda y quién puede verla.
 - «Mis dispositivos»: «Nueva conversación en este dispositivo».
 - Voz: si Whisper no puede usarse en un turno (memoria de la GPU, GPU no disponible, no configurado), la web
-  repite con Vosk y muestra el motivo. La app actual muestra «Motor de voz básico»; el motivo le llega en
-  `notice` para cuando una versión de la app lo muestre.
+  repite con Vosk y muestra el motivo. La app muestra «Motor de voz básico» y, una vez (hasta que la voz
+  vuelva a la normalidad), un aviso con el motivo según `fallback_reason`.
 
 ## En la app del celular
 
@@ -132,7 +132,5 @@ y `node --test "tests/*.test.mjs"`. Manual, después de reiniciar el backend:
 
 ## Pendiente
 
-- Panel de historial: tiene scroll horizontal y los títulos se cortan.
-- App Android: mostrar `notice` (el motivo de usar Vosk). Requiere recompilar.
 - Probar con los lentes y el celular bloqueado, cuando estén disponibles.
 - Publicar la web por HTTPS en Caddy para otras PCs: subir antes `PasswordMinLength`.

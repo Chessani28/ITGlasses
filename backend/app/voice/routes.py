@@ -13,8 +13,8 @@ from .service import MAX_AUDIO, STT_ENGINE_ALIASES, STT_ENGINES, VOICE_NAME, Voi
 router = APIRouter(prefix="/api/v1/voice")
 
 # Stage "historial" 5: when Whisper answers 503 (not enough GPU memory, GPU unusable, not configured) the web and
-# the app retry with Vosk; that Vosk transcription says why, in "notice" (the web shows it; the current app keeps
-# its own "Motor de voz básico" label and ignores the field until an Android stage shows it).
+# the app retry with Vosk; that Vosk transcription says why, in "notice" (the web shows it) and "fallback_reason"
+# (the app maps it to its own fixed Spanish notice, shown once).
 FALLBACK_SECONDS = 120
 FALLBACK_NOTICES = {
     "voice_vram_limit": "Whisper no disponible por memoria de la GPU; usando Vosk, la transcripción puede ser "
