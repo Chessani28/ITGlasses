@@ -150,6 +150,19 @@ def restore(conversation_id, user_id, now=None):
         return {"channel": row["channel"], "messages": row["message_count"]}
 
 
+def open_for_device(conversation_id, user_id, device_id, now=None):
+    """Check that the user may continue this conversation from the device (phone app: "continue") and close the
+    device's other open conversations. The chat layer then routes the device's messages to it (see chat.resolve);
+    the conversation itself is not moved: a web conversation stays a web conversation."""
+    if not _exists():
+        raise NotFound(conversation_id)
+    with store.transaction() as db:
+        _owned(db, conversation_id, user_id)
+        db.execute("UPDATE conversations SET closed_at=? WHERE device_id=? AND user_id=? AND closed_at IS NULL "
+                   "AND deleted_at IS NULL AND id<>?", (_now(now), device_id, user_id, conversation_id))
+    return {"id": conversation_id}
+
+
 def close_device(device_id, user_id, now=None):
     """Close the device's open conversations: its next message starts a new one. Number closed."""
     if not _exists():

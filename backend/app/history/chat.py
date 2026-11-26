@@ -7,6 +7,7 @@ runs exactly as before stage "historial", in memory only, and the answer says hi
 import asyncio
 import inspect
 import logging
+import time
 from dataclasses import dataclass
 
 from backend.app.assistant.voice_mode import channel_for
@@ -58,6 +59,35 @@ def _legacy(device_id, session_id):
     return Target(key=session_id, conversation_id=None)
 
 
+def remember_opened(app, device_id, conversation_id):
+    """The conversation the phone app opened to continue it (None: forget it). In memory: after a restart the device
+    simply goes back to its own conversation."""
+    opened = getattr(app.state, "device_opened", None)
+    if opened is None:
+        opened = app.state.device_opened = {}
+    if conversation_id is None:
+        opened.pop(device_id, None)
+    else:
+        opened[device_id] = (conversation_id, time.time())
+
+
+def _opened(request, db, device_id, owner):
+    """The conversation this device opened from the app, while it is still in use (opened or last message within the
+    conversation gap, like a device's own conversation); None otherwise."""
+    opened = getattr(getattr(request.app, "state", None), "device_opened", None) or {}
+    entry = opened.get(device_id)
+    if not entry:
+        return None
+    conversation_id, at = entry
+    row = db.execute("SELECT last_message_at FROM conversations WHERE id=? AND user_id=? AND deleted_at IS NULL",
+                     (conversation_id, owner)).fetchone()
+    now, gap = time.time(), conversations.gap_seconds()
+    if row is None or (now - at > gap and (row[0] or 0) < now - gap):
+        opened.pop(device_id, None)
+        return None
+    return conversation_id
+
+
 def resolve(request, session_id):
     """Where this exchange goes. KnowledgeError 404 when a web session asks for a conversation that is not its."""
     device_id = getattr(request.state, "device_id", None)
@@ -70,7 +100,8 @@ def resolve(request, session_id):
             if not owner:
                 return _legacy(device_id, session_id)  # a device without an owner: its chats are not saved
             with store.transaction() as db:
-                conversation_id = conversations.device_conversation(db, device_id, owner, label)
+                conversation_id = (_opened(request, db, device_id, owner)
+                                   or conversations.device_conversation(db, device_id, owner, label))
             return Target(key=conversation_id, conversation_id=conversation_id, source=source)
         with store.transaction() as db:
             if session_id:

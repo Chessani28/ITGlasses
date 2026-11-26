@@ -156,3 +156,85 @@ def conversation_stats(request: Request, response: Response):
               "role": row["role"], "status": row["status"], **found.get(row["id"], empty)}
              for row in people if row["id"] == session.user_id or accounts.can_manage(session.role, session.user_id, row)]
     return {"users": users, "retention_days": conversations.retention_days(), "grace_days": conversations.grace_days()}
+
+
+# --- Phone app (paired device, DPoP): the owner's own history --------------------------------------------------------
+# Exact POST routes with the id in the body: Caddy never publishes path parameters and DPoP proofs reject queries.
+
+class DeviceHistoryRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    id: str | None = Field(default=None, max_length=128)
+    cursor: str | None = Field(default=None, max_length=200)
+
+
+def _device_owner(request):
+    """(device id, owner user id) of the paired phone that signed this request; 403 when it has no owner."""
+    from fastapi import HTTPException
+    from backend.app.pairing.routes import mobile_auth
+    from .chat import _device
+    auth = request.headers.get("authorization", "").split(" ", 1)
+    if len(auth) != 2 or auth[0].lower() != "dpop":
+        raise HTTPException(401)
+    mobile_auth(request, auth[1])
+    device_id = request.state.device_id
+    owner, _, _ = _device(device_id)
+    if not owner:
+        raise KnowledgeError("device_without_owner",
+                             "Este celular no tiene dueño asignado, así que no tiene historial.", 403)
+    return device_id, owner
+
+
+def _required_id(payload):
+    if not payload.id:
+        raise KnowledgeError("conversation_required", "Indica la conversación.", 422)
+    return payload.id
+
+
+@router.post("/devices/me/conversations/list")
+def device_list(payload: DeviceHistoryRequest, request: Request, response: Response):
+    _, owner = _device_owner(request)
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        items, next_cursor = manage.list_conversations(owner, None, None, False, 50, payload.cursor)
+    except ValueError:
+        raise KnowledgeError("invalid_cursor", "El cursor de la lista no es válido.", 422) from None
+    except store.HistoryUnavailable:
+        raise _unavailable() from None
+    return {"conversations": items, "next_cursor": next_cursor}
+
+
+@router.post("/devices/me/conversations/read")
+def device_read(payload: DeviceHistoryRequest, request: Request, response: Response):
+    _, owner = _device_owner(request)
+    response.headers["Cache-Control"] = "no-store"
+    try:
+        return {"conversation": manage.conversation(_required_id(payload), owner)}
+    except manage.NotFound:
+        raise _not_found() from None
+    except store.HistoryUnavailable:
+        raise _unavailable() from None
+
+
+@router.post("/devices/me/conversations/open")
+def device_open(payload: DeviceHistoryRequest, request: Request):
+    device_id, owner = _device_owner(request)
+    try:
+        opened = manage.open_for_device(_required_id(payload), owner, device_id)
+        from .chat import remember_opened
+        remember_opened(request.app, device_id, opened["id"])
+        return opened
+    except manage.NotFound:
+        raise _not_found() from None
+    except store.HistoryUnavailable:
+        raise _unavailable() from None
+
+
+@router.post("/devices/me/conversations/new")
+def device_new(payload: DeviceHistoryRequest, request: Request):
+    device_id, owner = _device_owner(request)
+    try:
+        from .chat import remember_opened
+        remember_opened(request.app, device_id, None)
+        return {"closed": manage.close_device(device_id, owner)}
+    except store.HistoryUnavailable:
+        raise _unavailable() from None
