@@ -60,12 +60,12 @@ async def _free_ollama_embeddings():
         return False
 
 
-async def ram_for_whisper_load(measure=None, free=None, minimum=WHISPER_MIN_LOAD_RAM):
+async def ram_for_whisper_load(measure=None, free=None):
     """Available RAM for loading Whisper. Whisper comes before speed: when it does not fit, the embedding model is
     unloaded first and the RAM measured again."""
     measure = measure or _available_system_memory
     available = measure()
-    if available >= minimum:
+    if available >= WHISPER_MIN_LOAD_RAM:
         return available
     if await (free or _free_ollama_embeddings)():
         await asyncio.sleep(0.5)  # Ollama releases the memory asynchronously
@@ -301,30 +301,6 @@ def whisper_fallback_model(value=None):
     return path if whisper_model_files(path) is not None else None
 
 
-DEFAULT_LIGHT_MODEL = PROJECT_ROOT / "storage" / "voice" / "models" / "faster-whisper-base"
-WHISPER_LIGHT_MIN_RAM = int(1.5 * 1024**3)
-
-
-def whisper_light_model(value=None):
-    """ITGLASSES_WHISPER_LIGHT_MODEL: absolute folder of the light CPU model (faster-whisper-base), used when Whisper
-    Small does not fit in RAM; by default the one in storage\\voice\\models. None when absent or incomplete."""
-    raw = str(_setting("ITGLASSES_WHISPER_LIGHT_MODEL", value) or "").strip()
-    path = Path(raw).expanduser() if raw else Path(DEFAULT_LIGHT_MODEL)
-    if not path.is_absolute():
-        return None
-    path = path.resolve()
-    return path if path.is_dir() and whisper_model_files(path) is not None else None
-
-
-def _light_target(config):
-    """The light CPU target (base, int8, ~1.5 GiB of RAM), or None."""
-    light = config.get("light")
-    if not light:
-        return None
-    return {"python": config["python"], "model": light, "device": "cpu", "compute_type": "int8",
-            "min_ram": WHISPER_LIGHT_MIN_RAM}
-
-
 def whisper_model_label(path):
     """Model name for responses and logs: the folder name without "faster-whisper-", never a path."""
     name = Path(str(path)).name
@@ -543,7 +519,6 @@ class VoiceService:
             "device": device,
             "compute_type": whisper_compute_type(device),
             "fallback": whisper_fallback_model() if device == "cuda" else None,
-            "light": whisper_light_model(),
         }
         cached = self._whisper_probe_cache
         if (
@@ -944,13 +919,6 @@ class VoiceService:
             if fallback is None:
                 raise KnowledgeError(failure.code, GPU_MESSAGES[failure.code], 503) from None
             target, fallback_reason = fallback, failure.code
-            result, target = await self._whisper_light_attempt(config, target, payload, request, hint, hint_mode)
-        except KnowledgeError as error:
-            light = _light_target(config)
-            if error.code != "voice_resource_limit" or light is None or target["model"] == light["model"]:
-                raise
-            # Small does not fit in RAM: the light model still understands far better than Vosk on the phone.
-            target, fallback_reason = light, error.code
             result = await self._whisper_attempt(target, payload, request, hint, hint_mode)
         result["whisper_model"] = whisper_model_label(target["model"])
         result["device"] = target["device"]
@@ -960,16 +928,6 @@ class VoiceService:
             logger.warning("Whisper fallback used model=%s device=%s reason=%s",
                            result["whisper_model"], target["device"], fallback_reason)
         return result
-
-    async def _whisper_light_attempt(self, config, target, payload, request, hint, hint_mode):
-        """(result, target used): the CPU retry after a GPU failure; if that model does not fit in RAM, the light one."""
-        try:
-            return await self._whisper_attempt(target, payload, request, hint, hint_mode), target
-        except KnowledgeError as error:
-            light = _light_target(config)
-            if error.code != "voice_resource_limit" or light is None or target["model"] == light["model"]:
-                raise
-            return await self._whisper_attempt(light, payload, request, hint, hint_mode), light
 
     async def _whisper_worker_for(self, target, request=None):
         """(worker, startup) for the target: the loaded worker when it matches, otherwise a new one."""
@@ -993,11 +951,10 @@ class VoiceService:
                     "Whisper was stopped because available system memory fell below 1.5 GiB.",
                     503,
                 )
-        elif available_ram < (minimum := target.get("min_ram", WHISPER_MIN_LOAD_RAM)) \
-                and await ram_for_whisper_load(minimum=minimum) < minimum:
+        elif available_ram < WHISPER_MIN_LOAD_RAM and await ram_for_whisper_load() < WHISPER_MIN_LOAD_RAM:
             raise KnowledgeError(
                 "voice_resource_limit",
-                f"Whisper needs at least {minimum / 1024**3:.1f} GiB of available system memory.",
+                "Whisper Small requires at least 3 GiB of available system memory.",
                 503,
             )
         if request is not None and await request.is_disconnected():

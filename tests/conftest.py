@@ -54,8 +54,3 @@ def _isolated_device_database(tmp_path_factory, monkeypatch):
         monkeypatch.setenv("ITGLASSES_HISTORY_DB", str(tmp_path_factory.mktemp("history") / "history.sqlite3"))
     if not os.environ.get("ITGLASSES_BACKUP_DIR"):
         monkeypatch.setenv("ITGLASSES_BACKUP_DIR", str(tmp_path_factory.mktemp("backups")))
-    # The light Whisper model installed on this PC (storage\voice\models\faster-whisper-base) must not change what a
-    # test sees: by default no test finds it; a test that wants it points DEFAULT_LIGHT_MODEL or the variable at one.
-    from backend.app.voice import service as voice_service
-    monkeypatch.setattr(voice_service, "DEFAULT_LIGHT_MODEL", tmp_path_factory.mktemp("no-light-model") / "none")
-    monkeypatch.delenv("ITGLASSES_WHISPER_LIGHT_MODEL", raising=False)
