@@ -566,3 +566,22 @@ Lo que falló en la prueba manual y cómo quedó (pruebas: `tests/test_user_test
 - Examen: 102/112 con internet estable; ningún caso empeoró contra la corrida de la mañana. Pendiente conocido: el
   modelo de 4B dice que Benito Juárez nació el 18 de marzo (fue el 21) y, dentro de una conversación mezclada, a
   veces responde «no tengo información» a esa pregunta (`mez-random-luego-vpn` queda fallando a propósito).
+
+### Batería de coherencia (51 respuestas leídas una por una)
+
+Bien: hora, «¿qué día es mañana?», dólar y mundial (internet), fin de soporte de Windows 10, matemáticas, pregunta en
+inglés, hilo «no tengo internet» (4 turnos), insulto con calma, política de la empresa sin evidencia (se niega bien).
+Arreglado (pruebas en `tests/test_user_test_2026_11_26.py`, casos nuevos en `evals/cases/mezcla.json`):
+
+- Videojuegos: «cómo jugar/ganar» (Minecraft, Fortnite, FIFA, Clash Royale…) se decide en código (`game_play_answer`):
+  siempre la misma respuesta («no es un tema de TI… si el juego te falla, con eso sí te ayudo»); un juego que se
+  traba, no abre, da error o pregunta de seguridad sigue siendo soporte. El modelo explicaba Minecraft.
+- «Es una cuenta de la empresa» tras «Olvidé mi contraseña» era «No pude verificar en los manuales»: un enunciado que
+  da contexto en un hilo de soporte se contesta en general («pide a TI que la restablezca»).
+- Voz: «Mi mouse no funciona» → «Sí» explicaba qué es un mouse; el detalle de una falla da más pasos para resolverla.
+- «asdfgh» → pide repetir. Saludo sin «Chat general» (no tiene sentido en los lentes).
+- Identidad del prompt general: «Eres ITGlasses, un asistente de soporte técnico amable» (con «que también platica»
+  inventaba chistes; sin «amable», «tu película favorita» se negaba).
+
+Queda: «¿Me ayudas con mi tarea de historia?» sin pregunta concreta se niega (una pregunta concreta sí se contesta);
+el clima encuentra páginas pero no las puede leer (dinámicas). Examen: 109/118, sin retrocesos.

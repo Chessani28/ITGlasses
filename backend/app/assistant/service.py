@@ -118,6 +118,9 @@ DOCUMENTED_TOPIC = re.compile(
 # verificar ese procedimiento". The company's own procedures ("la VPN de la empresa", "nuestro", "interno") and
 # explicit manual requests keep the documentation route. Patterns run on folded text (lowercase, no accents).
 FOLLOWUP_START = re.compile(r"^(?:y|e|pero|entonces|tambien|ademas|para que|por que)\b")
+# A statement that adds context to the problem in a support thread ("Es una cuenta de la empresa", "Ya lo intenté…").
+CONTEXT_STATEMENT = re.compile(r"^(?:es|son|era|esta|estan|estoy|tengo|tiene|uso|usamos|ya)\b")
+QUESTION_WORD = re.compile(r"\b(?:que|cual|cuales|como|cuando|donde|quien|cuanto|cuanta|por que|para que)\b")
 FOLLOWUP_ANAPHORA = re.compile(r"\b(?:eso|esto|ello|lo anterior|lo mismo|la misma|el mismo)\b")
 COMPANY_OWN = re.compile(r"\b(?:la|mi|nuestra|esta|esa|tu|su)\s+empresa\b|\bempresa\s+(?:actual|interna)\b"
                          r"|\bintern[oa]s?\b|\bnuestr[oa]s?\b")
@@ -207,9 +210,11 @@ GENERAL_NOTICE = "Respuesta general (no proviene de los manuales autorizados):"
 # specialized advice outside IT is declined in one or two kind sentences instead of invented ("defender el 2.6 en
 # Clash Royale", bets); a known fact is said plainly ("No sé la fecha… pero nació el 18 de marzo de 1806").
 GENERAL_SCOPE = (
-    "Las preguntas ligeras o de cultura general (un chiste, una pregunta imaginaria, una fecha histórica, tus gustos) "
-    "contéstalas con naturalidad y directo, sin aclarar que no son de TI. Solo si te piden un consejo especializado "
-    "que no es de tecnología (estrategias de videojuegos, apuestas, salud, temas legales o de dinero), dilo en una o "
+    "Las preguntas ligeras o de cultura general (un chiste, una pregunta imaginaria, una fecha histórica, una duda "
+    "escolar sencilla, tus gustos: puedes elegir uno con humor) contéstalas con naturalidad y directo, sin aclarar "
+    "que no son de TI. Si el mensaje no se entiende (letras sin sentido o una frase cortada), pide en una frase que "
+    "lo repita. Solo si te piden un consejo especializado que no es de tecnología (cómo jugar, avanzar o ganar en "
+    "videojuegos, apuestas, salud, temas legales o de dinero), dilo en una o "
     "dos frases amables: que no es un tema de TI y que no puedes darle un consejo confiable; no lo inventes. Si la "
     "pregunta es sobre un sistema, servidor, equipo o dato interno de la empresa, no lo inventes ni lo confundas con "
     "otra cosa: di que no tienes ese dato y a quién preguntarlo. "
@@ -372,6 +377,32 @@ _ASKS_DATE = re.compile(r"^(?:y\s+)?(?:(?:me\s+dices\s+)?(?:que|cual)\s+(?:es\s+
                         r"(?:es\s+)?(?:hoy|de\s+hoy)|que\s+fecha\s+es|a\s+que\s+(?:dia|fecha)\s+estamos"
                         r"|que\s+dia\s+es)$")
 _ASKS_TIME = re.compile(r"^(?:y\s+)?(?:me\s+dices\s+)?que\s+hora\s+es(?:\s+ahorita|\s+ahora)?$")
+
+
+# How to play a video game is not IT (the user's rule of 2026-11-26), but a game that fails on the computer or the
+# phone is: "¿Cómo consigo diamantes en Minecraft?" is declined, "Mi juego se traba" / "Minecraft no abre" are support.
+# The 4B model followed the prompt rule for FIFA and Clash Royale but explained Minecraft, so it is decided here.
+_VIDEO_GAME = re.compile(
+    r"\b(?:videojuegos?|minecraft|fortnite|fifa|ea sports fc|clash royale|clash of clans|free fire|roblox|gta|"
+    r"call of duty|warzone|league of legends|valorant|counter strike|cs2|pokemon|zelda|super mario|among us|"
+    r"brawl stars|genshin|apex|overwatch|dota|candy crush|pubg|rocket league)\b")
+_GAME_TECH_PROBLEM = re.compile(
+    r"\b(?:trab\w*|lent\w*|lag|fps|ping|error\w*|crash\w*|cierra|congel\w*|no (?:abre|inicia|carga|funciona|"
+    r"conecta|jala|sirve|deja)|instal\w*|desinstal\w*|actualiz\w*|descarg\w*|driver\w*|controlador\w*|tarjeta|"
+    r"grafic\w*|requisitos|ram|procesador|pantalla|control(?:es)?|mando|sonido|audio|microfono|internet|red|wifi|"
+    r"servidor(?:es)?|cuenta|contrasena|consola|pc|laptop|computadora|celular|segur\w*|privacidad|parental|"
+    r"estafa\w*|hacke\w*|virus|robo|robaron)\b")
+GAME_PLAY = ("Eso ya es de cómo se juega, y no es un tema de TI, así que no te puedo dar un consejo confiable. "
+             "Si el juego te falla en la computadora o en el celular (se traba, no abre o da error), con eso sí te "
+             "ayudo.")
+
+
+def game_play_answer(message):
+    """GAME_PLAY for a question about playing a video game, None for anything else (a game that fails is support)."""
+    text = _fold(message or "")
+    if _VIDEO_GAME.search(text) and not _GAME_TECH_PROBLEM.search(text):
+        return GAME_PLAY
+    return None
 
 
 def clock_answer(message, now=None):
@@ -1484,6 +1515,10 @@ class UnifiedAssistantService:
         if EXPLICIT_MANUAL_REQUEST.search(message or ""):
             return False
         text = _fold(message or "").lstrip("¿¡ \t")
+        if CONTEXT_STATEMENT.search(text) and "?" not in (message or "") and not QUESTION_WORD.search(text):
+            # Context for the problem being solved, not a question about the company's documents: "Olvidé mi
+            # contraseña de Windows" → "Es una cuenta de la empresa" (it answered "No pude verificar… manuales").
+            return True
         if not (FOLLOWUP_START.search(text) or FOLLOWUP_ANAPHORA.search(text)):
             return False
         if COMPANY_OWN.search(text):
@@ -1728,10 +1763,14 @@ class UnifiedAssistantService:
         style = (voice_mode.VOICE_RULES + " Contesta la siguiente pregunta del usuario.\n" if voice_short else
                  "Responde en español, de forma breve y clara, a la siguiente pregunta del usuario.\n")
         if state.get("_detail_of"):
+            # A fault gets more steps to fix it; a concept, how it works ("Mi mouse no funciona" → "Sí" explained
+            # what a mouse is).
+            more = ("más pasos concretos para resolverlo, en orden, distintos de los del resumen" if subject else
+                    "más detalle: cómo funciona, para qué sirve y un ejemplo práctico")
             context += ("\n\nEl usuario ya escuchó este resumen: «" + state["_detail_of"] + "». Ahora responde con "
-                        "más detalle: cómo funciona, para qué sirve y un ejemplo práctico. No repitas el resumen.")
+                        + more + ". No repitas el resumen.")
         prompt = (
-            "Eres un asistente de soporte técnico. " + style + missing +
+            "Eres ITGlasses, un asistente de soporte técnico amable. " + style + missing +
             "Si no sabes la respuesta, dilo claramente.\n\n" + "Mensaje del usuario: " + message +
             context + web_block +
             # Last, right before the answer: the 4B model followed it there, not at the start (Clash Royale).
@@ -1971,6 +2010,11 @@ class UnifiedAssistantService:
         if clock is not None:
             self.sessions.remember(state, message, clock)
             return {"answer": clock, "session_id": session_id, "route": "social", "sources": []}
+        # How to play a video game: not IT, said the same way every time (never the manuals nor the web).
+        game = game_play_answer(message)
+        if game is not None:
+            self.sessions.remember(state, message, game, route="general")
+            return {"answer": game, "session_id": session_id, "route": "general", "sources": []}
 
         # Social messages never disturb the procedure continuity of the session.
         social = detect_social_intent(message)

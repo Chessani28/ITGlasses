@@ -37,7 +37,7 @@ _BYE = re.compile(
 )
 
 _SOCIAL_RESPONSES = {
-    "greeting": "¡Hola! ¿En qué puedo ayudarte? Puedes consultar procedimientos en los manuales disponibles o usar el Chat general para otros temas.",
+    "greeting": "¡Hola! ¿En qué te ayudo? Puedo resolver dudas de TI, consultar los manuales de la empresa o buscar algo en internet.",
     "thanks": "¡Con gusto! ¿Necesitas algo más?",
     "how_are_you": "¡Muy bien, gracias! ¿En qué puedo ayudarte?",
     "bye": "¡Hasta luego! Que tengas un buen día.",

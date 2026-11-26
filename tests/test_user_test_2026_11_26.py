@@ -119,3 +119,64 @@ def test_a_bet_is_not_looked_up_on_the_web():
 def test_general_answers_carry_the_scope_rule():
     from backend.app.assistant.service import GENERAL_SCOPE
     assert "no es un tema de TI" in GENERAL_SCOPE and "preguntas ligeras" in GENERAL_SCOPE
+
+
+# --- Coherence battery of 2026-11-26 (the assistant's own review of 51 answers) -----------------------------------
+
+def test_the_greeting_does_not_name_a_part_of_the_web_page():
+    # "…o usar el Chat general para otros temas" makes no sense through the glasses.
+    from backend.app.knowledge.social import social_response
+    greeting = social_response("greeting")
+    assert "Chat general" not in greeting and "TI" in greeting
+
+
+def test_context_added_to_a_support_thread_is_not_refused_as_company_documentation():
+    # "Olvidé mi contraseña de Windows" → "Es una cuenta de la empresa" answered "No pude verificar… en los manuales".
+    from backend.app.assistant.service import UnifiedAssistantService
+    state = {"active_route": "general", "history": [("Olvidé mi contraseña de Windows", "Puedes restablecerla…")]}
+    assert UnifiedAssistantService._general_followup(state, "Es una cuenta de la empresa")
+    assert UnifiedAssistantService._general_followup(state, "Ya lo intenté y no funciona en la empresa")
+    assert not UnifiedAssistantService._general_followup(state, "¿Cuál es la política de la empresa?")
+
+
+def test_more_detail_about_a_fault_asks_for_more_steps_not_a_definition():
+    # Voice: "Mi mouse no funciona" → "Sí" explained what a mouse is.
+    from test_assistant_service import StubProvider
+    from test_history_context import NoEvidence
+    from backend.app.assistant.service import UnifiedAssistantService
+    provider = StubProvider("Revisa la conexión.")
+    service = UnifiedAssistantService(NoEvidence(), provider, web_search=StubWebSearch())
+    sid = session()
+    asyncio.run(service.chat("Mi mouse no funciona", session_id=sid, channel="voice"))
+    asyncio.run(service.chat("Sí", session_id=sid, channel="voice"))
+    detail_prompt = provider.calls[-1]
+    assert "más pasos" in detail_prompt and "para qué sirve" not in detail_prompt
+
+
+def test_how_to_play_a_video_game_is_not_it_but_a_game_that_fails_is():
+    from backend.app.assistant.service import game_play_answer
+    for question in ("¿Cómo consigo diamantes en Minecraft?", "¿Cómo gano en Fortnite?",
+                     "¿Qué jugadores me recomiendas para mi equipo en FIFA?", "¿Cómo defiendo el 2.6 en Clash Royale?",
+                     "¿Qué personaje es mejor en Free Fire?"):
+        answer = game_play_answer(question)
+        assert answer and "TI" in answer, question
+    for question in ("Mi juego se traba mucho en la computadora", "Minecraft no abre", "Fortnite me da error al iniciar",
+                     "¿Cómo instalo Roblox en la laptop?", "Tengo mucho lag en Valorant", "¿Qué es una VPN?",
+                     "Si fueras panadero, ¿qué pan venderías?"):
+        assert game_play_answer(question) is None, question
+
+
+def test_a_game_question_never_reaches_the_manuals_or_the_web():
+    web = StubWebSearch()
+    knowledge = Knowledge()
+    service = build(knowledge, web_search=web)
+    answer = asyncio.run(service.chat("¿Cómo consigo diamantes en Minecraft?", session_id=session()))
+    assert "TI" in answer["answer"] and "manual" not in answer["answer"].lower()
+    assert knowledge.queries == [] and web.calls == []
+
+
+def test_game_safety_and_names_that_are_not_games_stay_out():
+    from backend.app.assistant.service import game_play_answer
+    for question in ("Mi hijo juega Roblox, ¿es seguro?", "Me hackearon la cuenta de Fortnite", "jaja lol",
+                     "Mario no puede entrar a su correo"):
+        assert game_play_answer(question) is None, question
