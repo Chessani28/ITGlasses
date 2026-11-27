@@ -1397,3 +1397,22 @@ main { display:flex; flex-direction:column; min-width:0; height:100dvh; overflow
 .feedback-item .feedback-a { color:var(--muted); }
 .feedback-item .feedback-c { color:var(--amber); }
 .feedback-item small, .feedback-empty { color:var(--muted); font-size:12px; }
+/* QR pairing (2026-11-26) */
+.pair-open {
+  margin-left:auto;
+}
+.pair-qr {
+  display:block;
+  margin:12px auto;
+  width:240px;
+  height:240px;
+  background:#fff;
+  border-radius:8px;
+}
+.pair-origin {
+  text-align:center;
+  font-family:ui-monospace, Consolas, monospace;
+  font-size:13px;
+  color:var(--muted);
+  word-break:break-all;
+}

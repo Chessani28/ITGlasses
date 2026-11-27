@@ -7,7 +7,7 @@ This router is independent from the phone router: no pairing origin, no HTTPS.
 import time
 from typing import Annotated
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Path, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from backend.app.core import local_request
@@ -85,6 +85,25 @@ def _signed_in(request):
     """Assigning an owner needs a login session (the old local panel without login cannot do it)."""
     if not getattr(request.state, "user_id", None):
         raise HTTPException(403)
+
+
+@router.get("/pairing-link")
+def pairing_link(response: Response):
+    """QR for one APK, any server: the public origin and its certificate pin (see link.py). 404 without a
+    configured origin; 503 when the server's certificate cannot be read (Caddy stopped)."""
+    import os
+    from . import link
+
+    origin = os.getenv("ITGLASSES_PAIRING_ORIGIN", "")
+    if not link.valid_origin(origin):
+        raise HTTPException(404)
+    try:
+        pin = link.server_pin(origin)
+    except link.Unavailable:
+        raise HTTPException(503) from None
+    text = link.link(origin, pin)
+    response.headers["Cache-Control"] = "no-store"
+    return {"origin": origin, "pin": pin, "link": text, "svg": link.qr_svg(text)}
 
 
 @router.get("/devices")

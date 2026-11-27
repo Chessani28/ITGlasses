@@ -20,6 +20,7 @@ from backend.app.pairing.store import PROJECT_ROOT, BackupError, SchemaError, ba
 logger = logging.getLogger(__name__)
 
 DEFAULT_DB = PROJECT_ROOT / "storage" / "history" / "history.sqlite3"
+LOCK_WAIT_SECONDS = 30  # how long a write waits for another one to finish before giving up
 SCHEMA_VERSION = 2
 
 # Version 1: conversations (web or one device, always with an owner) and their messages.
@@ -136,10 +137,17 @@ def transaction(path=None):
     except (OSError, sqlite3.Error, SchemaError, BackupError) as error:
         logger.exception("History database is unavailable")
         raise HistoryUnavailable(type(error).__name__) from None
-    with closing(sqlite3.connect(path.as_uri() + "?mode=rw", uri=True, timeout=5)) as db, db:
+    # Many technicians at once (load test, 2026-11-27): with 20 asking together some writes waited more than 5 s
+    # for their turn and the question failed with 500. They now wait up to LOCK_WAIT_SECONDS; past that the
+    # history is "unavailable" for that exchange (the answer still arrives, it is just not saved).
+    with closing(sqlite3.connect(path.as_uri() + "?mode=rw", uri=True, timeout=LOCK_WAIT_SECONDS)) as db, db:
         db.row_factory = sqlite3.Row
         db.execute("PRAGMA foreign_keys=ON")
         # A purged conversation is overwritten in the file, not only unlinked (stage "historial" 4).
         db.execute("PRAGMA secure_delete=ON")
-        db.execute("BEGIN IMMEDIATE")
+        try:
+            db.execute("BEGIN IMMEDIATE")
+        except sqlite3.OperationalError as error:
+            logger.error("History database busy: %s", type(error).__name__)
+            raise HistoryUnavailable("busy") from None
         yield db

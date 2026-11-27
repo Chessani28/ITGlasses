@@ -657,3 +657,48 @@ Quedan (5): «etiquetas» (la página correcta sale primera pero con similitud 0
 compuerta está calibrada para no dejar pasar preguntas generales), «servicio después de instalar Windows» (empate
 real con el manual de laptops: pregunta cuál), «deadline» (la portada gana por las palabras del título), «VC redist
 x86» y «Dominos: lo primero que instalo» (el selector elige otra frase del mismo apartado; varía entre corridas).
+
+## 2026-11-27 — Emparejar con QR: una sola APK para cualquier servidor (rama feature/emparejar-qr)
+
+Para venderlo, la APK ya no tiene que llevar la dirección del servidor de cada cliente.
+
+- **Web (admin):** botón «▣ Emparejar con QR» en el panel Dispositivos. Muestra un QR con
+  `itglasses://emparejar?v=1&o=<ITGLASSES_PAIRING_ORIGIN>&p=<huella>` (`GET /api/v1/admin/pairing-link`, solo admin,
+  `no-store`). La huella es el SHA-256 (base64url) de la llave pública (SPKI) del certificado de más arriba que
+  presenta el servidor (la CA si Caddy la manda, si no el del servidor). El backend la obtiene conectándose a su
+  propia dirección pública como cualquier cliente (no lee archivos de certificados) y la guarda 10 min;
+  `ITGLASSES_PAIRING_PIN` la fija a mano. El QR no es secreto: el admin sigue aprobando cada celular con su código.
+  404 sin origen configurado; 503 si no se puede leer el certificado (Caddy apagado). QR con `segno` (pip).
+- **Android:** «Escanear QR del servidor» en la tarjeta de emparejamiento (lector de Google,
+  `play-services-code-scanner`) o el enlace `itglasses://` desde la cámara. Siempre pregunta antes de cambiar. El
+  servidor se guarda fuera de los respaldos; las conexiones a él se aceptan por la huella (y si no coincide, por las
+  comprobaciones normales de Android); OkHttp sigue revisando el nombre. Cambiar de servidor crea una identidad nueva
+  para ese servidor y pide aprobación allá.
+- **Sin QR escaneado todo queda igual** (origen y CA piloto metidos en la APK): la demo no cambia.
+- **Falta probar en el celular real:** escanear el QR de la web, aprobar, chatear y voz con los lentes.
+
+## 2026-11-27 — Prueba de carga: hasta 20 técnicos a la vez (rama feature/prueba-carga)
+- **Cómo:** `.\scripts\run-load-test.ps1` (Ollama encendido). Levanta una copia aislada en el puerto 8010 con
+  usuarios, historial y dispositivos de prueba en `.cache\load\<hora>\` y una copia del índice de manuales; nunca
+  toca `storage\`, el 8000 ni Caddy. Cada técnico entra con su usuario, dice un número de técnico, hace 3 preguntas
+  (general, seguimiento, manual) y al final pregunta su número: así se ve si una conversación se mezcla con otra.
+  Todos preguntan sin pausa: es el peor caso, más duro que una planta real.
+- **Resultado (qwen3 4b en la GPU de esta PC, después del arreglo):**
+
+  | Técnicos a la vez | Bien | Mediana por respuesta | p90 | Máx. | Recuerdan su número | Mezclas |
+  |---:|---:|---:|---:|---:|---:|---:|
+  | 1 | 5/5 | 2.9 s | 4.1 s | 4.1 s | 1/1 | 0 |
+  | 3 | 15/15 | 4.3 s | 6.6 s | 9.0 s | 3/3 | 0 |
+  | 5 | 25/25 | 7.4 s | 12.6 s | 16.1 s | 5/5 | 0 |
+  | 10 | 50/50 | 16.3 s | 24.2 s | 28.0 s | 10/10 | 0 |
+  | 20 (dos veces) | 200/200 | 32 s | 51 s | 57 s | 40/40 | 0 |
+
+  El modelo contesta una pregunta a la vez: la espera crece en línea recta con los técnicos que preguntan al mismo
+  tiempo. Con hasta ~5 preguntando a la vez se mantiene bajo ~10 s.
+- **Arreglos que encontró:**
+  - Con 20 a la vez, 5 de 100 preguntas fallaban con 500: la base del historial esperaba solo 5 s su turno
+    ("database is locked") y ese error no se manejaba. Ahora espera hasta 30 s y, si sigue ocupada, la respuesta
+    llega igual y solo ese intercambio no se guarda (`history/store.py`, prueba en `test_history_chat.py`).
+  - Los manuales solo aceptaban la página del puerto 8000 escrito fijo; ahora usan el puerto configurado (en el
+    8000 queda igual).
+- **No cubre:** voz (Whisper/Piper), el Wi-Fi del celular ni los lentes.

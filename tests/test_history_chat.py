@@ -132,6 +132,27 @@ def test_an_unusable_history_never_breaks_the_chat(people, monkeypatch, tmp_path
     assert "History unavailable" in caplog.text
 
 
+def test_a_busy_history_never_breaks_the_chat(people, monkeypatch, caplog):
+    """Load test 2026-11-27: with 20 technicians at once some history writes waited past the lock timeout and the
+    question failed with 500. Now the answer arrives; that exchange is just not saved."""
+    with web() as client:
+        headers = sign_in(client, "ana")
+        first = ask(client, headers)
+        assert first["history_saved"] is True
+        monkeypatch.setattr(history, "LOCK_WAIT_SECONDS", 0.2)
+        with closing(sqlite3.connect(os.environ["ITGLASSES_HISTORY_DB"], isolation_level=None)) as other:
+            other.execute("BEGIN IMMEDIATE")   # another write holds the database
+            try:
+                again = ask(client, headers, session_id=first["session_id"])
+                new = ask(client, headers)
+            finally:
+                other.execute("ROLLBACK")
+        assert again["answer"] and again["history_saved"] is False and again["session_id"] == first["session_id"]
+        assert new["answer"] and new["history_saved"] is False
+        assert "History database busy" in caplog.text
+        assert ask(client, headers, session_id=first["session_id"])["history_saved"] is True
+
+
 def test_one_assistant_for_the_whole_backend(people):
     with web() as client:
         ana = sign_in(client, "ana")
