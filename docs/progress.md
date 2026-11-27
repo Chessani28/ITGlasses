@@ -676,3 +676,29 @@ Para venderlo, la APK ya no tiene que llevar la dirección del servidor de cada 
   para ese servidor y pide aprobación allá.
 - **Sin QR escaneado todo queda igual** (origen y CA piloto metidos en la APK): la demo no cambia.
 - **Falta probar en el celular real:** escanear el QR de la web, aprobar, chatear y voz con los lentes.
+
+## 2026-11-27 — Prueba de carga: hasta 20 técnicos a la vez (rama feature/prueba-carga)
+- **Cómo:** `.\scripts\run-load-test.ps1` (Ollama encendido). Levanta una copia aislada en el puerto 8010 con
+  usuarios, historial y dispositivos de prueba en `.cache\load\<hora>\` y una copia del índice de manuales; nunca
+  toca `storage\`, el 8000 ni Caddy. Cada técnico entra con su usuario, dice un número de técnico, hace 3 preguntas
+  (general, seguimiento, manual) y al final pregunta su número: así se ve si una conversación se mezcla con otra.
+  Todos preguntan sin pausa: es el peor caso, más duro que una planta real.
+- **Resultado (qwen3 4b en la GPU de esta PC, después del arreglo):**
+
+  | Técnicos a la vez | Bien | Mediana por respuesta | p90 | Máx. | Recuerdan su número | Mezclas |
+  |---:|---:|---:|---:|---:|---:|---:|
+  | 1 | 5/5 | 2.9 s | 4.1 s | 4.1 s | 1/1 | 0 |
+  | 3 | 15/15 | 4.3 s | 6.6 s | 9.0 s | 3/3 | 0 |
+  | 5 | 25/25 | 7.4 s | 12.6 s | 16.1 s | 5/5 | 0 |
+  | 10 | 50/50 | 16.3 s | 24.2 s | 28.0 s | 10/10 | 0 |
+  | 20 (dos veces) | 200/200 | 32 s | 51 s | 57 s | 40/40 | 0 |
+
+  El modelo contesta una pregunta a la vez: la espera crece en línea recta con los técnicos que preguntan al mismo
+  tiempo. Con hasta ~5 preguntando a la vez se mantiene bajo ~10 s.
+- **Arreglos que encontró:**
+  - Con 20 a la vez, 5 de 100 preguntas fallaban con 500: la base del historial esperaba solo 5 s su turno
+    ("database is locked") y ese error no se manejaba. Ahora espera hasta 30 s y, si sigue ocupada, la respuesta
+    llega igual y solo ese intercambio no se guarda (`history/store.py`, prueba en `test_history_chat.py`).
+  - Los manuales solo aceptaban la página del puerto 8000 escrito fijo; ahora usan el puerto configurado (en el
+    8000 queda igual).
+- **No cubre:** voz (Whisper/Piper), el Wi-Fi del celular ni los lentes.

@@ -239,7 +239,9 @@ def origin(request: Request):
 
 def permitted_browser_origin(request):
     supplied = request.headers.get("origin")
-    if supplied in (None, "http://localhost:8000", "http://127.0.0.1:8000"):
+    from backend.app.core.config import settings
+    # The web page of this backend, on its own port (8000; a separate test copy such as the load test uses another).
+    if supplied in (None, f"http://localhost:{settings.port}", f"http://127.0.0.1:{settings.port}"):
         return True
     return (request.url.scheme == "https" and supplied == os.getenv("ITGLASSES_PAIRING_ORIGIN")
             and supplied == f"https://{request.url.netloc}")
