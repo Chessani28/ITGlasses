@@ -256,8 +256,39 @@ function choose(device, action, button) {
   $("device-dialog-cancel").focus();
 }
 
+// QR pairing (2026-11-26): one APK for any server. The phone scans the server's address and certificate pin;
+// the admin still approves it with its code. The SVG goes in as an <img> (data URL), never as HTML.
+const PAIR_ERRORS = {
+  404: "Falta configurar la dirección pública del servidor (ITGLASSES_PAIRING_ORIGIN).",
+  503: "No pude leer el certificado del servidor. Revisa que Caddy esté encendido y vuelve a intentarlo.",
+  403: "Solo un administrador puede ver el QR de emparejamiento.",
+};
+
+async function showPairing() {
+  const status = $("pair-status");
+  const image = $("pair-qr");
+  $("pair-origin").textContent = "";
+  image.hidden = true;
+  status.textContent = "Generando el QR…";
+  $("pair-dialog").showModal();
+  try {
+    const data = await api("pairing-link");
+    image.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(data.svg);
+    image.hidden = false;
+    $("pair-origin").textContent = data.origin;
+    status.textContent = "En la app ITGlasses toca «Escanear QR del servidor» y apunta a este código. "
+      + "Después aprueba el celular aquí comparando su código.";
+  } catch (error) {
+    status.textContent = PAIR_ERRORS[error.status] || "No se pudo generar el QR. Inténtalo de nuevo.";
+  }
+}
+
 function start() {
   if (!$("device-panel")) return;
+  if ($("pair-open")) {
+    $("pair-open").addEventListener("click", showPairing);
+    $("pair-close").addEventListener("click", () => $("pair-dialog").close());
+  }
   $("device-dialog").addEventListener("close", () => {
     if (!state.confirming) return;
     const {button} = state.confirming;

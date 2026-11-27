@@ -6,7 +6,8 @@ import vm from "node:vm";
 const source = await readFile(new URL("../frontend/devices.js", import.meta.url), "utf8");
 const IDS = ["device-panel", "device-updated", "device-toast", "device-alert", "device-alert-text", "device-retry",
   "device-list", "device-feedback", "device-dialog", "device-dialog-title", "device-dialog-details",
-  "device-dialog-consequence", "device-dialog-cancel", "device-dialog-confirm"];
+  "device-dialog-consequence", "device-dialog-cancel", "device-dialog-confirm",
+  "pair-open", "pair-close", "pair-dialog", "pair-qr", "pair-origin", "pair-status"];
 const now = () => Math.floor(Date.now() / 1000);
 
 // --- minimal fake DOM: only what devices.js uses -------------------------------
@@ -315,4 +316,27 @@ test("muestra a qué usuario pertenece cada dispositivo aprobado", async () => {
   assert.match(text.find(t => t.includes("Ana López")), /Usuario: Ana López/);
   assert.ok(text.some(t => t.includes("Sin usuario asignado")));
   assert.ok(!text.find(t => t.includes("123 456")).includes("Usuario"));
+});
+
+test("emparejar con QR muestra la imagen y la dirección del servidor, o un aviso claro", async () => {
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg"><rect/></svg>';
+  let reply = {ok: true, status: 200, json: async () => ({origin: "https://10.0.0.5:8443", pin: "x", link: "l", svg})};
+  const panel = await boot({server: path => path.endsWith("/pairing-link") ? reply : null});
+  await panel.get("pair-open").click();
+  await settle();
+  assert.equal(panel.get("pair-dialog").open, true);
+  assert.equal(panel.get("pair-qr").hidden, false);
+  assert.equal(panel.get("pair-qr").src, "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg));
+  assert.equal(panel.get("pair-origin").textContent, "https://10.0.0.5:8443");
+  assert.match(panel.get("pair-status").textContent, /Escanear QR del servidor/);
+  const call = panel.calls.find(c => c.path === "/api/v1/admin/pairing-link");
+  assert.equal(call.headers["X-ITGlasses-Admin"], "1");
+
+  reply = {ok: false, status: 503, json: async () => ({})};
+  await panel.get("pair-open").click();
+  await settle();
+  assert.equal(panel.get("pair-qr").hidden, true);
+  assert.match(panel.get("pair-status").textContent, /Caddy/);
+  await panel.get("pair-close").click();
+  assert.equal(panel.get("pair-dialog").open, false);
 });

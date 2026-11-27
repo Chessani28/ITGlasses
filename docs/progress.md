@@ -657,3 +657,22 @@ Quedan (5): «etiquetas» (la página correcta sale primera pero con similitud 0
 compuerta está calibrada para no dejar pasar preguntas generales), «servicio después de instalar Windows» (empate
 real con el manual de laptops: pregunta cuál), «deadline» (la portada gana por las palabras del título), «VC redist
 x86» y «Dominos: lo primero que instalo» (el selector elige otra frase del mismo apartado; varía entre corridas).
+
+## 2026-11-27 — Emparejar con QR: una sola APK para cualquier servidor (rama feature/emparejar-qr)
+
+Para venderlo, la APK ya no tiene que llevar la dirección del servidor de cada cliente.
+
+- **Web (admin):** botón «▣ Emparejar con QR» en el panel Dispositivos. Muestra un QR con
+  `itglasses://emparejar?v=1&o=<ITGLASSES_PAIRING_ORIGIN>&p=<huella>` (`GET /api/v1/admin/pairing-link`, solo admin,
+  `no-store`). La huella es el SHA-256 (base64url) de la llave pública (SPKI) del certificado de más arriba que
+  presenta el servidor (la CA si Caddy la manda, si no el del servidor). El backend la obtiene conectándose a su
+  propia dirección pública como cualquier cliente (no lee archivos de certificados) y la guarda 10 min;
+  `ITGLASSES_PAIRING_PIN` la fija a mano. El QR no es secreto: el admin sigue aprobando cada celular con su código.
+  404 sin origen configurado; 503 si no se puede leer el certificado (Caddy apagado). QR con `segno` (pip).
+- **Android:** «Escanear QR del servidor» en la tarjeta de emparejamiento (lector de Google,
+  `play-services-code-scanner`) o el enlace `itglasses://` desde la cámara. Siempre pregunta antes de cambiar. El
+  servidor se guarda fuera de los respaldos; las conexiones a él se aceptan por la huella (y si no coincide, por las
+  comprobaciones normales de Android); OkHttp sigue revisando el nombre. Cambiar de servidor crea una identidad nueva
+  para ese servidor y pide aprobación allá.
+- **Sin QR escaneado todo queda igual** (origen y CA piloto metidos en la APK): la demo no cambia.
+- **Falta probar en el celular real:** escanear el QR de la web, aprobar, chatear y voz con los lentes.
